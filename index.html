@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kintsugi Motorworks Dashboard</title>
+  <link rel="stylesheet" href="dashboard-style.css" />
+</head>
+
+<body>
+  <div class="app">
+    <!-- ======= Top Navigation ======= -->
+    <div class="top-bar">
+      <div class="brand-block">
+        <div class="brand-title">Kintsugi Motorworks</div>
+      </div>
+      <div class="nav-tabs">
+        <a href="index.html" class="nav-pill active">Dashboard</a>
+        <a href="Payouts/payouts-index.html" class="nav-pill">Payouts</a>
+        <a href="Bank Records/bank-index.html" class="nav-pill">Bank</a>
+      </div>
+    </div>
+
+    <!-- ======= Metric Overview ======= -->
+    <div class="metric-grid">
+      <div class="metric-card">
+        <div class="metric-label">All-time repairs</div>
+        <div class="metric-value" id="statRepairs">–</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-label">All-time mechanic payout @ $700/repair</div>
+        <div class="metric-value" id="statPayout">–</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-label">Latest week ending</div>
+        <div class="metric-value" id="statLatestWeek">–</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-label">Active mechanics</div>
+        <div class="metric-value" id="statMechanics">–</div>
+      </div>
+    </div>
+
+    <!-- ======= Quick Access Links ======= -->
+    <div class="link-row">
+      <div class="link-card">
+        <div class="link-title">Payouts</div>
+        <div class="link-sub">Weekly mechanic payouts, week totals & CSV export.</div>
+        <a href="Payouts/payouts-index.html" class="link-btn">Open Payouts →</a>
+      </div>
+
+      <div class="link-card">
+        <div class="link-title">Bank Records</div>
+        <div class="link-sub">Transaction viewer, filters & flags.</div>
+        <a href="Bank Records/bank-index.html" class="link-btn">Open Bank →</a>
+      </div>
+    </div>
+
+    <!-- ======= Footer / Status ======= -->
+    <div id="overviewStatus" class="status">Overview loading…</div>
+  </div>
+
+  <!-- ======= Scripts ======= -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="dashboard-script.js"></script>
+</body>
+</html>
