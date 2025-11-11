@@ -2,69 +2,77 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <title>Kintsugi Motorworks · Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Kintsugi Motorworks Dashboard</title>
   <link rel="stylesheet" href="dashboard-style.css" />
+  <!-- PapaParse for CSV parsing from Google Sheets -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 </head>
-
 <body>
   <div class="app">
-    <!-- ======= Top Navigation ======= -->
-    <div class="top-bar">
-      <div class="brand-block">
+    <!-- Top Navigation -->
+    <header class="top-bar">
+      <div>
         <div class="brand-title">Kintsugi Motorworks</div>
+        <div class="brand-sub">Unified Operations Dashboard</div>
       </div>
-      <div class="nav-tabs">
+      <nav class="nav-tabs">
         <a href="index.html" class="nav-pill active">Dashboard</a>
         <a href="Payouts/payouts-index.html" class="nav-pill">Payouts</a>
         <a href="Bank Records/bank-index.html" class="nav-pill">Bank</a>
-      </div>
-    </div>
+      </nav>
+    </header>
 
-    <!-- ======= Metric Overview ======= -->
-    <div class="metric-grid">
-      <div class="metric-card">
-        <div class="metric-label">All-time repairs</div>
-        <div class="metric-value" id="statRepairs">–</div>
-      </div>
-
-      <div class="metric-card">
-        <div class="metric-label">All-time mechanic payout @ $700/repair</div>
-        <div class="metric-value" id="statPayout">–</div>
+    <!-- Stat cards -->
+    <section class="stat-boxes">
+      <div class="stat-box">
+        <h3>All-Time Repairs</h3>
+        <p id="totalRepairs">–</p>
       </div>
 
-      <div class="metric-card">
-        <div class="metric-label">Latest week ending</div>
-        <div class="metric-value" id="statLatestWeek">–</div>
+      <div class="stat-box">
+        <h3>All-Time Mechanic Payout @ $700/Repair</h3>
+        <p id="totalPayout">–</p>
       </div>
 
-      <div class="metric-card">
-        <div class="metric-label">Active mechanics</div>
-        <div class="metric-value" id="statMechanics">–</div>
-      </div>
-    </div>
-
-    <!-- ======= Quick Access Links ======= -->
-    <div class="link-row">
-      <div class="link-card">
-        <div class="link-title">Payouts</div>
-        <div class="link-sub">Weekly mechanic payouts, week totals & CSV export.</div>
-        <a href="Payouts/payouts-index.html" class="link-btn">Open Payouts →</a>
+      <div class="stat-box">
+        <h3>Latest Week Ending</h3>
+        <p id="latestWeek">–</p>
       </div>
 
-      <div class="link-card">
-        <div class="link-title">Bank Records</div>
-        <div class="link-sub">Transaction viewer, filters & flags.</div>
-        <a href="Bank Records/bank-index.html" class="link-btn">Open Bank →</a>
+      <div class="stat-box">
+        <h3>Active Mechanics</h3>
+        <p id="activeMechanics">–</p>
       </div>
-    </div>
 
-    <!-- ======= Footer / Status ======= -->
-    <div id="overviewStatus" class="status">Overview loading…</div>
+      <div class="stat-box">
+        <h3>BET Remaining</h3>
+        <p id="manualBetLeft">–</p>
+      </div>
+
+      <div class="stat-box">
+        <h3>Red Bins Remaining</h3>
+        <p id="manualRedBins">–</p>
+      </div>
+    </section>
+
+    <!-- Quick links -->
+    <section class="cta-row">
+      <div class="cta-card">
+        <h4>Payouts</h4>
+        <p>Weekly mechanic payouts, week totals &amp; CSV export.</p>
+        <a href="Payouts/payouts-index.html" class="cta-btn">Open Payouts View →</a>
+      </div>
+
+      <div class="cta-card">
+        <h4>Bank Records</h4>
+        <p>Transaction viewer, filters &amp; flags with BET / bins metrics.</p>
+        <a href="Bank Records/bank-index.html" class="cta-btn">Open Bank View →</a>
+      </div>
+    </section>
+
+    <div id="status" class="status">Loading overview…</div>
   </div>
-
-  <!-- ======= Scripts ======= -->
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script src="dashboard-script.js"></script>
 </body>
 </html>
