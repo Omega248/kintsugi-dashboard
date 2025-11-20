@@ -5,8 +5,8 @@ const STATE_ID_SHEET = "State ID's";
 
 const PAY_PER_REPAIR = 700;
 const REPAIR_RATE = 2500;              // per across, customer billing
-const ENGINE_REPLACEMENT_RATE = 12000; // per engine replacement, customer billing
-const ENGINE_REPLACEMENT_MECH_PAY = 500; // per engine replacement, mechanic payout
+const ENGINE_REPLACEMENT_RATE = 15000; // per engine replacement, customer billing
+const ENGINE_REPLACEMENT_MECH_PAY = 1500; // per engine replacement, mechanic payout
 
 // ===== State =====
 let weeklyAgg = [];   // mechanic-week aggregates
