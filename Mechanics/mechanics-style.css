@@ -1,0 +1,516 @@
+:root {
+  --bg: #020617;
+  --bg-soft: #030712;
+  --panel: #050816;
+  --panel-soft: #060b1a;
+  --border-subtle: #111827;
+  --text-main: #e5e7eb;
+  --text-soft: #9ca3af;
+  --accent: #4f46e5;
+  --accent-soft: rgba(79, 70, 229, 0.25);
+  --accent-strong: #6366f1;
+  --font: system-ui, -apple-system, Segoe UI, sans-serif;
+  --shadow-soft: 0 24px 70px rgba(0, 0, 0, 0.85);
+}
+
+/* Reset / base */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: radial-gradient(circle at top, #01040b, #000 70%);
+  color: var(--text-main);
+  font-family: var(--font);
+}
+
+/* Layout container */
+
+.app {
+  min-height: 100vh;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 24px 18px 32px;
+}
+
+/* Unified page shell – single big surface */
+
+.page-shell {
+  margin-top: 8px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  background: linear-gradient(
+      135deg,
+      rgba(10, 14, 28, 0.92),
+      rgba(6, 10, 20, 0.96)
+    );
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.65);
+  padding: 22px 26px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Top bar / nav */
+
+.top-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.brand-title {
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.brand-sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+}
+
+/* Nav tabs */
+
+.nav-tabs {
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(10, 16, 32, 0.98);
+  border: 1px solid #111827;
+  gap: 4px;
+  box-shadow: var(--shadow-soft);
+  margin-top: 4px;
+}
+
+.nav-pill {
+  padding: 7px 20px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text-soft);
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: all 0.18s ease;
+}
+
+.nav-pill:hover {
+  color: #e5e7eb;
+  background: rgba(148, 163, 253, 0.08);
+  border-color: rgba(79, 70, 229, 0.35);
+}
+
+.nav-pill.active {
+  background: radial-gradient(circle at top left, #6366f1, #4f46e5);
+  color: #fff;
+  box-shadow: 0 0 18px rgba(79, 70, 229, 0.9);
+}
+
+/* Summary header */
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+.summary-main {
+  max-width: 540px;
+}
+
+.summary-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.summary-sub {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+.link-soft {
+  font-size: 11px;
+  color: var(--accent-strong);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.link-soft:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Metric cards row */
+
+.mechanics-summary-row {
+  margin-top: 6px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .mechanics-summary-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .mechanics-summary-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.mechanics-summary-card {
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(24, 32, 56, 0.9);
+  background: linear-gradient(135deg, #070f23, #050b1d);
+}
+
+.mechanics-summary-label {
+  font-size: 11px;
+  color: var(--text-soft);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.mechanics-summary-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.mechanics-summary-sub {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+/* Filters bar – full width band to connect cards and table */
+
+.controls {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(24, 32, 56, 0.9);
+  background: linear-gradient(135deg, #050a1b, #050816);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
+  justify-content: center;
+}
+
+.label-soft {
+  font-size: 10px;
+  color: var(--text-soft);
+}
+
+.select-wrap {
+  position: relative;
+}
+
+.select-pill {
+  padding: 5px 28px 5px 11px;
+  border-radius: 999px;
+  border: 1px solid #374151;
+  background: #020617;
+  color: var(--text-main);
+  font-size: 11px;
+  appearance: none;
+  outline: none;
+  cursor: pointer;
+}
+
+.select-wrap::after {
+  content: "▾";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-52%);
+  font-size: 9px;
+  color: var(--text-soft);
+  pointer-events: none;
+}
+
+/* Search area */
+
+.input-wrap {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 260px;
+  min-width: 220px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid #374151;
+  background: var(--bg-soft);
+  color: var(--text-main);
+  font-size: 11px;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.search-input::placeholder {
+  color: #4b5563;
+}
+
+.search-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.35);
+}
+
+/* Mechanics main area – no extra outer card, just content on shell */
+
+.mechanics-layout {
+  margin-top: 14px;
+}
+
+.mechanics-panel {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.panel-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+  align-items: center;
+  text-align: center;
+}
+
+.panel-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #9ca3af;
+}
+
+.panel-subtitle {
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+/* Table – slightly lighter than shell, no harsh contrast */
+
+.table-wrap {
+  margin-top: 2px;
+  border-radius: 16px;
+  border: 1px solid rgba(24, 32, 56, 0.9);
+  background: linear-gradient(135deg, #050a1b, #020617);
+  max-height: 460px;
+  overflow: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  table-layout: fixed;
+}
+
+.table thead {
+  position: sticky;
+  top: 0;
+  background: #050a1b;
+  z-index: 1;
+}
+
+.table th,
+.table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid rgba(24, 32, 56, 0.95);
+}
+
+.table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-soft);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.table tbody tr:nth-child(even) {
+  background: rgba(9, 13, 28, 0.98);
+}
+
+.table tbody tr:nth-child(odd) {
+  background: rgba(7, 11, 24, 0.98);
+}
+
+.table tbody tr:hover {
+  background: rgba(55, 65, 81, 0.7);
+  cursor: pointer;
+}
+
+/* Column widths */
+
+.mechanics-table th:nth-child(1),
+.mechanics-table td:nth-child(1) {
+  width: 22%;
+}
+
+.mechanics-table th:nth-child(2),
+.mechanics-table td:nth-child(2) {
+  width: 12%;
+}
+
+.mechanics-table th:nth-child(3),
+.mechanics-table td:nth-child(3) {
+  width: 10%;
+}
+
+.mechanics-table th:nth-child(4),
+.mechanics-table td:nth-child(4) {
+  width: 12%;
+}
+
+.mechanics-table th:nth-child(5),
+.mechanics-table td:nth-child(5) {
+  width: 12%;
+}
+
+.mechanics-table th:nth-child(6),
+.mechanics-table td:nth-child(6) {
+  width: 14%;
+}
+
+.mechanics-table th:nth-child(7),
+.mechanics-table td:nth-child(7) {
+  width: 18%;
+}
+
+/* Clickable row helper */
+
+.table tbody tr.is-clickable {
+  cursor: pointer;
+}
+
+.table tbody tr.is-clickable:hover {
+  background: rgba(55, 65, 81, 0.75);
+}
+
+/* Detail area – visually attached to table */
+
+.mechanic-detail-shell {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(24, 32, 56, 0.9);
+}
+
+.panel-header-detail {
+  margin-bottom: 4px;
+}
+
+.mechanic-detail {
+  margin-top: 2px;
+}
+
+.mechanic-detail-empty {
+  font-size: 11px;
+  color: var(--text-soft);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.mechanic-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mechanic-detail-item {
+  padding: 10px 10px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(24, 32, 56, 0.9);
+  background: var(--panel-soft);
+}
+
+.mechanic-detail-item-label {
+  font-size: 10px;
+  color: var(--text-soft);
+  margin-bottom: 2px;
+}
+
+.mechanic-detail-item-value {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Status text */
+
+.status {
+  font-size: 11px;
+  color: var(--text-soft);
+  margin-top: 10px;
+  text-align: center;
+}
+
+/* Responsive tweaks */
+
+@media (max-width: 900px) {
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .input-wrap {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .mechanic-detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .app {
+    padding: 18px 12px 28px;
+  }
+
+  .page-shell {
+    padding: 16px 12px 20px;
+  }
+
+  .nav-tabs {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}

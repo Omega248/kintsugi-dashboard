@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Kintsugi Motorworks · Payouts</title>
+  <link rel="stylesheet" href="payouts-style.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- Shared Top Nav -->
+    <header class="top-bar">
+      <div>
+        <div class="brand-title">Kintsugi Motorworks</div>
+        <div class="brand-sub">Payouts &amp; jobs</div>
+      </div>
+      <nav class="nav-tabs">
+        <a href="../index.html" class="nav-pill">Dashboard</a>
+        <a href="payouts-index.html" class="nav-pill active">Payouts</a>
+        <a href="../Mechanics/mechanics-index.html" class="nav-pill">Mechanics</a>
+        <a href="../Bank_Record/bank-index.html" class="nav-pill">Bank</a>
+      </nav>
+    </header>
+
+    <main class="page-shell">
+      <section class="summary">
+        <div class="summary-main">
+          <div class="summary-title">Payouts overview</div>
+          <p class="summary-sub">
+            Live jobs and payout totals from the mechanic repair sheet.
+          </p>
+        </div>
+      </section>
+
+      <!-- Controls -->
+      <div class="controls">
+        <span class="label-soft">Mechanic:</span>
+        <span class="select-wrap">
+          <select id="mechanicFilter" class="select-pill">
+            <option value="all">All Mechanics</option>
+          </select>
+        </span>
+
+        <span class="label-soft">Week ending:</span>
+        <span class="select-wrap">
+          <select id="weekFilter" class="select-pill">
+            <option value="all">All Weeks</option>
+          </select>
+        </span>
+
+        <span class="label-soft">Month ending:</span>
+        <span class="select-wrap">
+          <select id="monthFilter" class="select-pill">
+            <option value="all">All Months</option>
+          </select>
+        </span>
+
+        <input
+          id="jobsSearch"
+          class="search-input"
+          type="text"
+          placeholder="Search jobs by mechanic / owner / plate..."
+        />
+
+        <button id="exportPayoutsBtn" class="btn">
+          Export CSV (current view)
+        </button>
+
+        <button id="sortWeekBtn" class="btn">
+          Sort by Week Ending (Newest)
+        </button>
+
+        <button id="sortMonthBtn" class="btn">
+          Sort by Month Ending (Newest)
+        </button>
+
+        <div class="seg-tabs">
+          <button class="seg-btn active" data-view="weekly">Weekly (Mechanics)</button>
+          <button class="seg-btn" data-view="monthly">Monthly (Repairs)</button>
+          <button class="seg-btn" data-view="jobs">Jobs</button>
+        </div>
+      </div>
+
+      <!-- Quick presets -->
+      <div class="controls presets-row">
+        <span class="label-soft">Quick filters:</span>
+        <button class="btn quick-btn" data-preset="this-week">This Week</button>
+        <button class="btn quick-btn" data-preset="last-week">Last Week</button>
+        <button class="btn quick-btn" data-preset="this-month">This Month</button>
+        <button class="btn quick-btn" data-preset="last-month">Last Month</button>
+
+        <button id="toggleAdvancedFilters" class="btn advanced-toggle">
+          Advanced Filters ▾
+        </button>
+      </div>
+
+      <!-- Advanced filters panel -->
+      <div id="advancedFilters" class="advanced-filters hidden">
+        <div class="advanced-field">
+          <label for="ownerFilter">Owner contains</label>
+          <input
+            id="ownerFilter"
+            type="text"
+            class="advanced-input"
+            placeholder="Owner name"
+          />
+        </div>
+        <div class="advanced-field">
+          <label for="plateFilter">Plate contains</label>
+          <input
+            id="plateFilter"
+            type="text"
+            class="advanced-input"
+            placeholder="Plate"
+          />
+        </div>
+        <div class="advanced-note">
+          Advanced filters currently apply to the <strong>Jobs</strong> view.
+        </div>
+      </div>
+
+      <div id="weeklySummary" class="status"></div>
+
+      <!-- Mechanic summary -->
+      <div id="mechanicSummary" class="mech-summary hidden">
+        <div class="mech-summary-header">
+          <div class="mech-summary-title">
+            Mechanic summary:
+            <span id="mechSummaryName" class="mech-summary-name"></span>
+          </div>
+          <div class="mech-summary-actions">
+            <button id="mechSummaryBankBtn" class="link-btn">View bank records</button>
+            <button id="mechSummaryClearBtn" class="link-btn">Clear</button>
+          </div>
+        </div>
+
+        <div class="mech-summary-grid">
+          <div class="mech-summary-item">
+            <div class="label-soft">Repairs (Total Across)</div>
+            <div id="mechSummaryTotalRepairs" class="mech-summary-value">–</div>
+          </div>
+
+          <div class="mech-summary-item">
+            <div class="label-soft">Weeks Worked</div>
+            <div id="mechSummaryWeeksWorked" class="mech-summary-value">–</div>
+          </div>
+
+          <div class="mech-summary-item">
+            <div class="label-soft">Avg Repairs / Week</div>
+            <div id="mechSummaryAvgPerWeek" class="mech-summary-value">–</div>
+          </div>
+
+          <div class="mech-summary-item">
+            <div class="label-soft">Total Payout @ $700</div>
+            <div id="mechSummaryTotalPayout" class="mech-summary-value">–</div>
+          </div>
+
+          <div class="mech-summary-item">
+            <div class="label-soft">Last Job Date</div>
+            <div id="mechSummaryLastJob" class="mech-summary-value">–</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="status" class="status"></div>
+
+      <!-- Weekly -->
+      <div id="weeklyWrap" class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Mechanic</th>
+              <th>Week Ending</th>
+              <th>Repairs (Total Across)</th>
+              <th>Pay ($700/repair)</th>
+            </tr>
+          </thead>
+          <tbody id="weeklyBody"></tbody>
+        </table>
+      </div>
+
+      <!-- Monthly -->
+      <div id="monthlyWrap" class="table-wrap hidden">
+        <table>
+          <thead>
+            <tr>
+              <th>Month Ending</th>
+              <th>Repairs (Total Across)</th>
+              <th>Engine Replacements</th>
+              <th id="monthlyTotalHeader">Total Repair Value ($2,500/repair)</th>
+            </tr>
+          </thead>
+          <tbody id="monthlyBody"></tbody>
+        </table>
+      </div>
+
+      <!-- Jobs -->
+      <div id="jobsWrap" class="table-wrap hidden">
+        <table>
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Mechanic</th>
+              <th>Owner</th>
+              <th>Plate</th>
+              <th>Repairs (Across)</th>
+              <th>Engine Replacements</th>
+              <th>Week Ending</th>
+              <th>Month Ending</th>
+              <th>Total Value</th>
+            </tr>
+          </thead>
+          <tbody id="jobsBody"></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <script src="payouts-script.js"></script>
+
+  <!-- Keep nav links carrying querystring -->
+  <script>
+    (function () {
+      var qs = window.location.search;
+      if (!qs) return;
+
+      var navLinks = document.querySelectorAll(".nav-tabs a");
+      navLinks.forEach(function (a) {
+        var href = a.getAttribute("href");
+        if (!href) return;
+        try {
+          var url = new URL(href, window.location.origin);
+          url.search = qs;
+          a.setAttribute("href", url.pathname + url.search + url.hash);
+        } catch (e) {
+          // ignore
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

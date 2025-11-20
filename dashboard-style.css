@@ -1,0 +1,247 @@
+:root {
+  --bg: #020817;
+  --bg-soft: #050816;
+  --bg-soft2: #030712;
+  --border-subtle: #111827;
+  --border-strong: #1f2937;
+  --text-main: #e5e7eb;
+  --text-soft: #9ca3af;
+  --accent: #4f46e5;
+  --accent-soft: rgba(79, 70, 229, 0.22);
+  --accent-strong: #6366f1;
+  --in: #22c55e;
+  --net: #38bdf8;
+  --bins: #facc15;
+  --radius-lg: 18px;
+  --shadow-soft: 0 24px 70px rgba(0, 0, 0, 0.9);
+}
+
+/* Global */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 14px 18px 18px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  color: var(--text-main);
+  background-color: #000;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: -40vh -40vw;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at top, #111827 0%, #020817 35%, #000 75%);
+  opacity: 1;
+}
+
+.app {
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+/* Top bar */
+
+.top-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+
+
+.brand-title {
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-align: center;
+}
+
+
+.brand-sub {
+  margin-top: 2px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--text-soft);
+  text-align: center;
+}
+
+
+/* Nav tabs */
+
+.nav-tabs {
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(10, 16, 32, 0.98);
+  border: 1px solid #111827;
+  gap: 4px;
+  box-shadow: var(--shadow-soft);
+}
+
+
+
+.nav-pill {
+  padding: 7px 20px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text-soft);
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: all 0.18s ease;
+}
+
+.nav-pill:hover {
+  color: #e5e7eb;
+  background: rgba(148, 163, 253, 0.08);
+  border-color: rgba(79, 70, 229, 0.35);
+}
+
+.nav-pill.active {
+  background: radial-gradient(circle at top left, #6366f1, #4f46e5);
+  color: #fff;
+  box-shadow: 0 0 18px rgba(79, 70, 229, 0.9);
+}
+
+/* Stat cards */
+
+.stat-boxes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+
+.stat-box {
+  padding: 18px 18px 16px;
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at top left, rgba(148, 163, 253, 0.10), transparent),
+    rgba(6, 11, 25, 0.98);
+  border: 1px solid rgba(31, 41, 55, 0.95);
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  flex: 0 1 260px;
+}
+
+
+.stat-box h3 {
+  margin: 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-soft);
+}
+
+.stat-box p {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.stat-box .sub {
+  margin: 0;
+  font-size: 10px;
+  color: var(--text-soft);
+}
+
+/* Status */
+
+.status {
+  font-size: 10px;
+  color: var(--text-soft);
+  margin-top: 4px;
+}
+
+/* CTAs */
+
+.cta-row {
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  gap: 24px;
+  margin: 0 auto 10px auto;
+  max-width: 1200px;
+  padding: 0 16px;
+}
+
+
+.cta-card {
+  padding: 18px 18px 16px;
+  border-radius: var(--radius-lg);
+  background: rgba(5, 9, 20, 0.98);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-soft);
+  flex: 0 1 460px;
+}
+
+
+.cta-card h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.cta-card p {
+  margin: 0 0 10px;
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+.cta-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: #e5e7eb;
+  background: radial-gradient(circle at top left, #6366f1, #4f46e5);
+  text-decoration: none;
+  box-shadow: 0 8px 20px rgba(79, 70, 229, 0.7);
+  transition: transform 0.15s ease, box-shadow 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.cta-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(79, 70, 229, 0.9);
+  opacity: 0.95;
+}
+
+/* Scrollbars */
+
+body {
+  scrollbar-color: #4f46e5 #050816;
+  scrollbar-width: thin;
+}
+body::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+body::-webkit-scrollbar-track {
+  background: #050816;
+}
+body::-webkit-scrollbar-thumb {
+  background: #4f46e5;
+  border-radius: 999px;
+}
