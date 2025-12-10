@@ -284,13 +284,13 @@ function showCopyNotification(message = 'Copied to clipboard!') {
     position: fixed;
     top: 20px;
     right: 20px;
-    padding: 12px 20px;
+    padding: var(--space-sm, 8px) var(--space-md, 16px);
     background: var(--color-success, #22c55e);
     color: white;
     border-radius: var(--radius-md, 8px);
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
     z-index: 10000;
-    font-size: 14px;
+    font-size: var(--font-size-md, 13px);
     font-weight: 500;
     animation: slideIn 0.3s ease;
   `;

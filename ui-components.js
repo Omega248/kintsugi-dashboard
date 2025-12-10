@@ -253,7 +253,7 @@ function createStatCard(data) {
   Object.assign(card.style, {
     padding: 'var(--space-md, 16px)',
     borderRadius: 'var(--radius-lg, 18px)',
-    background: 'radial-gradient(circle at top left, rgba(148, 163, 253, 0.10), transparent), rgba(6, 11, 25, 0.98)',
+    background: 'radial-gradient(circle at top left, var(--accent-soft, rgba(79, 70, 229, 0.22)), transparent), var(--bg-secondary, rgba(6, 11, 25, 0.98))',
     border: '1px solid var(--border-default)',
     boxShadow: 'var(--shadow-soft)',
     display: 'flex',
