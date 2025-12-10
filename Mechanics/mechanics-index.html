@@ -4,7 +4,9 @@
   <meta charset="UTF-8" />
   <title>Kintsugi Motorworks · Mechanics</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="../shared-styles.css" />
   <link rel="stylesheet" href="mechanics-style.css" />
+  <script src="../kintsugi-core.js"></script>
 </head>
 <body>
   <div class="app">
@@ -160,26 +162,5 @@
   </div>
 
   <script src="mechanics-script.js"></script>
-
-  <!-- Keep nav links carrying querystring -->
-  <script>
-    (function () {
-      var qs = window.location.search;
-      if (!qs) return;
-
-      var navLinks = document.querySelectorAll(".nav-tabs a");
-      navLinks.forEach(function (a) {
-        var href = a.getAttribute("href");
-        if (!href) return;
-        try {
-          var url = new URL(href, window.location.origin);
-          url.search = qs;
-          a.setAttribute("href", url.pathname + url.search + url.hash);
-        } catch (e) {
-          // ignore
-        }
-      });
-    })();
-  </script>
 </body>
 </html>

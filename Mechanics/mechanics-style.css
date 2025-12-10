@@ -1,130 +1,32 @@
+/* =============================================
+   Mechanics Page - Specific Styles
+   Common styles are in ../shared-styles.css
+   ============================================= */
+
+/* Additional local variables */
 :root {
-  --bg: #020817;
-  --bg-soft: #050816;
-  --bg-soft2: #030712;
   --panel: #050816;
   --panel-soft: #060b1a;
-  --border-subtle: #111827;
-  --border-strong: #1f2937;
-  --text-main: #e5e7eb;
-  --text-soft: #9ca3af;
-  --accent: #4f46e5;
-  --accent-soft: rgba(79, 70, 229, 0.22);
-  --accent-strong: #6366f1;
-  --radius-lg: 18px;
-  --font: system-ui, -apple-system, Segoe UI, sans-serif;
-  --shadow-soft: 0 24px 70px rgba(0, 0, 0, 0.9);
 }
 
-/* Reset / base */
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  margin: 0;
-  padding: 0;
-  background: radial-gradient(circle at top, #01040b, #000 70%);
-  color: var(--text-main);
-  font-family: var(--font);
-}
-
-/* Layout container */
-
-.app {
-  min-height: 100vh;
-  max-width: 1600px;
-  margin: 0 auto;
-  padding: 24px 18px 32px;
-}
-
-/* Unified page shell – single big surface */
-
+/* Page shell override for mechanics layout */
 .page-shell {
-  margin-top: 8px;
-  border-radius: 22px;
+  margin-top: var(--space-sm);
+  border-radius: var(--radius-xl);
   border: 1px solid rgba(255, 255, 255, 0.03);
   background: linear-gradient(
       135deg,
       rgba(10, 14, 28, 0.92),
       rgba(6, 10, 20, 0.96)
     );
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.65);
-  padding: 22px 26px 26px;
+  box-shadow: var(--shadow-elevated);
+  padding: var(--space-lg) 26px 26px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-md);
 }
 
-/* Top bar / nav */
-
-.top-bar {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  margin-bottom: 20px;
-  text-align: center;
-}
-
-.brand-title {
-  font-size: 34px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-}
-
-.brand-sub {
-  margin-top: 2px;
-  font-size: 11px;
-  color: var(--text-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-}
-
-/* Nav tabs */
-
-.nav-tabs {
-  display: inline-flex;
-  padding: 4px;
-  border-radius: 999px;
-  background: rgba(10, 16, 32, 0.98);
-  border: 1px solid #111827;
-  gap: 4px;
-  box-shadow: var(--shadow-soft);
-  margin-top: 4px;
-}
-
-.nav-pill {
-  padding: 7px 20px;
-  border-radius: 999px;
-  font-size: 11px;
-  color: var(--text-soft);
-  background: transparent;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-decoration: none;
-  border: 1px solid transparent;
-  transition: all 0.18s ease;
-}
-
-.nav-pill:hover {
-  color: #e5e7eb;
-  background: rgba(148, 163, 253, 0.08);
-  border-color: rgba(79, 70, 229, 0.35);
-}
-
-.nav-pill.active {
-  background: radial-gradient(circle at top left, #6366f1, #4f46e5);
-  color: #fff;
-  box-shadow: 0 0 18px rgba(79, 70, 229, 0.9);
-}
+/* Nav pills styles are in shared-styles.css */
 
 /* Summary header */
 
