@@ -13,8 +13,9 @@ This document provides technical details about the implementation of the payouts
 - **Regular repairs**: $2,500 per repair (unchanged)
 
 #### Mechanic Payout
-- **BCSO engine replacements**: $0 (mechanic does not get paid)
-- **LSPD/other engine replacements**: $1,500 (unchanged)
+- **BCSO engine replacements**: $12,000 (reimbursement only, no bonus)
+- **LSPD engine replacements**: $13,500 ($12k reimbursement + $1.5k bonus from 3k profit split)
+- **Other department engine replacements**: $13,500 ($12k reimbursement + $1.5k bonus)
 - **Regular repairs**: $700 per repair (unchanged for all departments)
 
 ### 2. Department Filter
@@ -100,12 +101,19 @@ This ensures department filtering works correctly with other filters.
 
 ### Mechanic Pay Calculation
 
-Mechanic pay excludes BCSO engine replacements:
+Mechanic pay includes reimbursement for all engine replacements, plus bonus for non-BCSO:
 ```javascript
-// For BCSO engines, mechanic gets $0
+// BCSO: $12k reimbursement only
+// LSPD: $12k reimbursement + $1.5k bonus (50% of 3k profit)
+// Other: $12k reimbursement + $1.5k bonus
 const bcsoEngines = engineReplacementsByDept["BCSO"] || 0;
-const nonBcsoEngines = totalEngines - bcsoEngines;
-const enginePay = nonBcsoEngines * ENGINE_REPLACEMENT_MECH_PAY;
+const lspdEngines = engineReplacementsByDept["LSPD"] || 0;
+const otherEngines = totalEngines - bcsoEngines - lspdEngines;
+
+const enginePay = 
+  bcsoEngines * ENGINE_REIMBURSEMENT +
+  lspdEngines * (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD) +
+  otherEngines * (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD);
 const totalPay = repairs * PAY_PER_REPAIR + enginePay;
 ```
 
@@ -174,7 +182,8 @@ const PAY_PER_REPAIR = 700;
 const REPAIR_RATE = 2500;
 const ENGINE_REPLACEMENT_RATE = 15000;
 const ENGINE_REPLACEMENT_RATE_BCSO = 12100;
-const ENGINE_REPLACEMENT_MECH_PAY = 1500;
+const ENGINE_REIMBURSEMENT = 12000;
+const ENGINE_BONUS_LSPD = 1500;
 ```
 
 ### Adding New Filters
