@@ -40,6 +40,13 @@
           </select>
         </span>
 
+        <span class="label-soft">Department:</span>
+        <span class="select-wrap">
+          <select id="departmentFilter" class="select-pill">
+            <option value="all">All Departments</option>
+          </select>
+        </span>
+
         <span class="label-soft">Week ending:</span>
         <span class="select-wrap">
           <select id="weekFilter" class="select-pill">
@@ -63,6 +70,10 @@
 
         <button id="exportPayoutsBtn" class="btn">
           Export CSV (current view)
+        </button>
+
+        <button id="generateBillBtn" class="btn">
+          Generate Bill (Dept + Month)
         </button>
 
         <button id="sortWeekBtn" class="btn">
