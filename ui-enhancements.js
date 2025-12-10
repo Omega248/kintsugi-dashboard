@@ -387,23 +387,52 @@ function animateNumber(element, start, end, duration = 1000) {
 
 async function copyToClipboard(text, showToast = true) {
   try {
-    await navigator.clipboard.writeText(text);
-    if (showToast) {
-      toast.success('Copied!', 'Text copied to clipboard', 2000);
+    // Modern clipboard API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      if (showToast) {
+        toast.success('Copied!', 'Text copied to clipboard', 2000);
+      }
+      return true;
     }
-    return true;
+    
+    // Fallback for older browsers
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-9999px';
+    textArea.style.top = '-9999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    try {
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      
+      if (successful && showToast) {
+        toast.success('Copied!', 'Text copied to clipboard', 2000);
+      } else if (!successful && showToast) {
+        toast.error('Copy Failed', 'Could not copy to clipboard', 3000);
+      }
+      return successful;
+    } catch (err) {
+      document.body.removeChild(textArea);
+      throw err;
+    }
   } catch (err) {
     console.error('Failed to copy:', err);
     if (showToast) {
-      toast.error('Copy Failed', 'Could not copy to clipboard', 3000);
+      toast.error('Copy Failed', 'Your browser does not support clipboard operations', 3000);
     }
     return false;
   }
 }
 
-// ===== Debounce Helper (if not in utils.js) =====
+// ===== Debounce Helper =====
+// Note: Check if debounce exists in utils.js before using this version
 
-function debounce(func, wait) {
+function debounceUI(func, wait) {
   let timeout;
   return function executedFunction(...args) {
     const later = () => {
@@ -500,10 +529,16 @@ class PaginationManager {
     const startItem = (this.currentPage - 1) * this.itemsPerPage + 1;
     const endItem = Math.min(this.currentPage * this.itemsPerPage, this.totalItems);
 
-    let html = '<div class="pagination">';
+    const paginationDiv = document.createElement('div');
+    paginationDiv.className = 'pagination';
     
     // Previous button
-    html += `<button class="pagination-button" ${this.currentPage === 1 ? 'disabled' : ''} onclick="pagination.setPage(${this.currentPage - 1})">‹</button>`;
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'pagination-button';
+    prevBtn.textContent = '‹';
+    prevBtn.disabled = this.currentPage === 1;
+    prevBtn.addEventListener('click', () => this.setPage(this.currentPage - 1));
+    paginationDiv.appendChild(prevBtn);
     
     // Page numbers
     const maxVisible = 5;
@@ -515,32 +550,60 @@ class PaginationManager {
     }
 
     if (startPage > 1) {
-      html += `<button class="pagination-button" onclick="pagination.setPage(1)">1</button>`;
+      const firstBtn = document.createElement('button');
+      firstBtn.className = 'pagination-button';
+      firstBtn.textContent = '1';
+      firstBtn.addEventListener('click', () => this.setPage(1));
+      paginationDiv.appendChild(firstBtn);
+      
       if (startPage > 2) {
-        html += '<span class="pagination-info">...</span>';
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'pagination-info';
+        ellipsis.textContent = '...';
+        paginationDiv.appendChild(ellipsis);
       }
     }
 
     for (let i = startPage; i <= endPage; i++) {
-      html += `<button class="pagination-button ${i === this.currentPage ? 'active' : ''}" onclick="pagination.setPage(${i})">${i}</button>`;
+      const pageBtn = document.createElement('button');
+      pageBtn.className = `pagination-button ${i === this.currentPage ? 'active' : ''}`;
+      pageBtn.textContent = i;
+      const page = i;
+      pageBtn.addEventListener('click', () => this.setPage(page));
+      paginationDiv.appendChild(pageBtn);
     }
 
     if (endPage < totalPages) {
       if (endPage < totalPages - 1) {
-        html += '<span class="pagination-info">...</span>';
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'pagination-info';
+        ellipsis.textContent = '...';
+        paginationDiv.appendChild(ellipsis);
       }
-      html += `<button class="pagination-button" onclick="pagination.setPage(${totalPages})">${totalPages}</button>`;
+      
+      const lastBtn = document.createElement('button');
+      lastBtn.className = 'pagination-button';
+      lastBtn.textContent = totalPages;
+      lastBtn.addEventListener('click', () => this.setPage(totalPages));
+      paginationDiv.appendChild(lastBtn);
     }
     
     // Next button
-    html += `<button class="pagination-button" ${this.currentPage === totalPages ? 'disabled' : ''} onclick="pagination.setPage(${this.currentPage + 1})">›</button>`;
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'pagination-button';
+    nextBtn.textContent = '›';
+    nextBtn.disabled = this.currentPage === totalPages;
+    nextBtn.addEventListener('click', () => this.setPage(this.currentPage + 1));
+    paginationDiv.appendChild(nextBtn);
     
     // Info
-    html += `<span class="pagination-info">${startItem}-${endItem} of ${this.totalItems}</span>`;
+    const info = document.createElement('span');
+    info.className = 'pagination-info';
+    info.textContent = `${startItem}-${endItem} of ${this.totalItems}`;
+    paginationDiv.appendChild(info);
     
-    html += '</div>';
-    
-    container.innerHTML = html;
+    container.innerHTML = '';
+    container.appendChild(paginationDiv);
   }
 }
 

@@ -1115,18 +1115,18 @@ body.high-contrast .data-card {
 /* ===== Increased Font Size Mode ===== */
 
 body.large-text {
-  --font-size-xs: 11px;
-  --font-size-sm: 12px;
-  --font-size-base: 14px;
-  --font-size-md: 16px;
-  --font-size-lg: 18px;
-  --font-size-xl: 22px;
-  --font-size-2xl: 28px;
-  --font-size-3xl: 40px;
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-base: 15px;
+  --font-size-md: 17px;
+  --font-size-lg: 19px;
+  --font-size-xl: 24px;
+  --font-size-2xl: 30px;
+  --font-size-3xl: 42px;
 }
 
 body.large-text table {
-  font-size: 15px;
+  font-size: 16px;
 }
 
 /* ===== Compact Mode ===== */
@@ -1848,16 +1848,16 @@ body.compact-mode table td {
   }
   
   .filter-chips-container {
-    font-size: var(--font-size-xs);
+    font-size: var(--font-size-sm);
   }
   
   .filter-chip {
-    font-size: 9px;
+    font-size: var(--font-size-sm);
     padding: 3px 8px;
   }
   
   .breadcrumb {
-    font-size: 10px;
+    font-size: var(--font-size-sm);
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
@@ -1868,7 +1868,7 @@ body.compact-mode table td {
   }
   
   .pagination {
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     gap: 4px;
   }
 }
