@@ -6,6 +6,10 @@
 // Default sheet ID (can be overridden per page if needed)
 const KINTSUGI_SHEET_ID = "1EJxx9BAUyBgj9XImCXQ5_3nr_o5BXyLZ9SSkaww71Ks";
 
+// Cache for parsed CSV data to avoid redundant fetches
+const kCsvCache = new Map();
+const kCacheTimeout = 5 * 60 * 1000; // 5 minutes
+
 // ----- SHEETS / CSV -----
 
 /**
@@ -72,80 +76,128 @@ function kParseCSV(text) {
 
 /**
  * Fetch CSV from a sheet and parse it.
- * @param {string} sheetName
- * @param {object} options
- *   - sheetId: override SHEET_ID if needed
- *   - usePapa: use PapaParse if available (default: false)
- *   - header: return array of objects (true) or array-of-arrays (false) - default: false
- *
+ * @param {string} sheetName - Name of the sheet/tab to fetch
+ * @param {object} options - Configuration options
+ * @param {string} [options.sheetId] - Override default sheet ID
+ * @param {boolean} [options.usePapa=false] - Use PapaParse if available
+ * @param {boolean} [options.header=false] - Return objects with headers
+ * @param {boolean} [options.cache=true] - Enable caching
+ * @returns {Promise<Array|Object>} Parsed CSV data
+ * 
  * Returns:
  *   if header === false -> string[][]
  *   if header === true  -> { fields: string[], data: object[] }
  */
 async function kFetchCSV(sheetName, options = {}) {
-  const { sheetId, usePapa = false, header = false } = options;
+  const { sheetId, usePapa = false, header = false, cache = true } = options;
   const url = kSheetCsvUrl(sheetName, sheetId);
-
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status} for sheet "${sheetName}"`);
-
-  const text = await res.text();
-  if (!text.trim() || text.trim().startsWith("<")) {
-    throw new Error(
-      `Sheet "${sheetName}" returned HTML/empty — check tab name & sharing.`
-    );
+  
+  // Check cache first
+  if (cache && kCsvCache.has(url)) {
+    const cached = kCsvCache.get(url);
+    if (Date.now() - cached.timestamp < kCacheTimeout) {
+      return kDeepClone(cached.data);
+    }
+    kCsvCache.delete(url);
   }
 
-  // Use PapaParse if available and requested
-  if (usePapa && typeof Papa !== 'undefined') {
-    return new Promise((resolve, reject) => {
-      Papa.parse(text, {
-        header,
-        skipEmptyLines: "greedy",
-        dynamicTyping: false,
-        complete: (parsed) => {
-          if (parsed.errors && parsed.errors.length) {
-            console.warn(`PapaParse errors for "${sheetName}"`, parsed.errors);
-          }
+  try {
+    const res = await fetch(url);
+    
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`Sheet "${sheetName}" not found. Please check the sheet name.`);
+      } else if (res.status === 403) {
+        throw new Error(`Access denied to sheet "${sheetName}". Please check sharing settings.`);
+      } else {
+        throw new Error(`HTTP ${res.status} error while fetching sheet "${sheetName}"`);
+      }
+    }
 
-          if (header) {
-            const data = parsed.data || [];
-            const fields =
-              (parsed.meta && parsed.meta.fields) ||
-              (data[0] ? Object.keys(data[0]) : []);
-            resolve({ fields, data });
-          } else {
-            resolve(parsed.data || []);
-          }
-        },
-        error: reject,
+    const text = await res.text();
+    
+    if (!text.trim()) {
+      throw new Error(`Sheet "${sheetName}" is empty.`);
+    }
+    
+    if (text.trim().startsWith("<")) {
+      throw new Error(
+        `Sheet "${sheetName}" returned HTML — check tab name & sharing settings.`
+      );
+    }
+
+    // Use PapaParse if available and requested
+    if (usePapa && typeof Papa !== 'undefined') {
+      const parsed = await new Promise((resolve, reject) => {
+        Papa.parse(text, {
+          header,
+          skipEmptyLines: "greedy",
+          dynamicTyping: false,
+          complete: (parsed) => {
+            if (parsed.errors && parsed.errors.length) {
+              console.warn(`PapaParse errors for "${sheetName}"`, parsed.errors);
+            }
+
+            if (header) {
+              const data = parsed.data || [];
+              const fields =
+                (parsed.meta && parsed.meta.fields) ||
+                (data[0] ? Object.keys(data[0]) : []);
+              resolve({ fields, data });
+            } else {
+              resolve(parsed.data || []);
+            }
+          },
+          error: reject,
+        });
       });
-    });
-  }
+      
+      // Cache the result
+      if (cache) {
+        kCsvCache.set(url, { data: parsed, timestamp: Date.now() });
+      }
+      
+      return parsed;
+    }
 
-  // Use built-in parser
-  const rows = kParseCSV(text);
-  
-  if (!header) {
-    return rows;
+    // Use built-in parser
+    const rows = kParseCSV(text);
+    
+    let result;
+    if (!header) {
+      result = rows;
+    } else {
+      // Convert to objects with headers
+      if (rows.length === 0) {
+        result = { fields: [], data: [] };
+      } else {
+        const fields = rows[0].map(h => h.trim());
+        const data = [];
+        
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          const obj = {};
+          fields.forEach((field, idx) => {
+            obj[field] = row[idx] || "";
+          });
+          data.push(obj);
+        }
+        
+        result = { fields, data };
+      }
+    }
+    
+    // Cache the result
+    if (cache) {
+      kCsvCache.set(url, { data: result, timestamp: Date.now() });
+    }
+    
+    return result;
+    
+  } catch (error) {
+    console.error(`Error fetching CSV from "${sheetName}":`, error);
+    throw error;
   }
-
-  // Convert to objects with headers
-  if (rows.length === 0) return { fields: [], data: [] };
-  
-  const fields = rows[0].map(h => h.trim());
-  const data = [];
-  
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    const obj = {};
-    fields.forEach((field, idx) => {
-      obj[field] = row[idx] || "";
-    });
-    data.push(obj);
-  }
-  
-  return { fields, data };
 }
 
 /**
@@ -302,6 +354,99 @@ function kInitNavSyncOnLoad() {
 function kSetText(id, value) {
   const el = document.getElementById(id);
   if (el) el.textContent = value;
+}
+
+/**
+ * Set HTML content of an element by ID (use with caution).
+ * @param {string} id - Element ID
+ * @param {string} html - HTML content to set
+ */
+function kSetHtml(id, html) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = html;
+}
+
+/**
+ * Show loading state for an element.
+ * @param {string|HTMLElement} target - Element ID or element
+ * @param {string} [message='Loading...'] - Loading message
+ */
+function kShowLoading(target, message = 'Loading...') {
+  const el = typeof target === 'string' ? document.getElementById(target) : target;
+  if (!el) return;
+  
+  const loader = document.createElement('div');
+  loader.className = 'k-loader';
+  loader.innerHTML = `
+    <div class="k-loader-spinner"></div>
+    <div class="k-loader-text">${message}</div>
+  `;
+  
+  el.style.position = 'relative';
+  el.style.minHeight = '100px';
+  el.appendChild(loader);
+}
+
+/**
+ * Hide loading state for an element.
+ * @param {string|HTMLElement} target - Element ID or element
+ */
+function kHideLoading(target) {
+  const el = typeof target === 'string' ? document.getElementById(target) : target;
+  if (!el) return;
+  
+  const loaders = el.querySelectorAll('.k-loader');
+  loaders.forEach(loader => loader.remove());
+}
+
+/**
+ * Show error state for an element.
+ * @param {string|HTMLElement} target - Element ID or element
+ * @param {string} message - Error message
+ * @param {Function} [onRetry] - Optional retry callback
+ */
+function kShowError(target, message, onRetry) {
+  const el = typeof target === 'string' ? document.getElementById(target) : target;
+  if (!el) return;
+  
+  const error = document.createElement('div');
+  error.className = 'k-error';
+  error.innerHTML = `
+    <div class="k-error-icon">⚠️</div>
+    <div class="k-error-message">${message}</div>
+    ${onRetry ? '<button class="k-error-retry btn">Try Again</button>' : ''}
+  `;
+  
+  if (onRetry) {
+    const retryBtn = error.querySelector('.k-error-retry');
+    retryBtn.addEventListener('click', onRetry);
+  }
+  
+  el.style.position = 'relative';
+  el.style.minHeight = '100px';
+  el.appendChild(error);
+}
+
+/**
+ * Show empty state for an element.
+ * @param {string|HTMLElement} target - Element ID or element
+ * @param {string} message - Empty state message
+ * @param {string} [icon='📭'] - Icon to display
+ */
+function kShowEmpty(target, message, icon = '📭') {
+  const el = typeof target === 'string' ? document.getElementById(target) : target;
+  if (!el) return;
+  
+  const empty = document.createElement('div');
+  empty.className = 'k-empty';
+  empty.innerHTML = `
+    <div class="k-empty-icon">${icon}</div>
+    <div class="k-empty-message">${message}</div>
+  `;
+  
+  el.style.position = 'relative';
+  el.style.minHeight = '100px';
+  el.appendChild(empty);
 }
 
 /**

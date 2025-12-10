@@ -399,6 +399,142 @@ tbody tr:hover {
   text-align: center;
 }
 
+/* ===== Loading, Error & Empty States ===== */
+
+.k-loader {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 8, 23, 0.85);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  border-radius: var(--radius-md);
+}
+
+.k-loader-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-default);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: kSpin 0.8s linear infinite;
+}
+
+@keyframes kSpin {
+  to { transform: rotate(360deg); }
+}
+
+.k-loader-text {
+  margin-top: var(--space-md);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.k-error {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 8, 23, 0.95);
+  z-index: 100;
+  padding: var(--space-lg);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.k-error-icon {
+  font-size: 48px;
+  margin-bottom: var(--space-md);
+}
+
+.k-error-message {
+  color: var(--text-primary);
+  font-size: var(--font-size-md);
+  max-width: 400px;
+  margin-bottom: var(--space-md);
+  line-height: 1.6;
+}
+
+.k-error-retry {
+  margin-top: var(--space-sm);
+}
+
+.k-empty {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg);
+  text-align: center;
+}
+
+.k-empty-icon {
+  font-size: 64px;
+  margin-bottom: var(--space-md);
+  opacity: 0.5;
+}
+
+.k-empty-message {
+  color: var(--text-secondary);
+  font-size: var(--font-size-md);
+  max-width: 400px;
+  line-height: 1.6;
+}
+
+/* ===== Skeleton Loading ===== */
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-secondary) 0%,
+    var(--bg-tertiary) 50%,
+    var(--bg-secondary) 100%
+  );
+  background-size: 200% 100%;
+  animation: kSkeletonPulse 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes kSkeletonPulse {
+  0%, 100% { background-position: 200% 0; }
+  50% { background-position: -200% 0; }
+}
+
+.skeleton-text {
+  height: 1em;
+  margin-bottom: 0.5em;
+}
+
+.skeleton-title {
+  height: 1.5em;
+  width: 60%;
+  margin-bottom: 1em;
+}
+
+.skeleton-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+}
+
 /* ===== Utility Classes ===== */
 
 .hidden {
@@ -415,6 +551,21 @@ tbody tr:hover {
 
 .text-left {
   text-align: left;
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fade-in {
+  animation: kFadeIn 0.3s ease;
+}
+
+@keyframes kFadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* ===== Scrollbars ===== */
@@ -457,32 +608,184 @@ body::-webkit-scrollbar-thumb:hover {
   border-radius: var(--radius-full);
 }
 
+/* ===== Accessibility Improvements ===== */
+
+/* Focus styles for keyboard navigation */
+*:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Skip to main content link */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  padding: 8px 16px;
+  background: var(--accent-primary);
+  color: white;
+  text-decoration: none;
+  z-index: 10000;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* Screen reader only text */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ===== Print Styles ===== */
+
+@media print {
+  body {
+    background: white;
+    color: black;
+  }
+  
+  .nav-tabs,
+  .controls,
+  button,
+  .btn,
+  .status {
+    display: none !important;
+  }
+  
+  .table-wrap {
+    box-shadow: none;
+    border: 1px solid #ccc;
+  }
+  
+  table {
+    page-break-inside: auto;
+  }
+  
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  
+  thead {
+    display: table-header-group;
+  }
+}
+
 /* ===== Responsive Design ===== */
 
-@media (max-width: 768px) {
+/* Mobile First Approach */
+
+/* Small devices (phones, 0-767px) */
+@media (max-width: 767px) {
   body {
     padding: 10px;
   }
   
   .brand-title {
-    font-size: 24px;
+    font-size: 20px;
+  }
+  
+  .brand-sub {
+    font-size: 9px;
   }
   
   .nav-tabs {
     flex-wrap: wrap;
+    justify-content: center;
   }
   
   .nav-pill {
-    padding: 6px 14px;
+    padding: 6px 12px;
+    font-size: var(--font-size-xs);
+  }
+  
+  .btn {
+    font-size: var(--font-size-xs);
+    padding: 4px 10px;
+  }
+  
+  .select-pill,
+  .search-input {
     font-size: var(--font-size-sm);
+    min-width: 120px;
+  }
+  
+  .table-wrap {
+    max-height: calc(100vh - 160px);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
   
   table {
     font-size: 11px;
+    min-width: 600px;
   }
   
   th,
   td {
     padding: 4px 6px;
+    min-width: 80px;
+  }
+  
+  .k-loader-text,
+  .k-error-message,
+  .k-empty-message {
+    font-size: var(--font-size-sm);
+  }
+}
+
+/* Medium devices (tablets, 768px-1023px) */
+@media (min-width: 768px) and (max-width: 1023px) {
+  body {
+    padding: 12px 16px;
+  }
+  
+  .brand-title {
+    font-size: 28px;
+  }
+  
+  table {
+    font-size: 12px;
+  }
+}
+
+/* Large devices (desktops, 1024px and up) */
+@media (min-width: 1024px) {
+  .app {
+    max-width: 1600px;
+  }
+}
+
+/* Extra large devices (large desktops, 1440px and up) */
+@media (min-width: 1440px) {
+  .app {
+    max-width: 1800px;
+  }
+}
+
+/* Reduced motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Dark mode support (respects system preference) */
+@media (prefers-color-scheme: light) {
+  :root {
+    /* Could add light theme overrides here if needed */
   }
 }
