@@ -484,10 +484,12 @@ if (clearQuickBtn) {
 }
 
 if (searchInput) {
-  searchInput.addEventListener("input", () => {
+  // Debounce search for better performance
+  const debouncedBankSearch = kDebounce(() => {
     render();
     updateUrlFromState();
-  });
+  }, 300);
+  searchInput.addEventListener("input", debouncedBankSearch);
 }
 
 if (toggleBalance) {

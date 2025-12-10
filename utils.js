@@ -442,3 +442,83 @@ async function kRetryAsync(fn, maxRetries = 3, delay = 1000) {
   
   throw lastError;
 }
+
+/**
+ * Register keyboard shortcuts
+ * @param {Object} shortcuts - Map of key combinations to handlers
+ * Example: { 'ctrl+s': saveHandler, 'ctrl+/': helpHandler }
+ */
+function kRegisterShortcuts(shortcuts) {
+  if (!shortcuts || typeof shortcuts !== 'object') return;
+  
+  document.addEventListener('keydown', (e) => {
+    const key = [];
+    if (e.ctrlKey || e.metaKey) key.push('ctrl');
+    if (e.altKey) key.push('alt');
+    if (e.shiftKey) key.push('shift');
+    key.push(e.key.toLowerCase());
+    
+    const combo = key.join('+');
+    const handler = shortcuts[combo];
+    
+    if (handler) {
+      e.preventDefault();
+      handler(e);
+    }
+  });
+}
+
+/**
+ * Format date range as human-readable string
+ * @param {Date} start - Start date
+ * @param {Date} end - End date
+ * @returns {string} Formatted date range
+ */
+function kFormatDateRange(start, end) {
+  if (!kIsValidDate(start) || !kIsValidDate(end)) return '';
+  
+  const formatDate = (d) => {
+    return d.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: d.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+    });
+  };
+  
+  return `${formatDate(start)} – ${formatDate(end)}`;
+}
+
+/**
+ * Parse query string to object
+ * @param {string} [search] - Query string (default: window.location.search)
+ * @returns {Object} Parsed query parameters
+ */
+function kParseQuery(search = window.location.search) {
+  const params = new URLSearchParams(search);
+  const result = {};
+  
+  for (const [key, value] of params) {
+    result[key] = value;
+  }
+  
+  return result;
+}
+
+/**
+ * Build query string from object
+ * @param {Object} params - Parameters object
+ * @returns {string} Query string (without leading ?)
+ */
+function kBuildQuery(params) {
+  if (!params || typeof params !== 'object') return '';
+  
+  const searchParams = new URLSearchParams();
+  
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== null && value !== undefined && value !== '') {
+      searchParams.set(key, String(value));
+    }
+  }
+  
+  return searchParams.toString();
+}

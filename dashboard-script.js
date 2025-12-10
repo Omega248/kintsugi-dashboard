@@ -248,10 +248,46 @@ function money(n) {
   return kFmtMoney(n);
 }
 
+// ==== Keyboard Shortcuts ====
+
+function initKeyboardShortcuts() {
+  kRegisterShortcuts({
+    'ctrl+r': (e) => {
+      // Reload data
+      loadOverview().then(() => kShowToast('Data refreshed', 'success', 2000));
+    },
+    'ctrl+1': () => {
+      // Navigate to Dashboard
+      window.location.href = 'index.html';
+    },
+    'ctrl+2': () => {
+      // Navigate to Payouts
+      window.location.href = 'Payouts/payouts-index.html';
+    },
+    'ctrl+3': () => {
+      // Navigate to Mechanics
+      window.location.href = 'Mechanics/mechanics-index.html';
+    },
+    'ctrl+4': () => {
+      // Navigate to Bank
+      window.location.href = 'Bank_Record/bank-index.html';
+    }
+  });
+}
+
 // ==== Init ====
 
 document.addEventListener("DOMContentLoaded", async () => {
   kSyncNavLinksWithCurrentSearch();
-  await loadOverview();
-  await loadConfig();
+  initKeyboardShortcuts();
+  
+  // Load overview and config in parallel for better performance
+  try {
+    await Promise.all([
+      loadOverview(),
+      loadConfig()
+    ]);
+  } catch (err) {
+    console.error('Error during dashboard initialization:', err);
+  }
 });
