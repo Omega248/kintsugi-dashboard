@@ -164,6 +164,17 @@ function commentForWeek(weekEndDate) {
   return `Payout for week ending ${fmtDate(weekEndDate)}`;
 }
 
+// Calculate engine replacement billing value by department
+function calculateEngineValue(engineReplacementsByDept) {
+  let totalValue = 0;
+  for (const dept in engineReplacementsByDept) {
+    const count = engineReplacementsByDept[dept];
+    const rate = (dept === "BCSO") ? ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
+    totalValue += count * rate;
+  }
+  return totalValue;
+}
+
 // ===== CSV export helpers =====
 function toCsv(cols, rows) {
   const esc = (val) => {
@@ -628,24 +639,11 @@ function renderMonthly() {
     monthSortDesc ? b.monthEnd - a.monthEnd : a.monthEnd - b.monthEnd
   );
 
-  if (!rows.length) {
-    monthlyBody.innerHTML =
-      '<tr><td colspan="4" style="padding:8px; color:#6b7280;">No monthly records for this selection.</td></tr>';
-    if (headerCell) {
-      headerCell.textContent = "Total Repair Value ($2,500/repair)";
-    }
-    return;
-  }
-
   let grandTotalValue = 0;
 
   rows.forEach((r) => {
     const engineReps = r.engineReplacements || 0;
-    // Calculate engine replacement value using BCSO rate for BCSO, standard rate for others
-    const bcsoEngines = r.engineReplacementsByDept["BCSO"] || 0;
-    const nonBcsoEngines = engineReps - bcsoEngines;
-    const engineValue = (bcsoEngines * ENGINE_REPLACEMENT_RATE_BCSO) + 
-                        (nonBcsoEngines * ENGINE_REPLACEMENT_RATE);
+    const engineValue = calculateEngineValue(r.engineReplacementsByDept || {});
     const totalValue = r.repairs * REPAIR_RATE + engineValue;
     grandTotalValue += totalValue;
 
@@ -995,11 +993,7 @@ function exportCurrentViewCsv() {
 
     const mapped = rows.map((r) => {
       const engineReps = r.engineReplacements || 0;
-      // Use BCSO rate for BCSO engines, standard rate for others
-      const bcsoEngines = r.engineReplacementsByDept["BCSO"] || 0;
-      const nonBcsoEngines = engineReps - bcsoEngines;
-      const engineValue = (bcsoEngines * ENGINE_REPLACEMENT_RATE_BCSO) + 
-                          (nonBcsoEngines * ENGINE_REPLACEMENT_RATE);
+      const engineValue = calculateEngineValue(r.engineReplacementsByDept || {});
       const totalValue = r.repairs * REPAIR_RATE + engineValue;
       return {
         "Month Ending": fmtDate(r.monthEnd),
