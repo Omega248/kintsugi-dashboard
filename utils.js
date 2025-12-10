@@ -522,3 +522,178 @@ function kBuildQuery(params) {
   
   return searchParams.toString();
 }
+
+// =======================================
+// Data Validation Helpers
+// =======================================
+
+/**
+ * Validate email address
+ * @param {string} email - Email to validate
+ * @returns {boolean} True if valid
+ */
+function kValidateEmail(email) {
+  if (!email || typeof email !== 'string') return false;
+  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return re.test(email.trim());
+}
+
+/**
+ * Validate number within range
+ * @param {number} value - Value to validate
+ * @param {number} [min] - Minimum value
+ * @param {number} [max] - Maximum value
+ * @returns {boolean} True if valid
+ */
+function kValidateNumber(value, min, max) {
+  const num = Number(value);
+  if (!isFinite(num)) return false;
+  if (min !== undefined && num < min) return false;
+  if (max !== undefined && num > max) return false;
+  return true;
+}
+
+/**
+ * Sanitize HTML to prevent XSS
+ * @param {string} html - HTML string to sanitize
+ * @returns {string} Sanitized HTML
+ */
+function kSanitizeHtml(html) {
+  if (!html || typeof html !== 'string') return '';
+  
+  const div = document.createElement('div');
+  div.textContent = html;
+  return div.innerHTML;
+}
+
+/**
+ * Validate required fields in an object
+ * @param {Object} obj - Object to validate
+ * @param {string[]} required - Array of required field names
+ * @returns {Object} { valid: boolean, missing: string[] }
+ */
+function kValidateRequired(obj, required) {
+  if (!obj || typeof obj !== 'object' || !Array.isArray(required)) {
+    return { valid: false, missing: [] };
+  }
+  
+  const missing = required.filter(field => {
+    const value = kGet(obj, field);
+    return kIsEmpty(value);
+  });
+  
+  return {
+    valid: missing.length === 0,
+    missing
+  };
+}
+
+/**
+ * Validate CSV data structure
+ * @param {Array} data - CSV data array
+ * @param {string[]} requiredColumns - Required column names
+ * @returns {Object} { valid: boolean, errors: string[] }
+ */
+function kValidateCsvData(data, requiredColumns = []) {
+  const errors = [];
+  
+  if (!Array.isArray(data)) {
+    errors.push('Data must be an array');
+    return { valid: false, errors };
+  }
+  
+  if (data.length === 0) {
+    errors.push('Data is empty');
+    return { valid: false, errors };
+  }
+  
+  if (requiredColumns.length > 0 && data.length > 0) {
+    const firstRow = data[0];
+    const columns = typeof firstRow === 'object' ? Object.keys(firstRow) : [];
+    
+    const missing = requiredColumns.filter(col => !columns.includes(col));
+    if (missing.length > 0) {
+      errors.push(`Missing required columns: ${missing.join(', ')}`);
+    }
+  }
+  
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
+// =======================================
+// Local Storage Helpers
+// =======================================
+
+/**
+ * Save data to localStorage with error handling
+ * @param {string} key - Storage key
+ * @param {*} value - Value to store (will be JSON stringified)
+ * @returns {boolean} Success status
+ */
+function kStorageSet(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (error) {
+    console.error('Failed to save to localStorage:', error);
+    return false;
+  }
+}
+
+/**
+ * Get data from localStorage with error handling
+ * @param {string} key - Storage key
+ * @param {*} [defaultValue] - Default value if key not found
+ * @returns {*} Stored value or default
+ */
+function kStorageGet(key, defaultValue = null) {
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : defaultValue;
+  } catch (error) {
+    console.error('Failed to read from localStorage:', error);
+    return defaultValue;
+  }
+}
+
+/**
+ * Remove item from localStorage
+ * @param {string} key - Storage key
+ * @returns {boolean} Success status
+ */
+function kStorageRemove(key) {
+  try {
+    localStorage.removeItem(key);
+    return true;
+  } catch (error) {
+    console.error('Failed to remove from localStorage:', error);
+    return false;
+  }
+}
+
+/**
+ * Clear all localStorage items with optional prefix filter
+ * @param {string} [prefix] - Only clear keys starting with this prefix
+ * @returns {boolean} Success status
+ */
+function kStorageClear(prefix) {
+  try {
+    if (prefix) {
+      const keys = Object.keys(localStorage);
+      keys.forEach(key => {
+        if (key.startsWith(prefix)) {
+          localStorage.removeItem(key);
+        }
+      });
+    } else {
+      localStorage.clear();
+    }
+    return true;
+  } catch (error) {
+    console.error('Failed to clear localStorage:', error);
+    return false;
+  }
+}
