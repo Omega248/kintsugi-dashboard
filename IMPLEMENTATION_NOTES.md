@@ -14,8 +14,8 @@ This document provides technical details about the implementation of the payouts
 
 #### Mechanic Payout
 - **BCSO engine replacements**: $12,000 (reimbursement only, no bonus)
-- **LSPD engine replacements**: $13,500 ($12k reimbursement + $1.5k bonus from 3k profit split)
-- **Other department engine replacements**: $13,500 ($12k reimbursement + $1.5k bonus)
+- **LSPD engine replacements**: $13,500 ($12,000 reimbursement + $1,500 bonus from $3,000 profit split)
+- **Other department engine replacements**: $13,500 ($12,000 reimbursement + $1,500 bonus)
 - **Regular repairs**: $700 per repair (unchanged for all departments)
 
 ### 2. Department Filter

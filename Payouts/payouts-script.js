@@ -176,6 +176,35 @@ function calculateEngineValue(engineReplacementsByDept) {
   return totalValue;
 }
 
+// Calculate mechanic pay for engine replacements by department
+// BCSO: $12k reimbursement only (no bonus)
+// LSPD: $12k reimbursement + $1.5k bonus
+// Other: $12k reimbursement + $1.5k bonus
+function calculateEnginePayment(engineReplacementsByDept) {
+  let enginePay = 0;
+  if (!engineReplacementsByDept) return 0;
+  
+  const bcsoEngines = engineReplacementsByDept["BCSO"] || 0;
+  const lspdEngines = engineReplacementsByDept["LSPD"] || 0;
+  
+  // Calculate total for other departments
+  let otherEngines = 0;
+  for (const dept in engineReplacementsByDept) {
+    if (dept !== "BCSO" && dept !== "LSPD") {
+      otherEngines += engineReplacementsByDept[dept] || 0;
+    }
+  }
+  
+  // BCSO: reimbursement only
+  enginePay += bcsoEngines * ENGINE_REIMBURSEMENT;
+  // LSPD: reimbursement + bonus
+  enginePay += lspdEngines * (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD);
+  // Other: reimbursement + bonus
+  enginePay += otherEngines * (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD);
+  
+  return enginePay;
+}
+
 // ===== CSV export helpers =====
 function toCsv(cols, rows) {
   const esc = (val) => {
@@ -529,22 +558,7 @@ function renderWeekly() {
     const mechTotals = new Map();
 
     entries.forEach((r) => {
-      // Calculate engine pay:
-      // - BCSO: mechanic gets $12k reimbursement only (no bonus)
-      // - LSPD: mechanic gets $12k reimbursement + $1.5k bonus (50% of 3k profit)
-      let enginePay = 0;
-      if (r.engineReplacements > 0) {
-        const bcsoEngines = r.engineReplacementsByDept["BCSO"] || 0;
-        const lspdEngines = r.engineReplacementsByDept["LSPD"] || 0;
-        const otherEngines = r.engineReplacements - bcsoEngines - lspdEngines;
-        
-        // BCSO: reimbursement only
-        enginePay += bcsoEngines * ENGINE_REIMBURSEMENT;
-        // LSPD: reimbursement + bonus
-        enginePay += lspdEngines * (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD);
-        // Other departments: reimbursement + bonus (same as LSPD)
-        enginePay += otherEngines * (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD);
-      }
+      const enginePay = calculateEnginePayment(r.engineReplacementsByDept);
       const pay = r.repairs * PAY_PER_REPAIR + enginePay;
       const comment = commentForWeek(r.weekEnd);
 
@@ -952,20 +966,7 @@ function exportCurrentViewCsv() {
     if (!filtered.length) return;
 
     const rows = filtered.map((r) => {
-      // Calculate engine pay:
-      // - BCSO: $12k reimbursement only
-      // - LSPD: $12k reimbursement + $1.5k bonus
-      // - Other: $12k reimbursement + $1.5k bonus
-      let enginePay = 0;
-      if (r.engineReplacements > 0) {
-        const bcsoEngines = r.engineReplacementsByDept["BCSO"] || 0;
-        const lspdEngines = r.engineReplacementsByDept["LSPD"] || 0;
-        const otherEngines = r.engineReplacements - bcsoEngines - lspdEngines;
-        
-        enginePay += bcsoEngines * ENGINE_REIMBURSEMENT;
-        enginePay += lspdEngines * (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD);
-        enginePay += otherEngines * (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD);
-      }
+      const enginePay = calculateEnginePayment(r.engineReplacementsByDept);
       const pay = r.repairs * PAY_PER_REPAIR + enginePay;
       const mechLabel = labelWithStateId(r.mechanic);
       const comment = commentForWeek(r.weekEnd);
