@@ -5,8 +5,9 @@ const STATE_ID_SHEET = "State ID's";
 
 const PAY_PER_REPAIR = 700;
 const REPAIR_RATE = 2500;              // per across, customer billing
-const ENGINE_REPLACEMENT_RATE = 15000; // per engine replacement, customer billing
-const ENGINE_REPLACEMENT_MECH_PAY = 1500; // per engine replacement, mechanic payout
+const ENGINE_REPLACEMENT_RATE = 15000; // per engine replacement, customer billing (LSPD)
+const ENGINE_REPLACEMENT_RATE_BCSO = 12100; // per engine replacement, customer billing (BCSO)
+const ENGINE_REPLACEMENT_MECH_PAY = 1500; // per engine replacement, mechanic payout (not for BCSO)
 
 // ===== State =====
 let weeklyAgg = [];   // mechanic-week aggregates
@@ -15,6 +16,7 @@ let jobs = [];        // raw jobs
 let mechanicLatestWeekISO = null; // latest week for current mechanic summary
 
 let mechanics = new Set();
+let departments = new Set(); // for Department filter
 let monthKeys = new Set(); // for Month Ending filter
 let weekKeys = new Set();  // for Week Ending filter
 let monthKeyToDate = new Map(); // mKey -> monthEnd Date
@@ -246,6 +248,10 @@ async function loadPayouts() {
     const iEngine = headersLower.findIndex(
       (h) => h.includes("engine") && h.includes("replacement")
     );
+    // find department column
+    const iDept = headersLower.findIndex(
+      (h) => h.includes("department")
+    );
 
     if (iMech === -1 || iAcross === -1 || iWeek === -1 || iMonth === -1) {
       throw new Error("Missing required columns.");
@@ -255,6 +261,7 @@ async function loadPayouts() {
     monthlyAgg = [];
     jobs = [];
     mechanics.clear();
+    departments.clear();
     monthKeys.clear();
     weekKeys.clear();
     monthKeyToDate.clear();
@@ -294,8 +301,10 @@ async function loadPayouts() {
       const tsDate = tsRaw ? parseDateLike(tsRaw) || new Date(tsRaw) : null;
       const owner = iOwner !== -1 ? (row[iOwner] || "").trim() : "";
       const plate = iPlate !== -1 ? (row[iPlate] || "").trim() : "";
+      const dept = iDept !== -1 ? (row[iDept] || "").trim() : "";
 
       mechanics.add(mech);
+      if (dept) departments.add(dept);
 
       const mKey = monthKey(monthEnd);
       monthKeys.add(mKey);
@@ -314,9 +323,13 @@ async function loadPayouts() {
           mKey,
           repairs: 0,
           engineReplacements: 0,
+          engineReplacementsByDept: {}, // track engine replacements by department
         };
       w.repairs += across;
       w.engineReplacements += engineCount;
+      if (engineCount > 0 && dept) {
+        w.engineReplacementsByDept[dept] = (w.engineReplacementsByDept[dept] || 0) + engineCount;
+      }
       weeklyMap.set(wKey, w);
 
       // Monthly agg
@@ -326,9 +339,13 @@ async function loadPayouts() {
           mKey,
           repairs: 0,
           engineReplacements: 0,
+          engineReplacementsByDept: {}, // track engine replacements by department
         };
       mAgg.repairs += across;
       mAgg.engineReplacements += engineCount;
+      if (engineCount > 0 && dept) {
+        mAgg.engineReplacementsByDept[dept] = (mAgg.engineReplacementsByDept[dept] || 0) + engineCount;
+      }
       monthlyMap.set(mKey, mAgg);
 
       // Jobs table
@@ -339,6 +356,7 @@ async function loadPayouts() {
         plate,
         across,
         engineReplacements: engineCount,
+        department: dept,
         weekEnd,
         weekISO,
         monthEnd,
@@ -368,6 +386,7 @@ async function loadPayouts() {
 // ===== Filters =====
 function populateFilters() {
   const mechSel = document.getElementById("mechanicFilter");
+  const deptSel = document.getElementById("departmentFilter");
   const weekSel = document.getElementById("weekFilter");
   const monthSel = document.getElementById("monthFilter");
 
@@ -377,6 +396,15 @@ function populateFilters() {
       .sort()
       .forEach((m) => {
         mechSel.innerHTML += `<option value="${m}">${m}</option>`;
+      });
+  }
+
+  if (deptSel) {
+    deptSel.innerHTML = '<option value="all">All Departments</option>';
+    Array.from(departments)
+      .sort()
+      .forEach((d) => {
+        deptSel.innerHTML += `<option value="${d}">${d}</option>`;
       });
   }
 
@@ -405,10 +433,12 @@ function populateFilters() {
 
 function getFilters() {
   const mechSel = document.getElementById("mechanicFilter");
+  const deptSel = document.getElementById("departmentFilter");
   const weekSel = document.getElementById("weekFilter");
   const monthSel = document.getElementById("monthFilter");
   return {
     mech: mechSel ? mechSel.value : "all",
+    dept: deptSel ? deptSel.value : "all",
     week: weekSel ? weekSel.value : "all",
     month: monthSel ? monthSel.value : "all",
   };
@@ -416,14 +446,44 @@ function getFilters() {
 
 // ===== Weekly view =====
 function renderWeekly() {
-  const { mech, week } = getFilters(); // month ignored in weekly
+  const { mech, dept, week } = getFilters(); // month ignored in weekly
   weeklyBody.innerHTML = "";
 
-  const filtered = weeklyAgg.filter((r) => {
-    if (mech !== "all" && r.mechanic !== mech) return false;
-    if (week !== "all" && r.weekISO !== week) return false;
-    return true;
+  // Filter jobs first by department if needed
+  let filteredJobs = jobs;
+  if (dept !== "all") {
+    filteredJobs = jobs.filter((j) => j.department === dept);
+  }
+  if (mech !== "all") {
+    filteredJobs = filteredJobs.filter((j) => j.mechanic === mech);
+  }
+  if (week !== "all") {
+    filteredJobs = filteredJobs.filter((j) => j.weekISO === week);
+  }
+
+  // Re-aggregate filtered jobs by mechanic+week
+  const weeklyMap = new Map();
+  filteredJobs.forEach((j) => {
+    const wKey = `${j.mechanic}|${j.weekISO}`;
+    const w = weeklyMap.get(wKey) || {
+      mechanic: j.mechanic,
+      weekEnd: j.weekEnd,
+      weekISO: j.weekISO,
+      mKey: j.mKey,
+      repairs: 0,
+      engineReplacements: 0,
+      engineReplacementsByDept: {},
+    };
+    w.repairs += j.across;
+    w.engineReplacements += j.engineReplacements;
+    if (j.engineReplacements > 0 && j.department) {
+      w.engineReplacementsByDept[j.department] = 
+        (w.engineReplacementsByDept[j.department] || 0) + j.engineReplacements;
+    }
+    weeklyMap.set(wKey, w);
   });
+
+  const filtered = Array.from(weeklyMap.values());
 
   if (!filtered.length) {
     weeklyBody.innerHTML =
@@ -457,8 +517,13 @@ function renderWeekly() {
     const mechTotals = new Map();
 
     entries.forEach((r) => {
-      const enginePay =
-        (r.engineReplacements || 0) * ENGINE_REPLACEMENT_MECH_PAY;
+      // Calculate engine pay: exclude BCSO engine replacements (mechanic gets $0)
+      let enginePay = 0;
+      if (r.engineReplacements > 0) {
+        const bcsoEngines = r.engineReplacementsByDept["BCSO"] || 0;
+        const nonBcsoEngines = r.engineReplacements - bcsoEngines;
+        enginePay = nonBcsoEngines * ENGINE_REPLACEMENT_MECH_PAY;
+      }
       const pay = r.repairs * PAY_PER_REPAIR + enginePay;
       const comment = commentForWeek(r.weekEnd);
 
@@ -515,23 +580,48 @@ function updateWeeklySummary(weekBuckets) {
 
 // ===== Monthly view =====
 function renderMonthly() {
-  const { month } = getFilters();
+  const { dept, month } = getFilters();
   monthlyBody.innerHTML = "";
 
   const headerCell = document.getElementById("monthlyTotalHeader");
 
-  if (!monthlyAgg.length) {
+  // Filter jobs first by department if needed
+  let filteredJobs = jobs;
+  if (dept !== "all") {
+    filteredJobs = jobs.filter((j) => j.department === dept);
+  }
+  if (month !== "all") {
+    filteredJobs = filteredJobs.filter((j) => j.mKey === month);
+  }
+
+  // Re-aggregate filtered jobs by month
+  const monthlyMap = new Map();
+  filteredJobs.forEach((j) => {
+    const mAgg = monthlyMap.get(j.mKey) || {
+      monthEnd: j.monthEnd,
+      mKey: j.mKey,
+      repairs: 0,
+      engineReplacements: 0,
+      engineReplacementsByDept: {},
+    };
+    mAgg.repairs += j.across;
+    mAgg.engineReplacements += j.engineReplacements;
+    if (j.engineReplacements > 0 && j.department) {
+      mAgg.engineReplacementsByDept[j.department] = 
+        (mAgg.engineReplacementsByDept[j.department] || 0) + j.engineReplacements;
+    }
+    monthlyMap.set(j.mKey, mAgg);
+  });
+
+  let rows = Array.from(monthlyMap.values());
+
+  if (!rows.length) {
     monthlyBody.innerHTML =
-      '<tr><td colspan="4" style="padding:8px; color:#6b7280;">No monthly records.</td></tr>';
+      '<tr><td colspan="4" style="padding:8px; color:#6b7280;">No monthly records for this selection.</td></tr>';
     if (headerCell) {
       headerCell.textContent = "Total Repair Value ($2,500/repair)";
     }
     return;
-  }
-
-  let rows = monthlyAgg.slice();
-  if (month !== "all") {
-    rows = rows.filter((r) => r.mKey === month);
   }
 
   rows.sort((a, b) =>
@@ -551,8 +641,12 @@ function renderMonthly() {
 
   rows.forEach((r) => {
     const engineReps = r.engineReplacements || 0;
-    const totalValue =
-      r.repairs * REPAIR_RATE + engineReps * ENGINE_REPLACEMENT_RATE;
+    // Calculate engine replacement value using BCSO rate for BCSO, standard rate for others
+    const bcsoEngines = r.engineReplacementsByDept["BCSO"] || 0;
+    const nonBcsoEngines = engineReps - bcsoEngines;
+    const engineValue = (bcsoEngines * ENGINE_REPLACEMENT_RATE_BCSO) + 
+                        (nonBcsoEngines * ENGINE_REPLACEMENT_RATE);
+    const totalValue = r.repairs * REPAIR_RATE + engineValue;
     grandTotalValue += totalValue;
 
     const tr = document.createElement("tr");
@@ -575,7 +669,7 @@ function renderMonthly() {
 
 // ===== Jobs view =====
 function renderJobs() {
-  const { mech, week, month } = getFilters();
+  const { mech, dept, week, month } = getFilters();
   jobsBody.innerHTML = "";
 
   const q =
@@ -587,6 +681,7 @@ function renderJobs() {
 
   let rows = jobs.filter((j) => {
     if (mech !== "all" && j.mechanic !== mech) return false;
+    if (dept !== "all" && j.department !== dept) return false;
     if (week !== "all" && j.weekISO !== week) return false;
     if (month !== "all" && j.mKey !== month) return false;
 
@@ -632,8 +727,11 @@ function renderJobs() {
   rows.forEach((j) => {
     const engineReps = j.engineReplacements || 0;
     const engineLabel = engineReps ? "Yes" : "No";
+    // Use BCSO rate for BCSO engine replacements, standard rate for others
+    const engineRate = (j.department === "BCSO" && engineReps > 0) ? 
+                       ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
     const totalValue =
-      j.across * REPAIR_RATE + engineReps * ENGINE_REPLACEMENT_RATE;
+      j.across * REPAIR_RATE + engineReps * engineRate;
 
     const mechLabel = j.mechanic; // keep Jobs view as raw mechanic name
 
@@ -683,11 +781,18 @@ function updateMechanicSummary() {
   let lastJob = null;
   mechanicLatestWeekISO = null;
 
+  let totalEngineRepsBCSO = 0; // Track BCSO engine replacements separately
+
   mechJobs.forEach((j) => {
     const rep = Number(j.across || 0) || 0;
     const engines = Number(j.engineReplacements || 0) || 0;
     totalRepairs += rep;
     totalEngineReps += engines;
+    
+    // Track BCSO engine replacements (no pay for mechanic)
+    if (engines > 0 && j.department === "BCSO") {
+      totalEngineRepsBCSO += engines;
+    }
 
     if (j.weekISO) {
       weekSet.add(j.weekISO);
@@ -705,9 +810,11 @@ function updateMechanicSummary() {
 
   const weeksWorked = weekSet.size;
   const avgPerWeek = weeksWorked ? totalRepairs / weeksWorked : 0;
+  // Mechanic doesn't get paid for BCSO engine replacements
+  const paidEngineReps = totalEngineReps - totalEngineRepsBCSO;
   const totalPayout =
     totalRepairs * PAY_PER_REPAIR +
-    totalEngineReps * ENGINE_REPLACEMENT_MECH_PAY;
+    paidEngineReps * ENGINE_REPLACEMENT_MECH_PAY;
 
   if (nameEl) nameEl.textContent = mech;
   if (totalRepairsEl) totalRepairsEl.textContent = totalRepairs.toLocaleString();
@@ -787,19 +894,53 @@ function onMechanicClickFromTable(evt) {
 
 // ===== Export current view =====
 function exportCurrentViewCsv() {
-  const { mech, week, month } = getFilters();
+  const { mech, dept, week, month } = getFilters();
 
   if (currentView === "weekly") {
-    const filtered = weeklyAgg.filter((r) => {
-      if (mech !== "all" && r.mechanic !== mech) return false;
-      if (week !== "all" && r.weekISO !== week) return false;
-      return true;
+    // Filter jobs by department, mechanic, and week
+    let filteredJobs = jobs;
+    if (dept !== "all") {
+      filteredJobs = filteredJobs.filter((j) => j.department === dept);
+    }
+    if (mech !== "all") {
+      filteredJobs = filteredJobs.filter((j) => j.mechanic === mech);
+    }
+    if (week !== "all") {
+      filteredJobs = filteredJobs.filter((j) => j.weekISO === week);
+    }
+
+    // Re-aggregate
+    const weeklyMap = new Map();
+    filteredJobs.forEach((j) => {
+      const wKey = `${j.mechanic}|${j.weekISO}`;
+      const w = weeklyMap.get(wKey) || {
+        mechanic: j.mechanic,
+        weekEnd: j.weekEnd,
+        weekISO: j.weekISO,
+        repairs: 0,
+        engineReplacements: 0,
+        engineReplacementsByDept: {},
+      };
+      w.repairs += j.across;
+      w.engineReplacements += j.engineReplacements;
+      if (j.engineReplacements > 0 && j.department) {
+        w.engineReplacementsByDept[j.department] = 
+          (w.engineReplacementsByDept[j.department] || 0) + j.engineReplacements;
+      }
+      weeklyMap.set(wKey, w);
     });
+
+    const filtered = Array.from(weeklyMap.values());
     if (!filtered.length) return;
 
     const rows = filtered.map((r) => {
-      const enginePay =
-        (r.engineReplacements || 0) * ENGINE_REPLACEMENT_MECH_PAY;
+      // Exclude BCSO engine replacements from mechanic pay
+      let enginePay = 0;
+      if (r.engineReplacements > 0) {
+        const bcsoEngines = r.engineReplacementsByDept["BCSO"] || 0;
+        const nonBcsoEngines = r.engineReplacements - bcsoEngines;
+        enginePay = nonBcsoEngines * ENGINE_REPLACEMENT_MECH_PAY;
+      }
       const pay = r.repairs * PAY_PER_REPAIR + enginePay;
       const mechLabel = labelWithStateId(r.mechanic);
       const comment = commentForWeek(r.weekEnd);
@@ -821,18 +962,45 @@ function exportCurrentViewCsv() {
     ];
     downloadCsv("payouts_weekly_filtered.csv", toCsv(cols, rows));
   } else if (currentView === "monthly") {
-    if (!monthlyAgg.length) return;
-
-    let rows = monthlyAgg.slice();
-    if (month !== "all") {
-      rows = rows.filter((r) => r.mKey === month);
+    // Filter jobs by department and month
+    let filteredJobs = jobs;
+    if (dept !== "all") {
+      filteredJobs = filteredJobs.filter((j) => j.department === dept);
     }
+    if (month !== "all") {
+      filteredJobs = filteredJobs.filter((j) => j.mKey === month);
+    }
+
+    // Re-aggregate
+    const monthlyMap = new Map();
+    filteredJobs.forEach((j) => {
+      const mAgg = monthlyMap.get(j.mKey) || {
+        monthEnd: j.monthEnd,
+        mKey: j.mKey,
+        repairs: 0,
+        engineReplacements: 0,
+        engineReplacementsByDept: {},
+      };
+      mAgg.repairs += j.across;
+      mAgg.engineReplacements += j.engineReplacements;
+      if (j.engineReplacements > 0 && j.department) {
+        mAgg.engineReplacementsByDept[j.department] = 
+          (mAgg.engineReplacementsByDept[j.department] || 0) + j.engineReplacements;
+      }
+      monthlyMap.set(j.mKey, mAgg);
+    });
+
+    const rows = Array.from(monthlyMap.values());
     if (!rows.length) return;
 
     const mapped = rows.map((r) => {
       const engineReps = r.engineReplacements || 0;
-      const totalValue =
-        r.repairs * REPAIR_RATE + engineReps * ENGINE_REPLACEMENT_RATE;
+      // Use BCSO rate for BCSO engines, standard rate for others
+      const bcsoEngines = r.engineReplacementsByDept["BCSO"] || 0;
+      const nonBcsoEngines = engineReps - bcsoEngines;
+      const engineValue = (bcsoEngines * ENGINE_REPLACEMENT_RATE_BCSO) + 
+                          (nonBcsoEngines * ENGINE_REPLACEMENT_RATE);
+      const totalValue = r.repairs * REPAIR_RATE + engineValue;
       return {
         "Month Ending": fmtDate(r.monthEnd),
         "Total Repairs (Across)": r.repairs,
@@ -897,8 +1065,10 @@ function exportCurrentViewCsv() {
     const mapped = rows.map((j) => {
       const engineReps = j.engineReplacements || 0;
       const engineLabel = engineReps ? "Yes" : "No";
-      const totalValue =
-        j.across * REPAIR_RATE + engineReps * ENGINE_REPLACEMENT_RATE;
+      // Use BCSO rate for BCSO, standard rate for others
+      const engineRate = (j.department === "BCSO" && engineReps > 0) ? 
+                         ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
+      const totalValue = j.across * REPAIR_RATE + engineReps * engineRate;
       return {
         Timestamp: j.tsDate ? fmtDate(j.tsDate) : "",
         Mechanic: j.mechanic,
@@ -927,6 +1097,102 @@ function exportCurrentViewCsv() {
   }
 }
 
+// ===== Generate Bill for Department + Month =====
+function generateBill() {
+  const { dept, month } = getFilters();
+
+  if (dept === "all") {
+    alert("Please select a specific department to generate a bill.");
+    return;
+  }
+
+  if (month === "all") {
+    alert("Please select a specific month to generate a bill.");
+    return;
+  }
+
+  // Filter jobs for the selected department and month
+  const filteredJobs = jobs.filter((j) => {
+    return j.department === dept && j.mKey === month;
+  });
+
+  if (!filteredJobs.length) {
+    alert(`No jobs found for department "${dept}" in the selected month.`);
+    return;
+  }
+
+  // Create bill rows with proper rates
+  const billRows = filteredJobs.map((j) => {
+    const engineReps = j.engineReplacements || 0;
+    // Use BCSO rate for BCSO, standard rate for others
+    const engineRate = (j.department === "BCSO" && engineReps > 0) ? 
+                       ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
+    const repairValue = j.across * REPAIR_RATE;
+    const engineValue = engineReps * engineRate;
+    const totalValue = repairValue + engineValue;
+
+    return {
+      "Date": j.tsDate ? fmtDate(j.tsDate) : "",
+      "Mechanic": j.mechanic,
+      "Owner": j.owner,
+      "Plate": j.plate,
+      "Department": j.department,
+      "Repairs (Across)": j.across,
+      "Repair Value": repairValue,
+      "Engine Replacements": engineReps,
+      "Engine Replacement Value": engineValue,
+      "Total": totalValue,
+    };
+  });
+
+  // Sort by date
+  billRows.sort((a, b) => {
+    const dateA = a.Date || "";
+    const dateB = b.Date || "";
+    return dateA.localeCompare(dateB);
+  });
+
+  // Calculate totals
+  const totalRepairs = billRows.reduce((sum, r) => sum + r["Repairs (Across)"], 0);
+  const totalRepairValue = billRows.reduce((sum, r) => sum + r["Repair Value"], 0);
+  const totalEngines = billRows.reduce((sum, r) => sum + r["Engine Replacements"], 0);
+  const totalEngineValue = billRows.reduce((sum, r) => sum + r["Engine Replacement Value"], 0);
+  const grandTotal = billRows.reduce((sum, r) => sum + r["Total"], 0);
+
+  // Add summary row
+  billRows.push({
+    "Date": "",
+    "Mechanic": "",
+    "Owner": "",
+    "Plate": "",
+    "Department": "TOTAL",
+    "Repairs (Across)": totalRepairs,
+    "Repair Value": totalRepairValue,
+    "Engine Replacements": totalEngines,
+    "Engine Replacement Value": totalEngineValue,
+    "Total": grandTotal,
+  });
+
+  const cols = [
+    "Date",
+    "Mechanic",
+    "Owner",
+    "Plate",
+    "Department",
+    "Repairs (Across)",
+    "Repair Value",
+    "Engine Replacements",
+    "Engine Replacement Value",
+    "Total",
+  ];
+
+  const monthDate = monthKeyToDate.get(month);
+  const monthStr = monthDate ? fmtDate(monthDate).replace(/\//g, "-") : month;
+  const filename = `bill_${dept}_${monthStr}.csv`;
+  
+  downloadCsv(filename, toCsv(cols, billRows));
+}
+
 // ===== Nav sync (keep tabs using current querystring) =====
 function syncNavLinksWithCurrentSearch() {
   const qs = window.location.search || "";
@@ -947,7 +1213,7 @@ function syncNavLinksWithCurrentSearch() {
 function updateUrlFromState() {
   try {
     const params = new URLSearchParams(window.location.search);
-    const { mech, week, month } = getFilters();
+    const { mech, dept, week, month } = getFilters();
     const q =
       (jobsSearchInput && jobsSearchInput.value.trim()) || "";
 
@@ -966,6 +1232,7 @@ function updateUrlFromState() {
 
     setOrDelete("view", currentView, "weekly");
     setOrDelete("mech", mech, "all");
+    setOrDelete("dept", dept, "all");
     setOrDelete("week", week, "all");
     setOrDelete("month", month, "all");
     setOrDelete("weekSort", weekSortDesc ? "desc" : "asc", "desc");
@@ -989,10 +1256,12 @@ function applyFiltersFromUrl() {
   if (!initialParams) return;
 
   const mechSel = document.getElementById("mechanicFilter");
+  const deptSel = document.getElementById("departmentFilter");
   const weekSel = document.getElementById("weekFilter");
   const monthSel = document.getElementById("monthFilter");
 
   const mech = initialParams.get("mech");
+  const dept = initialParams.get("dept");
   const week = initialParams.get("week");
   const month = initialParams.get("month");
   const weekSort = initialParams.get("weekSort");
@@ -1007,6 +1276,7 @@ function applyFiltersFromUrl() {
   };
 
   safeSet(mechSel, mech);
+  safeSet(deptSel, dept);
   safeSet(weekSel, week);
   safeSet(monthSel, month);
 
@@ -1150,6 +1420,18 @@ document.addEventListener("DOMContentLoaded", () => {
     })();
   exportBtn.addEventListener("click", exportCurrentViewCsv);
 
+  const generateBillBtn =
+    document.getElementById("generateBillBtn") ||
+    (() => {
+      const b = document.createElement("button");
+      b.id = "generateBillBtn";
+      b.className = "btn";
+      b.textContent = "Generate Bill (Dept + Month)";
+      controls && controls.appendChild(b);
+      return b;
+    })();
+  generateBillBtn.addEventListener("click", generateBill);
+
   sortWeekBtn =
     document.getElementById("sortWeekBtn") ||
     (() => {
@@ -1200,9 +1482,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Filters
   const mechSel = document.getElementById("mechanicFilter");
+  const deptSel = document.getElementById("departmentFilter");
   const weekSel = document.getElementById("weekFilter");
   const monthSel = document.getElementById("monthFilter");
   mechSel && mechSel.addEventListener("change", renderAll);
+  deptSel && deptSel.addEventListener("change", renderAll);
   weekSel && weekSel.addEventListener("change", renderAll);
   monthSel && monthSel.addEventListener("change", renderAll);
 
