@@ -415,10 +415,140 @@ function debounce(func, wait) {
   };
 }
 
+// ===== Accessibility Helpers =====
+
+function toggleHighContrast(enabled) {
+  if (enabled) {
+    document.body.classList.add('high-contrast');
+    localStorage.setItem('high-contrast', 'true');
+  } else {
+    document.body.classList.remove('high-contrast');
+    localStorage.removeItem('high-contrast');
+  }
+}
+
+function toggleLargeText(enabled) {
+  if (enabled) {
+    document.body.classList.add('large-text');
+    localStorage.setItem('large-text', 'true');
+  } else {
+    document.body.classList.remove('large-text');
+    localStorage.removeItem('large-text');
+  }
+}
+
+function toggleCompactMode(enabled) {
+  if (enabled) {
+    document.body.classList.add('compact-mode');
+    localStorage.setItem('compact-mode', 'true');
+  } else {
+    document.body.classList.remove('compact-mode');
+    localStorage.removeItem('compact-mode');
+  }
+}
+
+// Initialize accessibility preferences on load
+function initAccessibility() {
+  if (localStorage.getItem('high-contrast') === 'true') {
+    document.body.classList.add('high-contrast');
+  }
+  if (localStorage.getItem('large-text') === 'true') {
+    document.body.classList.add('large-text');
+  }
+  if (localStorage.getItem('compact-mode') === 'true') {
+    document.body.classList.add('compact-mode');
+  }
+}
+
+// Auto-initialize when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initAccessibility);
+} else {
+  initAccessibility();
+}
+
+// ===== Pagination Helper =====
+
+class PaginationManager {
+  constructor(options = {}) {
+    this.currentPage = 1;
+    this.itemsPerPage = options.itemsPerPage || 50;
+    this.totalItems = 0;
+    this.containerId = options.containerId;
+    this.onPageChange = options.onPageChange || (() => {});
+  }
+
+  setTotalItems(total) {
+    this.totalItems = total;
+    this.render();
+  }
+
+  setPage(page) {
+    const totalPages = Math.ceil(this.totalItems / this.itemsPerPage);
+    if (page < 1 || page > totalPages) return;
+    
+    this.currentPage = page;
+    this.render();
+    this.onPageChange(page);
+  }
+
+  render() {
+    const container = document.getElementById(this.containerId);
+    if (!container) return;
+
+    const totalPages = Math.ceil(this.totalItems / this.itemsPerPage);
+    const startItem = (this.currentPage - 1) * this.itemsPerPage + 1;
+    const endItem = Math.min(this.currentPage * this.itemsPerPage, this.totalItems);
+
+    let html = '<div class="pagination">';
+    
+    // Previous button
+    html += `<button class="pagination-button" ${this.currentPage === 1 ? 'disabled' : ''} onclick="pagination.setPage(${this.currentPage - 1})">‹</button>`;
+    
+    // Page numbers
+    const maxVisible = 5;
+    let startPage = Math.max(1, this.currentPage - Math.floor(maxVisible / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+    
+    if (endPage - startPage < maxVisible - 1) {
+      startPage = Math.max(1, endPage - maxVisible + 1);
+    }
+
+    if (startPage > 1) {
+      html += `<button class="pagination-button" onclick="pagination.setPage(1)">1</button>`;
+      if (startPage > 2) {
+        html += '<span class="pagination-info">...</span>';
+      }
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      html += `<button class="pagination-button ${i === this.currentPage ? 'active' : ''}" onclick="pagination.setPage(${i})">${i}</button>`;
+    }
+
+    if (endPage < totalPages) {
+      if (endPage < totalPages - 1) {
+        html += '<span class="pagination-info">...</span>';
+      }
+      html += `<button class="pagination-button" onclick="pagination.setPage(${totalPages})">${totalPages}</button>`;
+    }
+    
+    // Next button
+    html += `<button class="pagination-button" ${this.currentPage === totalPages ? 'disabled' : ''} onclick="pagination.setPage(${this.currentPage + 1})">›</button>`;
+    
+    // Info
+    html += `<span class="pagination-info">${startItem}-${endItem} of ${this.totalItems}</span>`;
+    
+    html += '</div>';
+    
+    container.innerHTML = html;
+  }
+}
+
 // Export for use in other scripts
 if (typeof window !== 'undefined') {
   window.toast = toast;
   window.FilterChipsManager = FilterChipsManager;
+  window.PaginationManager = PaginationManager;
   window.createTrendIndicator = createTrendIndicator;
   window.createProgressBar = createProgressBar;
   window.createBadge = createBadge;
@@ -428,4 +558,7 @@ if (typeof window !== 'undefined') {
   window.smoothScrollTo = smoothScrollTo;
   window.animateNumber = animateNumber;
   window.copyToClipboard = copyToClipboard;
+  window.toggleHighContrast = toggleHighContrast;
+  window.toggleLargeText = toggleLargeText;
+  window.toggleCompactMode = toggleCompactMode;
 }
