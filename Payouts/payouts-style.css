@@ -1,15 +1,18 @@
 :root {
   --bg: #020817;
   --bg-soft: #050816;
+  --bg-soft2: #030712;
   --border-subtle: #111827;
+  --border-strong: #1f2937;
   --text-main: #e5e7eb;
   --text-soft: #9ca3af;
   --accent: #4f46e5;
-  --accent-soft: rgba(79, 70, 229, 0.25);
+  --accent-soft: rgba(79, 70, 229, 0.22);
   --accent-strong: #6366f1;
   --in: #22c55e;
+  --radius-lg: 18px;
   --font: system-ui, -apple-system, Segoe UI, sans-serif;
-  --shadow-soft: 0 22px 60px rgba(0, 0, 0, 0.9);
+  --shadow-soft: 0 24px 70px rgba(0, 0, 0, 0.9);
 }
 
 *,
