@@ -476,7 +476,16 @@ function renderWeekly() {
           ${fmtMoney(pay)}
           <div class="payout-comment">${comment}</div>
         </td>
+        <td>
+          <button class="btn btn-copy-summary" data-row-idx="${fragment.children.length}" title="Copy payout summary for bank transaction">
+            📋 Copy
+          </button>
+        </td>
       `;
+      
+      // Store row data for later retrieval
+      tr.dataset.mechanicData = JSON.stringify(r);
+      
       fragment.appendChild(tr);
     });
 
@@ -1272,6 +1281,110 @@ function updateView() {
   else jobsWrap.classList.remove("hidden");
 }
 
+// ===== Copy Summary Handler =====
+function handleCopySummaryClick(evt) {
+  const target = evt.target;
+  if (!target) return;
+  
+  const copyBtn = target.closest && target.closest(".btn-copy-summary");
+  if (!copyBtn) return;
+  
+  // Get the row
+  const tr = copyBtn.closest("tr");
+  if (!tr) return;
+  
+  // Get stored data
+  const dataStr = tr.dataset.mechanicData;
+  if (!dataStr) return;
+  
+  try {
+    const rowData = JSON.parse(dataStr);
+    
+    // Generate and copy summary
+    generateAndCopyPayoutSummary(rowData, stateIdByMechanic, "bank");
+    
+  } catch (err) {
+    console.error("Failed to copy summary:", err);
+    if (typeof kShowToast === 'function') {
+      kShowToast("Failed to copy summary", "error");
+    }
+  }
+}
+
+// ===== Copy All Weekly Summaries =====
+async function copyAllWeeklySummaries() {
+  if (currentView !== "weekly") {
+    if (typeof kShowToast === 'function') {
+      kShowToast("This feature only works in Weekly view", "warning");
+    }
+    return;
+  }
+  
+  const { mech, dept, week } = getFilters();
+  
+  // Filter jobs
+  let filteredJobs = jobs;
+  if (dept !== "all") {
+    filteredJobs = filteredJobs.filter((j) => j.department === dept);
+  }
+  if (mech !== "all") {
+    filteredJobs = filteredJobs.filter((j) => j.mechanic === mech);
+  }
+  if (week !== "all") {
+    filteredJobs = filteredJobs.filter((j) => j.weekISO === week);
+  }
+  
+  // Re-aggregate
+  const weeklyMap = new Map();
+  filteredJobs.forEach((j) => {
+    const wKey = `${j.mechanic}|${j.weekISO}`;
+    const w = weeklyMap.get(wKey) || {
+      mechanic: j.mechanic,
+      weekEnd: j.weekEnd,
+      weekISO: j.weekISO,
+      repairs: 0,
+      engineReplacements: 0,
+      engineReplacementsByDept: {},
+    };
+    w.repairs += j.across;
+    w.engineReplacements += j.engineReplacements;
+    if (j.engineReplacements > 0 && j.department) {
+      w.engineReplacementsByDept[j.department] = 
+        (w.engineReplacementsByDept[j.department] || 0) + j.engineReplacements;
+    }
+    weeklyMap.set(wKey, w);
+  });
+  
+  const rows = Array.from(weeklyMap.values());
+  
+  if (!rows.length) {
+    if (typeof kShowToast === 'function') {
+      kShowToast("No data to copy", "warning");
+    }
+    return;
+  }
+  
+  // Sort by mechanic name
+  rows.sort((a, b) => a.mechanic.localeCompare(b.mechanic));
+  
+  // Generate batch summaries
+  const batchSummary = generateBatchSummaries(rows, stateIdByMechanic, "bank");
+  
+  try {
+    const success = await copyToClipboard(batchSummary);
+    if (success) {
+      showCopyNotification(`Copied ${rows.length} payout summaries!`);
+    } else {
+      showSummaryDialog(batchSummary);
+    }
+  } catch (err) {
+    console.error("Failed to copy batch summaries:", err);
+    if (typeof kShowToast === 'function') {
+      kShowToast("Failed to copy summaries", "error");
+    }
+  }
+}
+
 // ===== Init =====
 document.addEventListener("DOMContentLoaded", () => {
   initialParams = new URLSearchParams(window.location.search);
@@ -1285,6 +1398,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (weeklyBody) {
     weeklyBody.addEventListener("click", onMechanicClickFromTable);
+    weeklyBody.addEventListener("click", handleCopySummaryClick);
   }
   if (jobsBody) {
     jobsBody.addEventListener("click", onMechanicClickFromTable);
@@ -1341,6 +1455,18 @@ document.addEventListener("DOMContentLoaded", () => {
       return b;
     })();
   generateBillBtn.addEventListener("click", generateBill);
+
+  const copyAllSummariesBtn =
+    document.getElementById("copyAllSummariesBtn") ||
+    (() => {
+      const b = document.createElement("button");
+      b.id = "copyAllSummariesBtn";
+      b.className = "btn";
+      b.textContent = "📋 Copy All Summaries (Weekly)";
+      controls && controls.appendChild(b);
+      return b;
+    })();
+  copyAllSummariesBtn.addEventListener("click", copyAllWeeklySummaries);
 
   sortWeekBtn =
     document.getElementById("sortWeekBtn") ||

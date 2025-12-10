@@ -9,6 +9,7 @@
   <script src="../constants.js"></script>
   <script src="../utils.js"></script>
   <script src="../kintsugi-core.js"></script>
+  <script src="../payout-summary-generator.js"></script>
 </head>
 <body>
   <div class="app">
@@ -75,6 +76,10 @@
 
         <button id="exportPayoutsBtn" class="btn">
           Export CSV (current view)
+        </button>
+
+        <button id="copyAllSummariesBtn" class="btn">
+          📋 Copy All Summaries (Weekly)
         </button>
 
         <button id="generateBillBtn" class="btn">
@@ -188,6 +193,7 @@
               <th>Week Ending</th>
               <th>Repairs (Total Across)</th>
               <th>Pay ($700/repair)</th>
+              <th>Summary</th>
             </tr>
           </thead>
           <tbody id="weeklyBody"></tbody>
