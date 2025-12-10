@@ -9,9 +9,14 @@ async function loadOverview() {
   const status = document.getElementById("status");
 
   try {
+    // Show loading state
+    if (status) status.textContent = "Loading dashboard...";
+    
     const { data: rows } = await kFetchCSV(JOBS_SHEET, { header: true });
+    
     if (!rows.length) {
-      if (status) status && (status.textContent = "");
+      if (status) status.textContent = "";
+      kShowEmpty('stat-boxes', 'No jobs data available yet.');
       return;
     }
 
@@ -173,23 +178,30 @@ async function loadOverview() {
     );
 
     if (status) {
-      const fmtRange =
-        fmtDate(weekStart) + " – " + fmtDate(weekEnd);
-      status && (status.textContent = "");
+      status.textContent = "";
     }
   } catch (err) {
     console.error("Error loading overview from jobs sheet", err);
     if (status) {
-      status && (status.textContent = "");
+      status.textContent = "";
     }
+    
+    // Show user-friendly error message
+    const errorMsg = err.message.includes('404') || err.message.includes('not found')
+      ? 'Unable to load jobs data. Please check sheet configuration.'
+      : err.message.includes('403') || err.message.includes('denied')
+      ? 'Access denied. Please check sheet sharing settings.'
+      : 'Unable to load dashboard data. Please try refreshing the page.';
+    
+    kShowToast(errorMsg, 'error', 5000);
   }
 }
 
-// ===== Config sheet// ===== Config sheet (BET / bin manual overrides) =====
+// ===== Config sheet (BET / bin manual overrides) =====
 
 async function loadConfig() {
   try {
-    const { data: rows } = await kFetchCSV(CONFIG_SHEET, { header: true });
+    const { data: rows } = await kFetchCSV(CONFIG_SHEET, { header: true, cache: true });
     if (!rows.length) {
       return;
     }
@@ -217,6 +229,7 @@ async function loadConfig() {
     }
   } catch (err) {
     console.error("Error loading Config sheet", err);
+    // Config is optional, so we don't show error to user
   }
 }
 
@@ -235,10 +248,46 @@ function money(n) {
   return kFmtMoney(n);
 }
 
+// ==== Keyboard Shortcuts ====
+
+function initKeyboardShortcuts() {
+  kRegisterShortcuts({
+    'ctrl+r': (e) => {
+      // Reload data
+      loadOverview().then(() => kShowToast('Data refreshed', 'success', 2000));
+    },
+    'ctrl+1': () => {
+      // Navigate to Dashboard
+      window.location.href = 'index.html';
+    },
+    'ctrl+2': () => {
+      // Navigate to Payouts
+      window.location.href = 'Payouts/payouts-index.html';
+    },
+    'ctrl+3': () => {
+      // Navigate to Mechanics
+      window.location.href = 'Mechanics/mechanics-index.html';
+    },
+    'ctrl+4': () => {
+      // Navigate to Bank
+      window.location.href = 'Bank_Record/bank-index.html';
+    }
+  });
+}
+
 // ==== Init ====
 
 document.addEventListener("DOMContentLoaded", async () => {
   kSyncNavLinksWithCurrentSearch();
-  await loadOverview();
-  await loadConfig();
+  initKeyboardShortcuts();
+  
+  // Load overview and config in parallel for better performance
+  try {
+    await Promise.all([
+      loadOverview(),
+      loadConfig()
+    ]);
+  } catch (err) {
+    console.error('Error during dashboard initialization:', err);
+  }
 });

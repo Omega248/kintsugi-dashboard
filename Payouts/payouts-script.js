@@ -381,6 +381,10 @@ function getFilters() {
 // ===== Weekly view =====
 function renderWeekly() {
   const { mech, dept, week } = getFilters(); // month ignored in weekly
+  
+  // Use document fragment for better performance
+  const fragment = document.createDocumentFragment();
+  
   weeklyBody.innerHTML = "";
 
   // Filter jobs first by department if needed
@@ -473,7 +477,7 @@ function renderWeekly() {
           <div class="payout-comment">${comment}</div>
         </td>
       `;
-      weeklyBody.appendChild(tr);
+      fragment.appendChild(tr);
     });
 
     const totalRow = document.createElement("tr");
@@ -492,11 +496,14 @@ function renderWeekly() {
         weekEnd
       )}${mechBreakdown ? " — " + mechBreakdown : ""}</td>
     `;
-    weeklyBody.appendChild(totalRow);
+    fragment.appendChild(totalRow);
 
     summarySource.push({ weekEnd, weekTotal, mechTotals });
   });
 
+  // Append all rows at once for better performance
+  weeklyBody.appendChild(fragment);
+  
   updateWeeklySummary(summarySource);
 }
 
@@ -1401,16 +1408,18 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Jobs search
+  // Jobs search with debouncing
   if (jobsSearchInput) {
-    jobsSearchInput.addEventListener("input", () => {
+    const debouncedSearch = kDebounce(() => {
       if (currentView === "jobs") {
         renderAll();
       } else {
         // still update URL for cross-page search usage
         updateUrlFromState();
       }
-    });
+    }, 300);
+    
+    jobsSearchInput.addEventListener("input", debouncedSearch);
   }
 
   // Advanced filters
@@ -1420,16 +1429,19 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Debounced advanced filter inputs
   if (ownerFilterInput) {
-    ownerFilterInput.addEventListener("input", () => {
+    const debouncedOwner = kDebounce(() => {
       if (currentView === "jobs") renderAll();
-    });
+    }, 300);
+    ownerFilterInput.addEventListener("input", debouncedOwner);
   }
 
   if (plateFilterInput) {
-    plateFilterInput.addEventListener("input", () => {
+    const debouncedPlate = kDebounce(() => {
       if (currentView === "jobs") renderAll();
-    });
+    }, 300);
+    plateFilterInput.addEventListener("input", debouncedPlate);
   }
 
   const clearBtn = document.getElementById("mechSummaryClearBtn");

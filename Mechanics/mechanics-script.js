@@ -535,7 +535,9 @@ document.addEventListener("DOMContentLoaded", () => {
     sortByEl.addEventListener("change", mechApplyFiltersAndRender);
   }
   if (searchBoxEl) {
-    searchBoxEl.addEventListener("input", mechApplyFiltersAndRender);
+    // Debounce search for better performance
+    const debouncedSearch = kDebounce(mechApplyFiltersAndRender, 300);
+    searchBoxEl.addEventListener("input", debouncedSearch);
   }
 
   mechLoad();
