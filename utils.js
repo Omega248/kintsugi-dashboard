@@ -339,6 +339,91 @@ function kGetDateRange(period, date = new Date()) {
 }
 
 /**
+ * Show custom confirm dialog
+ * @param {string} title - Dialog title
+ * @param {string} message - Dialog message
+ * @param {Function} onConfirm - Callback on confirm
+ * @param {Function} [onCancel] - Optional callback on cancel
+ */
+function kConfirm(title, message, onConfirm, onCancel) {
+  // Remove existing dialogs
+  const existing = document.querySelectorAll('.k-confirm-overlay');
+  existing.forEach(el => el.remove());
+  
+  // Create overlay
+  const overlay = document.createElement('div');
+  overlay.className = 'k-confirm-overlay';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    animation: kFadeIn 0.2s ease;
+  `;
+  
+  // Create dialog
+  const dialog = document.createElement('div');
+  dialog.className = 'k-confirm-dialog';
+  dialog.style.cssText = `
+    background: var(--bg-secondary, #050816);
+    border: 1px solid var(--border-default, #1f2937);
+    border-radius: var(--radius-lg, 18px);
+    padding: var(--space-lg, 24px);
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+  `;
+  
+  dialog.innerHTML = `
+    <h3 style="margin: 0 0 16px; color: var(--text-primary, #e5e7eb); font-size: 18px;">${title}</h3>
+    <p style="margin: 0 0 24px; color: var(--text-secondary, #9ca3af); line-height: 1.6; font-size: 14px;">${message}</p>
+    <div style="display: flex; gap: 12px; justify-content: flex-end;">
+      <button class="k-confirm-cancel btn" style="min-width: 80px;">Cancel</button>
+      <button class="k-confirm-ok btn btn-primary" style="min-width: 80px;">Confirm</button>
+    </div>
+  `;
+  
+  overlay.appendChild(dialog);
+  document.body.appendChild(overlay);
+  
+  const closeDialog = () => {
+    overlay.style.animation = 'kFadeOut 0.2s ease';
+    setTimeout(() => overlay.remove(), 200);
+  };
+  
+  // Handle confirm
+  dialog.querySelector('.k-confirm-ok').addEventListener('click', () => {
+    closeDialog();
+    if (onConfirm) onConfirm();
+  });
+  
+  // Handle cancel
+  dialog.querySelector('.k-confirm-cancel').addEventListener('click', () => {
+    closeDialog();
+    if (onCancel) onCancel();
+  });
+  
+  // Handle ESC key
+  const handleEsc = (e) => {
+    if (e.key === 'Escape') {
+      closeDialog();
+      if (onCancel) onCancel();
+      document.removeEventListener('keydown', handleEsc);
+    }
+  };
+  document.addEventListener('keydown', handleEsc);
+  
+  // Focus the confirm button
+  setTimeout(() => dialog.querySelector('.k-confirm-ok').focus(), 100);
+}
+
+/**
  * Show toast notification
  * @param {string} message - Message to display
  * @param {string} [type='info'] - Toast type: 'info', 'success', 'warning', 'error'
@@ -554,16 +639,27 @@ function kValidateNumber(value, min, max) {
 }
 
 /**
- * Sanitize HTML to prevent XSS
- * @param {string} html - HTML string to sanitize
- * @returns {string} Sanitized HTML
+ * Escape HTML to prevent XSS (basic text escaping only)
+ * Note: This only performs basic text escaping, not full HTML sanitization.
+ * For displaying user input as text, not for allowing safe HTML tags.
+ * @param {string} text - Text to escape
+ * @returns {string} Escaped text safe for HTML insertion
  */
-function kSanitizeHtml(html) {
-  if (!html || typeof html !== 'string') return '';
+function kEscapeHtml(text) {
+  if (!text || typeof text !== 'string') return '';
   
   const div = document.createElement('div');
-  div.textContent = html;
+  div.textContent = text;
   return div.innerHTML;
+}
+
+/**
+ * Legacy alias for kEscapeHtml
+ * @deprecated Use kEscapeHtml instead for clarity
+ */
+function kSanitizeHtml(html) {
+  console.warn('kSanitizeHtml is deprecated. Use kEscapeHtml for text escaping.');
+  return kEscapeHtml(html);
 }
 
 /**

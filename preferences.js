@@ -173,13 +173,13 @@ function kInitPreferences() {
     document.body.classList.add('compact-mode');
   }
   
-  // Apply show balance preference
+  // Apply show balance preference (only if element exists on this page)
   const balanceToggle = document.getElementById('toggleBalance');
-  if (balanceToggle && prefs.showBalance) {
-    balanceToggle.checked = true;
+  if (balanceToggle) {
+    balanceToggle.checked = prefs.showBalance || false;
   }
   
-  // Apply show tax preference
+  // Apply show tax preference (only if element exists on this page)
   const taxToggle = document.getElementById('toggleTax');
   if (taxToggle && prefs.showTax) {
     taxToggle.classList.add('active');

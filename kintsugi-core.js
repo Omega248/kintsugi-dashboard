@@ -96,7 +96,9 @@ async function kFetchCSV(sheetName, options = {}) {
   if (cache && kCsvCache.has(url)) {
     const cached = kCsvCache.get(url);
     if (Date.now() - cached.timestamp < kCacheTimeout) {
-      return kDeepClone(cached.data);
+      // Return cached data directly - callers should not mutate it
+      // If mutation is needed, caller can clone it themselves
+      return cached.data;
     }
     kCsvCache.delete(url);
   }

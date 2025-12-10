@@ -210,14 +210,18 @@ function kAttachSettingsListeners() {
   
   // Reset settings
   document.getElementById('kResetSettings')?.addEventListener('click', () => {
-    if (confirm('Reset all settings to defaults?')) {
-      kResetPreferences();
-      kUpdateSettingsUI();
-      kShowToast('Settings reset to defaults', 'success', 2000);
-      
-      // Reload page to apply changes
-      setTimeout(() => location.reload(), 1000);
-    }
+    kConfirm(
+      'Reset all settings to defaults?',
+      'This will restore all preferences to their default values. This action cannot be undone.',
+      () => {
+        kResetPreferences();
+        kUpdateSettingsUI();
+        kShowToast('Settings reset to defaults', 'success', 2000);
+        
+        // Reload page to apply changes
+        setTimeout(() => location.reload(), 1000);
+      }
+    );
   });
 }
 

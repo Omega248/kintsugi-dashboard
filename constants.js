@@ -4,10 +4,9 @@
 // =======================================
 
 // ===== Google Sheets Configuration =====
+// Note: KINTSUGI_SHEET_ID is defined in kintsugi-core.js
+// This object extends that configuration with additional sheet names
 const KINTSUGI_CONFIG = {
-  // Default sheet ID - can be overridden per page
-  SHEET_ID: "1EJxx9BAUyBgj9XImCXQ5_3nr_o5BXyLZ9SSkaww71Ks",
-  
   // Sheet names
   SHEETS: {
     JOBS: "Form responses 1",
