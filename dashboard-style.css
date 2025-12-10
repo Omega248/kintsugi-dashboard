@@ -25,14 +25,51 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-xs);
-  transition: transform var(--transition-base), box-shadow var(--transition-base);
-  animation: kFadeIn 0.4s ease;
+  transition: all var(--duration-fast) var(--ease-smooth);
+  animation: statCardFadeIn 0.5s var(--ease-smooth) backwards;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-box::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at top left, rgba(148, 163, 253, 0.15), transparent);
+  opacity: 0;
+  transition: opacity var(--duration-fast);
 }
 
 .stat-box:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.95);
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.95), 0 0 40px rgba(79, 70, 229, 0.3);
+  border-color: var(--accent-primary);
 }
+
+.stat-box:hover::before {
+  opacity: 1;
+}
+
+@keyframes statCardFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stat-box:nth-child(1) { animation-delay: 0.05s; }
+.stat-box:nth-child(2) { animation-delay: 0.1s; }
+.stat-box:nth-child(3) { animation-delay: 0.15s; }
+.stat-box:nth-child(4) { animation-delay: 0.2s; }
+.stat-box:nth-child(5) { animation-delay: 0.25s; }
+.stat-box:nth-child(6) { animation-delay: 0.3s; }
+.stat-box:nth-child(7) { animation-delay: 0.35s; }
+.stat-box:nth-child(8) { animation-delay: 0.4s; }
+.stat-box:nth-child(9) { animation-delay: 0.45s; }
 
 .stat-box h3 {
   margin: 0;
@@ -41,6 +78,9 @@
   letter-spacing: 0.18em;
   color: var(--text-secondary);
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
 }
 
 .stat-box p {
@@ -49,12 +89,25 @@
   font-weight: 600;
   color: var(--text-primary);
   line-height: 1.1;
+  transition: color var(--duration-fast);
+}
+
+.stat-box:hover p {
+  color: var(--accent-secondary);
 }
 
 .stat-box .sub {
   margin: 0;
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-icon {
+  font-size: 16px;
+  opacity: 0.6;
 }
 
 /* ===== CTA Cards ===== */
@@ -76,12 +129,28 @@
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-soft);
   flex: 0 1 460px;
-  transition: transform var(--transition-base), box-shadow var(--transition-base);
+  transition: all var(--duration-fast) var(--ease-smooth);
+  position: relative;
+  overflow: hidden;
+}
+
+.cta-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(79, 70, 229, 0.1), transparent);
+  opacity: 0;
+  transition: opacity var(--duration-fast);
 }
 
 .cta-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-4px);
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.95);
+  border-color: var(--accent-primary);
+}
+
+.cta-card:hover::before {
+  opacity: 1;
 }
 
 .cta-card h4 {
@@ -108,15 +177,33 @@
   background: radial-gradient(circle at top left, var(--accent-secondary), var(--accent-primary));
   text-decoration: none;
   box-shadow: var(--shadow-glow-strong);
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast),
-    opacity var(--transition-fast);
+  transition: all var(--duration-fast) var(--ease-smooth);
   font-weight: 500;
+  position: relative;
+  overflow: hidden;
+}
+
+.cta-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transform: translateX(-100%);
+  transition: transform var(--duration-slow);
 }
 
 .cta-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 12px 28px rgba(79, 70, 229, 0.9);
-  opacity: 0.95;
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 16px 36px rgba(79, 70, 229, 0.95);
+}
+
+.cta-btn:hover::before {
+  transform: translateX(100%);
+}
+
+.cta-btn:active {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 8px 20px rgba(79, 70, 229, 0.8);
 }
 
 /* ===== Responsive Design ===== */
