@@ -1,55 +1,7 @@
 // ===== Config =====
-const SHEET_ID = "1EJxx9BAUyBgj9XImCXQ5_3nr_o5BXyLZ9SSkaww71Ks";
 const JOBS_SHEET = "Form responses 1";
 const CONFIG_SHEET = "Config";
 const PAY_PER_REPAIR = 700;
-
-// Build CSV URL for a sheet
-function sheetCsvUrl(sheetName) {
-  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(
-    sheetName
-  )}`;
-}
-
-// Generic CSV fetch using PapaParse
-async function fetchCsvRows(sheetName) {
-  const url = sheetCsvUrl(sheetName);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${sheetName}`);
-  const text = await res.text();
-  if (text.trim().startsWith("<")) {
-    throw new Error(`Got HTML instead of CSV for ${sheetName}. Check sharing.`);
-  }
-
-  return new Promise((resolve, reject) => {
-    Papa.parse(text, {
-      header: true,
-      skipEmptyLines: "greedy",
-      complete: (parsed) => {
-        if (parsed.errors && parsed.errors.length) {
-          console.warn(`Papa parse errors for ${sheetName}`, parsed.errors);
-        }
-        resolve(parsed.data || []);
-      },
-      error: reject,
-    });
-  });
-}
-
-// ===== Nav sync (keep tabs using current querystring for other pages) =====
-function syncNavLinksWithCurrentSearch() {
-  const qs = window.location.search || "";
-  document.querySelectorAll(".nav-tabs a").forEach((a) => {
-    if (!a) return;
-    const current = a.getAttribute("href") || "";
-    let base = a.getAttribute("data-base-href");
-    if (!base) {
-      base = current.split("?")[0];
-      a.setAttribute("data-base-href", base);
-    }
-    a.setAttribute("href", base + qs);
-  });
-}
 
 // ===== Overview from jobs sheet (GLOBAL ONLY) =====
 
@@ -57,7 +9,7 @@ async function loadOverview() {
   const status = document.getElementById("status");
 
   try {
-    const rows = await fetchCsvRows(JOBS_SHEET);
+    const { data: rows } = await kFetchCSV(JOBS_SHEET, { header: true });
     if (!rows.length) {
       if (status) status && (status.textContent = "");
       return;
@@ -177,47 +129,47 @@ async function loadOverview() {
       }
     });
 
-    setText("totalRepairs", totalRepairs.toLocaleString());
-    setText("totalPayout", money(totalPayout));
-    setText("activeMechanics", mechanics.size.toLocaleString());
-    setText("latestWeek", latestWeekDate ? fmtDate(latestWeekDate) : "—");
+    kSetText("totalRepairs", totalRepairs.toLocaleString());
+    kSetText("totalPayout", kFmtMoney(totalPayout));
+    kSetText("activeMechanics", mechanics.size.toLocaleString());
+    kSetText("latestWeek", latestWeekDate ? kFmtDate(latestWeekDate) : "—");
 
     // Week/month KPIs
-    setText("repairsThisWeek", repairsThisWeek.toLocaleString());
-    setText(
+    kSetText("repairsThisWeek", repairsThisWeek.toLocaleString());
+    kSetText(
       "payoutThisWeek",
-      "Payout: " + money(payoutThisWeek)
+      "Payout: " + kFmtMoney(payoutThisWeek)
     );
 
-    setText("repairsThisMonth", repairsThisMonth.toLocaleString());
-    setText(
+    kSetText("repairsThisMonth", repairsThisMonth.toLocaleString());
+    kSetText(
       "payoutThisMonth",
-      "Payout: " + money(payoutThisMonth)
+      "Payout: " + kFmtMoney(payoutThisMonth)
     );
 
     // Top mechanic this week
     if (topMechName) {
-      setText("topMechWeekName", topMechName);
-      setText(
+      kSetText("topMechWeekName", topMechName);
+      kSetText(
         "topMechWeekStats",
         topMechRepairs.toLocaleString() +
           " repairs · " +
-          money(topMechRepairs * PAY_PER_REPAIR)
+          kFmtMoney(topMechRepairs * PAY_PER_REPAIR)
       );
     } else {
-      setText("topMechWeekName", "—");
-      setText("topMechWeekStats", "No repairs logged this week");
+      kSetText("topMechWeekName", "—");
+      kSetText("topMechWeekStats", "No repairs logged this week");
     }
 
     // Subtitles
-    setText("tileSub-totalRepairs", "");
-    setText("tileSub-totalPayout", "");
-    setText("tileSub-activeMechanics", "");
-    setText("tileSub-manualBetLeft", "");
-    setText("tileSub-manualRedBins", "");
-    setText(
+    kSetText("tileSub-totalRepairs", "");
+    kSetText("tileSub-totalPayout", "");
+    kSetText("tileSub-activeMechanics", "");
+    kSetText("tileSub-manualBetLeft", "");
+    kSetText("tileSub-manualRedBins", "");
+    kSetText(
       "tileSub-latestWeek",
-      lastActivity ? "Last job: " + fmtDate(lastActivity) : ""
+      lastActivity ? "Last job: " + kFmtDate(lastActivity) : ""
     );
 
     if (status) {
@@ -237,7 +189,7 @@ async function loadOverview() {
 
 async function loadConfig() {
   try {
-    const rows = await fetchCsvRows(CONFIG_SHEET);
+    const { data: rows } = await kFetchCSV(CONFIG_SHEET, { header: true });
     if (!rows.length) {
       return;
     }
@@ -252,13 +204,13 @@ async function loadConfig() {
     });
 
     if (map.MANUAL_BET_LEFT !== undefined) {
-      setText(
+      kSetText(
         "manualBetLeft",
         Number(map.MANUAL_BET_LEFT || 0).toLocaleString()
       );
     }
     if (map.MANUAL_RED_BINS !== undefined) {
-      setText(
+      kSetText(
         "manualRedBins",
         Number(map.MANUAL_RED_BINS || 0).toLocaleString()
       );
@@ -268,58 +220,25 @@ async function loadConfig() {
   }
 }
 
-// ==== Helpers ====
-
-function setText(id, value) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = value;
-}
+// ==== Helpers (now using kintsugi-core.js) ====
+// All date/money formatting helpers are in kintsugi-core.js
 
 function parseDateLike(raw) {
-  if (!raw) return null;
-  const s = String(raw).trim();
-  if (!s) return null;
-
-  // dd/mm/yyyy or dd-mm-yyyy
-  let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-  if (m) {
-    const dd = parseInt(m[1], 10);
-    const mm = parseInt(m[2], 10);
-    const yyyy = parseInt(m[3], 10);
-    const d = new Date(yyyy, mm - 1, dd);
-    return isNaN(d) ? null : d;
-  }
-
-  // yyyy-mm-dd
-  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (m) {
-    const yyyy = parseInt(m[1], 10);
-    const mm = parseInt(m[2], 10);
-    const dd = parseInt(m[3], 10);
-    const d = new Date(yyyy, mm - 1, dd);
-    return isNaN(d) ? null : d;
-  }
-
-  const d = new Date(s);
-  return isNaN(d) ? null : d;
+  return kParseDateLike(raw);
 }
 
 function fmtDate(d) {
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const yyyy = d.getFullYear();
-  return `${mm}/${dd}/${yyyy}`;
+  return kFmtDate(d);
 }
 
 function money(n) {
-  const v = Number(n || 0);
-  return "$" + v.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  return kFmtMoney(n);
 }
 
 // ==== Init ====
 
 document.addEventListener("DOMContentLoaded", async () => {
-  syncNavLinksWithCurrentSearch();
+  kSyncNavLinksWithCurrentSearch();
   await loadOverview();
   await loadConfig();
 });

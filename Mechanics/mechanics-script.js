@@ -1,5 +1,4 @@
-// ===== Config =====
-const MECH_SHEET_ID = "1EJxx9BAUyBgj9XImCXQ5_3nr_o5BXyLZ9SSkaww71Ks";
+// ===== Config (using KINTSUGI_SHEET_ID from kintsugi-core.js) =====
 const MECH_JOBS_SHEET = "Form responses 1";
 const MECH_PAY_PER_REPAIR = 700;
 
@@ -29,112 +28,24 @@ let detailSubtitleEl;
 let mechanicDetailEl;
 let mechanicsTableSubEl;
 
-// ===== CSV fetch / parse =====
-function mechSheetCsvUrl(sheetName, sheetIdOverride) {
-  const id = sheetIdOverride || MECH_SHEET_ID;
-  const encodedSheetName = encodeURIComponent(sheetName);
-  return `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodedSheetName}`;
-}
-
-async function mechFetchCSV(sheetName, sheetIdOverride) {
-  const url = mechSheetCsvUrl(sheetName, sheetIdOverride);
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Failed fetching "${sheetName}" CSV: ${res.status} ${res.statusText}`);
-  }
-  const text = await res.text();
-  return mechParseCSV(text);
-}
-
-// minimal CSV parser
-function mechParseCSV(text) {
-  const rows = [];
-  let row = [];
-  let cur = "";
-  let inQuotes = false;
-
-  function pushCell() {
-    row.push(cur);
-    cur = "";
-  }
-  function pushRow() {
-    if (row.length > 0) rows.push(row);
-    row = [];
-  }
-
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-
-    if (inQuotes) {
-      if (ch === '"') {
-        const next = text[i + 1];
-        if (next === '"') {
-          cur += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        cur += ch;
-      }
-    } else {
-      if (ch === '"') {
-        inQuotes = true;
-      } else if (ch === ",") {
-        pushCell();
-      } else if (ch === "\n" || ch === "\r") {
-        if (ch === "\r" && text[i + 1] === "\n") i++;
-        pushCell();
-        pushRow();
-      } else {
-        cur += ch;
-      }
-    }
-  }
-  if (cur || row.length) {
-    pushCell();
-    pushRow();
-  }
-  return rows;
+// ===== CSV fetch (using kintsugi-core.js) =====
+async function mechFetchCSV(sheetName) {
+  return await kFetchCSV(sheetName, { header: false });
 }
 
 // ===== Date helpers =====
+// ===== Date/Money helpers (using kintsugi-core.js) =====
 function mechIsValidDate(d) {
   return d instanceof Date && !isNaN(d.getTime());
 }
 
 function mechParseDateLike(raw) {
-  if (!raw) return null;
-  const s = String(raw).trim();
-  if (!s) return null;
-
-  // dd/mm/yyyy or dd-mm-yyyy
-  let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-  if (m) {
-    const dd = parseInt(m[1], 10);
-    const mm = parseInt(m[2], 10);
-    const yyyy = parseInt(m[3], 10);
-    const d = new Date(yyyy, mm - 1, dd);
-    if (mechIsValidDate(d)) return d;
-  }
-
-  // yyyy-mm-dd
-  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (m) {
-    const yyyy = parseInt(m[1], 10);
-    const mm = parseInt(m[2], 10);
-    const dd = parseInt(m[3], 10);
-    const d = new Date(yyyy, mm - 1, dd);
-    if (mechIsValidDate(d)) return d;
-  }
-
-  // Fallback: browser parse
-  const d = new Date(s);
-  return mechIsValidDate(d) ? d : null;
+  return kParseDateLike(raw);
 }
 
 function mechFmtDate(d) {
   if (!mechIsValidDate(d)) return "–";
+  // Using UK format (DD/MM/YY) for this page
   return d.toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "2-digit",
@@ -143,6 +54,7 @@ function mechFmtDate(d) {
 }
 
 function mechFmtMoney(amount) {
+  // Using UK format (£) for this page
   return "£" + (amount || 0).toLocaleString("en-GB");
 }
 

@@ -1,6 +1,6 @@
 // =======================================
 // Kintsugi Core Helpers
-// Shared utilities for Dashboard / Payouts / Bank
+// Shared utilities for Dashboard / Payouts / Mechanics / Bank
 // =======================================
 
 // Default sheet ID (can be overridden per page if needed)
@@ -20,18 +20,70 @@ function kSheetCsvUrl(sheetName, sheetIdOverride) {
 }
 
 /**
- * Fetch CSV from a sheet and parse with PapaParse.
+ * Minimal CSV parser (no external dependencies).
+ * Handles quoted fields, escaped quotes, and newlines.
+ * @param {string} text - CSV text
+ * @returns {string[][]} - Array of rows, each row is an array of string values
+ */
+function kParseCSV(text) {
+  const rows = [];
+  let row = [];
+  let cur = "";
+  let inQuotes = false;
+
+  const pushCell = () => {
+    row.push(cur);
+    cur = "";
+  };
+
+  const pushRow = () => {
+    if (row.length || cur) {
+      pushCell();
+      rows.push(row);
+      row = [];
+    }
+  };
+
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cur += c;
+      }
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ",") pushCell();
+      else if (c === "\r") continue;
+      else if (c === "\n") pushRow();
+      else cur += c;
+    }
+  }
+
+  if (cur || row.length) pushRow();
+  return rows;
+}
+
+/**
+ * Fetch CSV from a sheet and parse it.
  * @param {string} sheetName
  * @param {object} options
  *   - sheetId: override SHEET_ID if needed
- *   - header: return array of objects (true) or array-of-arrays (false)
+ *   - usePapa: use PapaParse if available (default: false)
+ *   - header: return array of objects (true) or array-of-arrays (false) - default: false
  *
  * Returns:
- *   if header === true  -> { fields: string[], data: object[] }
  *   if header === false -> string[][]
+ *   if header === true  -> { fields: string[], data: object[] }
  */
-async function kFetchCsvPapa(sheetName, options = {}) {
-  const { sheetId, header = true } = options;
+async function kFetchCSV(sheetName, options = {}) {
+  const { sheetId, usePapa = false, header = false } = options;
   const url = kSheetCsvUrl(sheetName, sheetId);
 
   const res = await fetch(url);
@@ -44,30 +96,62 @@ async function kFetchCsvPapa(sheetName, options = {}) {
     );
   }
 
-  return new Promise((resolve, reject) => {
-    Papa.parse(text, {
-      header,
-      skipEmptyLines: "greedy",
-      dynamicTyping: false,
-      complete: (parsed) => {
-        if (parsed.errors && parsed.errors.length) {
-          console.warn(`PapaParse errors for "${sheetName}"`, parsed.errors);
-        }
+  // Use PapaParse if available and requested
+  if (usePapa && typeof Papa !== 'undefined') {
+    return new Promise((resolve, reject) => {
+      Papa.parse(text, {
+        header,
+        skipEmptyLines: "greedy",
+        dynamicTyping: false,
+        complete: (parsed) => {
+          if (parsed.errors && parsed.errors.length) {
+            console.warn(`PapaParse errors for "${sheetName}"`, parsed.errors);
+          }
 
-        if (header) {
-          const data = parsed.data || [];
-          const fields =
-            (parsed.meta && parsed.meta.fields) ||
-            (data[0] ? Object.keys(data[0]) : []);
-          resolve({ fields, data });
-        } else {
-          resolve(parsed.data || []);
-        }
-      },
-      error: reject,
+          if (header) {
+            const data = parsed.data || [];
+            const fields =
+              (parsed.meta && parsed.meta.fields) ||
+              (data[0] ? Object.keys(data[0]) : []);
+            resolve({ fields, data });
+          } else {
+            resolve(parsed.data || []);
+          }
+        },
+        error: reject,
+      });
     });
-  });
+  }
+
+  // Use built-in parser
+  const rows = kParseCSV(text);
+  
+  if (!header) {
+    return rows;
+  }
+
+  // Convert to objects with headers
+  if (rows.length === 0) return { fields: [], data: [] };
+  
+  const fields = rows[0].map(h => h.trim());
+  const data = [];
+  
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const obj = {};
+    fields.forEach((field, idx) => {
+      obj[field] = row[idx] || "";
+    });
+    data.push(obj);
+  }
+  
+  return { fields, data };
 }
+
+/**
+ * Legacy alias for backwards compatibility with PapaParse usage
+ */
+const kFetchCsvPapa = kFetchCSV;
 
 // ----- DATES & MONEY -----
 
@@ -206,4 +290,89 @@ function kInitNavSyncOnLoad() {
       console.warn("kInitNavSyncOnLoad failed:", e);
     }
   });
+}
+
+// ----- DOM HELPERS -----
+
+/**
+ * Set text content of an element by ID.
+ * @param {string} id - Element ID
+ * @param {string|number} value - Text content to set
+ */
+function kSetText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+/**
+ * Get element by ID safely.
+ * @param {string} id - Element ID
+ * @returns {HTMLElement|null}
+ */
+function kGetEl(id) {
+  return document.getElementById(id);
+}
+
+/**
+ * Add class to element.
+ */
+function kAddClass(el, className) {
+  if (el && el.classList) el.classList.add(className);
+}
+
+/**
+ * Remove class from element.
+ */
+function kRemoveClass(el, className) {
+  if (el && el.classList) el.classList.remove(className);
+}
+
+/**
+ * Toggle class on element.
+ */
+function kToggleClass(el, className) {
+  if (el && el.classList) el.classList.toggle(className);
+}
+
+/**
+ * Check if element has class.
+ */
+function kHasClass(el, className) {
+  return el && el.classList && el.classList.contains(className);
+}
+
+// ----- EXPORT CSV HELPERS -----
+
+/**
+ * Convert data to CSV format.
+ * @param {string[]} cols - Column names
+ * @param {object[]} rows - Array of objects
+ * @returns {string} - CSV text
+ */
+function kToCsv(cols, rows) {
+  const esc = (val) => {
+    if (val == null) return "";
+    const s = String(val);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const head = cols.join(",");
+  const lines = rows.map((r) => cols.map((c) => esc(r[c])).join(","));
+  return [head, ...lines].join("\n");
+}
+
+/**
+ * Download CSV file to user's computer.
+ * @param {string} filename - File name
+ * @param {string} csv - CSV text content
+ */
+function kDownloadCsv(filename, csv) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
