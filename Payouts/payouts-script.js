@@ -1,5 +1,4 @@
-// ===== Config =====
-const SHEET_ID = "1EJxx9BAUyBgj9XImCXQ5_3nr_o5BXyLZ9SSkaww71Ks";
+// ===== Config (using KINTSUGI_SHEET_ID from kintsugi-core.js) =====
 const PAYOUTS_SHEET = "Form responses 1";
 const STATE_ID_SHEET = "State ID's";
 
@@ -47,117 +46,26 @@ let advancedToggleBtn;
 // URL params on first load
 let initialParams = null;
 
-// ===== CSV fetch & parse =====
-function sheetCsvUrl(sheet) {
-  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(
-    sheet
-  )}`;
-}
-
+// ===== CSV fetch (using kintsugi-core.js) =====
 async function fetchCSV(sheet) {
-  const res = await fetch(sheetCsvUrl(sheet));
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const text = await res.text();
-  if (text.trim().startsWith("<")) {
-    throw new Error("Got HTML instead of CSV; check sharing.");
-  }
-  return parseCSV(text);
+  return await kFetchCSV(sheet, { header: false });
 }
 
-// Minimal CSV parser (no Papa dependency)
-function parseCSV(text) {
-  const rows = [];
-  let row = [];
-  let cur = "";
-  let inQuotes = false;
-
-  const pushCell = () => {
-    row.push(cur);
-    cur = "";
-  };
-
-  const pushRow = () => {
-    if (row.length || cur) {
-      pushCell();
-      rows.push(row);
-      row = [];
-    }
-  };
-
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQuotes) {
-      if (c === '"') {
-        if (text[i + 1] === '"') {
-          cur += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        cur += c;
-      }
-    } else {
-      if (c === '"') inQuotes = true;
-      else if (c === ",") pushCell();
-      else if (c === "\r") continue;
-      else if (c === "\n") pushRow();
-      else cur += c;
-    }
-  }
-
-  if (cur || row.length) pushRow();
-  return rows;
-}
-
-// ===== Date helpers =====
+// ===== Date helpers (using kintsugi-core.js) =====
 function parseDateLike(raw) {
-  if (!raw) return null;
-  const s = String(raw).trim();
-  if (!s) return null;
-
-  // dd/mm/yyyy or dd-mm-yyyy
-  let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-  if (m) {
-    const dd = parseInt(m[1], 10);
-    const mm = parseInt(m[2], 10);
-    const yyyy = parseInt(m[3], 10);
-    const d = new Date(yyyy, mm - 1, dd);
-    return isNaN(d.getTime()) ? null : d;
-  }
-
-  // yyyy-mm-dd
-  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (m) {
-    const yyyy = parseInt(m[1], 10);
-    const mm = parseInt(m[2], 10);
-    const dd = parseInt(m[3], 10);
-    const d = new Date(yyyy, mm - 1, dd);
-    return isNaN(d.getTime()) ? null : d;
-  }
-
-  const d = new Date(s);
-  return isNaN(d.getTime()) ? null : d;
+  return kParseDateLike(raw);
 }
 
-// US MM/DD/YYYY
 function fmtDate(d) {
-  if (!d) return "";
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const yyyy = d.getFullYear();
-  return `${mm}/${dd}/${yyyy}`;
+  return kFmtDate(d);
+}
+
+function fmtMoney(n) {
+  return kFmtMoney(n);
 }
 
 function monthKey(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function fmtMoney(n) {
-  return (
-    "$" +
-    (n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })
-  );
 }
 
 // Weekly payout comment helper
@@ -205,28 +113,13 @@ function calculateEnginePayment(engineReplacementsByDept) {
   return enginePay;
 }
 
-// ===== CSV export helpers =====
+// ===== CSV export helpers (using kintsugi-core.js) =====
 function toCsv(cols, rows) {
-  const esc = (val) => {
-    if (val == null) return "";
-    const s = String(val);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const head = cols.join(",");
-  const lines = rows.map((r) => cols.map((c) => esc(r[c])).join(","));
-  return [head, ...lines].join("\n");
+  return kToCsv(cols, rows);
 }
 
 function downloadCsv(filename, csv) {
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  kDownloadCsv(filename, csv);
 }
 
 // ===== State ID helpers =====
@@ -1215,21 +1108,9 @@ function generateBill() {
   downloadCsv(filename, toCsv(cols, billRows));
 }
 
-// ===== Nav sync (keep tabs using current querystring) =====
+// ===== Nav sync (using kintsugi-core.js) =====
 function syncNavLinksWithCurrentSearch() {
-  const qs = window.location.search || "";
-  const links = document.querySelectorAll(".nav-tabs a");
-  links.forEach((a) => {
-    if (!a) return;
-    const current = a.getAttribute("href") || "";
-    // Store the "base" href once (no query)
-    let base = a.getAttribute("data-base-href");
-    if (!base) {
-      base = current.split("?")[0];
-      a.setAttribute("data-base-href", base);
-    }
-    a.setAttribute("href", base + qs);
-  });
+  kSyncNavLinksWithCurrentSearch();
 }
 
 function updateUrlFromState() {
