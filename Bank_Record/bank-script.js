@@ -82,20 +82,9 @@ let resizeInfo = null;
 
 // ================== URL STATE HELPERS ==================
 
-// ================== NAV SYNC ==================
+// ================== NAV SYNC (using kintsugi-core.js) ==================
 function syncNavLinksWithCurrentSearch() {
-  const qs = window.location.search || "";
-  const links = document.querySelectorAll(".nav-tabs a");
-  links.forEach((a) => {
-    if (!a) return;
-    const current = a.getAttribute("href") || "";
-    let base = a.getAttribute("data-base-href");
-    if (!base) {
-      base = current.split("?")[0];
-      a.setAttribute("data-base-href", base);
-    }
-    a.setAttribute("href", base + qs);
-  });
+  kSyncNavLinksWithCurrentSearch();
 }
 
 
