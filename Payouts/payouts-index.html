@@ -4,8 +4,115 @@
   <meta charset="UTF-8" />
   <title>Kintsugi Motorworks · Payouts</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="../shared-styles.css" />
-  <link rel="stylesheet" href="payouts-style.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'kintsugi-bg-primary': '#020817',
+            'kintsugi-bg-secondary': '#050816',
+            'kintsugi-bg-tertiary': '#030712',
+            'kintsugi-bg-elevated': 'rgba(10, 14, 28, 0.92)',
+            'kintsugi-border-subtle': '#111827',
+            'kintsugi-border-default': '#1f2937',
+            'kintsugi-border-strong': '#374151',
+            'kintsugi-text-primary': '#e5e7eb',
+            'kintsugi-text-secondary': '#9ca3af',
+            'kintsugi-text-tertiary': '#6b7280',
+            'kintsugi-accent': '#4f46e5',
+            'kintsugi-accent-secondary': '#6366f1',
+            'kintsugi-accent-soft': 'rgba(79, 70, 229, 0.22)',
+            'kintsugi-accent-hover': 'rgba(148, 163, 253, 0.12)',
+            'kintsugi-gold': '#d4af37',
+            'kintsugi-gold-secondary': '#f4c430',
+          },
+          fontFamily: {
+            'sans': ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+          },
+          fontSize: {
+            'xs': '9px',
+            'sm': '10px',
+            'base': '11px',
+            'md': '13px',
+            'lg': '14px',
+            'xl': '18px',
+            '2xl': '24px',
+            '3xl': '34px',
+            '4xl': '39px',
+          },
+          borderRadius: {
+            'sm': '8px',
+            'md': '12px',
+            'lg': '18px',
+            'xl': '22px',
+          },
+          boxShadow: {
+            'kintsugi-soft': '0 24px 70px rgba(0, 0, 0, 0.9)',
+            'kintsugi-elevated': '0 20px 60px rgba(0, 0, 0, 0.65)',
+            'kintsugi-glow': '0 0 18px rgba(79, 70, 229, 0.9)',
+            'kintsugi-card': '0 20px 60px rgba(0, 0, 0, 0.75)',
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    body::before {
+      content: "";
+      position: fixed;
+      inset: -40vh -40vw;
+      z-index: -1;
+      pointer-events: none;
+      background: radial-gradient(circle at top, #111827 0%, #020817 35%, #000 75%);
+      opacity: 1;
+    }
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+      opacity: 0.03;
+      mix-blend-mode: overlay;
+    }
+    .brand-title-gradient {
+      background: linear-gradient(135deg, #e5e7eb 0%, #d4af37 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .brand-title-line::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 90px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #d4af37, transparent);
+      box-shadow: 0 0 10px rgba(212, 175, 55, 0.4);
+    }
+    .nav-pill-active {
+      background: radial-gradient(circle at top left, #6366f1, #4f46e5);
+      box-shadow: 0 0 16px rgba(79, 70, 229, 0.9), 0 0 4px rgba(212, 175, 55, 0.3);
+    }
+    .btn-gradient {
+      background: radial-gradient(circle at top left, #6366f1, #4f46e5);
+    }
+    .seg-btn-active {
+      background: radial-gradient(circle at top left, #6366f1, #4f46e5);
+      box-shadow: 0 0 12px rgba(79, 70, 229, 0.8);
+    }
+    .page-shell-bg {
+      background: linear-gradient(135deg, rgba(10, 14, 28, 0.92), rgba(6, 10, 20, 0.96));
+    }
+    /* Table styles that need to be preserved */
+    table { border-collapse: collapse; }
+    th { position: sticky; top: 0; z-index: 5; }
+    .week-total-row { background: rgba(79, 70, 229, 0.12); }
+  </style>
   <script src="../constants.js"></script>
   <script src="../utils.js"></script>
   <script src="../payout-helpers.js"></script>
@@ -13,105 +120,113 @@
   <script src="../ui-enhancements.js"></script>
   <script src="../kintsugi-core.js"></script>
 </head>
-<body>
-  <div class="app">
+<body class="m-0 p-[18px] font-sans text-kintsugi-text-primary bg-black overflow-x-hidden leading-normal">
+  <div class="max-w-[1600px] mx-auto">
     <!-- Shared Top Nav -->
-    <header class="top-bar">
+    <header class="flex flex-col items-center justify-start gap-3 mb-5">
       <div>
-        <div class="brand-title">Kintsugi Motorworks</div>
-        <div class="brand-sub">Payouts &amp; jobs</div>
+        <div class="text-4xl font-bold tracking-wide text-center relative pb-1 brand-title-gradient brand-title-line">
+          Kintsugi Motorworks
+        </div>
+        <div class="mt-1.5 text-md uppercase tracking-[0.22em] text-kintsugi-text-secondary text-center">
+          Payouts &amp; jobs
+        </div>
       </div>
-      <nav class="nav-tabs">
-        <a href="../index.html" class="nav-pill">Dashboard</a>
-        <a href="payouts-index.html" class="nav-pill active">Payouts</a>
-        <a href="../Mechanics/mechanics-index.html" class="nav-pill">Mechanics</a>
-        <a href="../Bank_Record/bank-index.html" class="nav-pill">Bank</a>
+      <nav class="inline-flex p-1 rounded-full bg-gradient-to-br from-[rgba(10,16,32,0.98)] to-[rgba(15,23,42,0.95)] border border-[rgba(79,70,229,0.15)] gap-1 shadow-[0_8px_24px_rgba(0,0,0,0.7),0_0_1px_rgba(79,70,229,0.5)] backdrop-blur-sm">
+        <a href="../index.html" class="px-[22px] py-2 rounded-full text-base text-kintsugi-text-secondary border border-transparent transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] cursor-pointer relative overflow-hidden hover:text-kintsugi-text-primary hover:bg-kintsugi-accent-hover hover:border-[rgba(79,70,229,0.35)] hover:-translate-y-px">Dashboard</a>
+        <a href="payouts-index.html" class="px-[22px] py-2 rounded-full text-base text-white border border-[rgba(212,175,55,0.2)] transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] cursor-pointer relative overflow-hidden nav-pill-active">Payouts</a>
+        <a href="../Mechanics/mechanics-index.html" class="px-[22px] py-2 rounded-full text-base text-kintsugi-text-secondary border border-transparent transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] cursor-pointer relative overflow-hidden hover:text-kintsugi-text-primary hover:bg-kintsugi-accent-hover hover:border-[rgba(79,70,229,0.35)] hover:-translate-y-px">Mechanics</a>
+        <a href="../Bank_Record/bank-index.html" class="px-[22px] py-2 rounded-full text-base text-kintsugi-text-secondary border border-transparent transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] cursor-pointer relative overflow-hidden hover:text-kintsugi-text-primary hover:bg-kintsugi-accent-hover hover:border-[rgba(79,70,229,0.35)] hover:-translate-y-px">Bank</a>
       </nav>
     </header>
 
-    <main class="page-shell">
-      <section class="summary">
-        <div class="summary-main">
-          <div class="summary-title">Payouts overview</div>
-          <p class="summary-sub">
+    <main class="mt-4 rounded-xl border border-[rgba(255,255,255,0.03)] shadow-kintsugi-card p-7 flex flex-col gap-4 page-shell-bg">
+      <section class="flex flex-col items-center text-center gap-1 mb-4">
+        <div class="max-w-[600px]">
+          <div class="text-[20px] font-semibold text-kintsugi-text-primary tracking-[0.02em]">Payouts overview</div>
+          <p class="mt-1.5 text-md text-kintsugi-text-secondary leading-normal">
             Live jobs and payout totals from the mechanic repair sheet.
           </p>
         </div>
       </section>
 
       <!-- Controls -->
-      <div class="controls">
-        <span class="label-soft">Mechanic:</span>
-        <span class="select-wrap">
-          <select id="mechanicFilter" class="select-pill">
+      <div class="flex flex-wrap gap-2 items-center mb-2 text-base">
+        <span class="text-kintsugi-text-secondary text-sm">Mechanic:</span>
+        <span class="relative inline-flex items-center">
+          <select id="mechanicFilter" class="px-[10px] py-1.5 pr-[26px] rounded-full border border-kintsugi-border-strong bg-kintsugi-bg-secondary text-kintsugi-text-primary text-base font-sans appearance-none cursor-pointer transition-all duration-[180ms] hover:border-kintsugi-accent focus:outline-none focus:border-kintsugi-accent focus:shadow-[0_0_0_3px_rgba(79,70,229,0.22)]">
             <option value="all">All Mechanics</option>
           </select>
+          <span class="absolute right-[10px] top-1/2 -translate-y-[52%] text-xs text-kintsugi-text-secondary pointer-events-none">▾</span>
         </span>
 
-        <span class="label-soft">Department:</span>
-        <span class="select-wrap">
-          <select id="departmentFilter" class="select-pill">
+        <span class="text-kintsugi-text-secondary text-sm">Department:</span>
+        <span class="relative inline-flex items-center">
+          <select id="departmentFilter" class="px-[10px] py-1.5 pr-[26px] rounded-full border border-kintsugi-border-strong bg-kintsugi-bg-secondary text-kintsugi-text-primary text-base font-sans appearance-none cursor-pointer transition-all duration-[180ms] hover:border-kintsugi-accent focus:outline-none focus:border-kintsugi-accent focus:shadow-[0_0_0_3px_rgba(79,70,229,0.22)]">
             <option value="all">All Departments</option>
           </select>
+          <span class="absolute right-[10px] top-1/2 -translate-y-[52%] text-xs text-kintsugi-text-secondary pointer-events-none">▾</span>
         </span>
 
-        <span class="label-soft">Week ending:</span>
-        <span class="select-wrap">
-          <select id="weekFilter" class="select-pill">
+        <span class="text-kintsugi-text-secondary text-sm">Week ending:</span>
+        <span class="relative inline-flex items-center">
+          <select id="weekFilter" class="px-[10px] py-1.5 pr-[26px] rounded-full border border-kintsugi-border-strong bg-kintsugi-bg-secondary text-kintsugi-text-primary text-base font-sans appearance-none cursor-pointer transition-all duration-[180ms] hover:border-kintsugi-accent focus:outline-none focus:border-kintsugi-accent focus:shadow-[0_0_0_3px_rgba(79,70,229,0.22)]">
             <option value="all">All Weeks</option>
           </select>
+          <span class="absolute right-[10px] top-1/2 -translate-y-[52%] text-xs text-kintsugi-text-secondary pointer-events-none">▾</span>
         </span>
 
-        <span class="label-soft">Month ending:</span>
-        <span class="select-wrap">
-          <select id="monthFilter" class="select-pill">
+        <span class="text-kintsugi-text-secondary text-sm">Month ending:</span>
+        <span class="relative inline-flex items-center">
+          <select id="monthFilter" class="px-[10px] py-1.5 pr-[26px] rounded-full border border-kintsugi-border-strong bg-kintsugi-bg-secondary text-kintsugi-text-primary text-base font-sans appearance-none cursor-pointer transition-all duration-[180ms] hover:border-kintsugi-accent focus:outline-none focus:border-kintsugi-accent focus:shadow-[0_0_0_3px_rgba(79,70,229,0.22)]">
             <option value="all">All Months</option>
           </select>
+          <span class="absolute right-[10px] top-1/2 -translate-y-[52%] text-xs text-kintsugi-text-secondary pointer-events-none">▾</span>
         </span>
 
         <input
           id="jobsSearch"
-          class="search-input"
           type="text"
           placeholder="Search jobs by mechanic / owner / plate..."
+          class="min-w-[220px] px-[10px] py-1.5 rounded-full border border-kintsugi-border-strong bg-kintsugi-bg-primary text-kintsugi-text-primary text-base font-sans outline-none transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-kintsugi-accent focus:border-kintsugi-accent focus:shadow-[0_0_0_3px_rgba(79,70,229,0.22)] focus:scale-[1.01]"
         />
 
-        <button id="exportPayoutsBtn" class="btn">
+        <button id="exportPayoutsBtn" class="px-[14px] py-[5px] rounded-full border-none bg-transparent text-kintsugi-text-secondary text-sm font-sans cursor-pointer transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap relative overflow-hidden hover:bg-kintsugi-accent-hover hover:text-kintsugi-text-primary hover:-translate-y-px active:translate-y-0 active:scale-[0.98]">
           Export CSV (current view)
         </button>
 
-        <button id="generateBillBtn" class="btn">
+        <button id="generateBillBtn" class="px-[14px] py-[5px] rounded-full border-none bg-transparent text-kintsugi-text-secondary text-sm font-sans cursor-pointer transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap relative overflow-hidden hover:bg-kintsugi-accent-hover hover:text-kintsugi-text-primary hover:-translate-y-px active:translate-y-0 active:scale-[0.98]">
           Generate Bill (Dept + Month)
         </button>
 
-        <button id="copyPayoutSummaryBtn" class="btn btn-primary">
+        <button id="copyPayoutSummaryBtn" class="px-[14px] py-[5px] rounded-full text-white text-sm font-sans cursor-pointer transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap relative overflow-hidden border border-[rgba(212,175,55,0.3)] shadow-[0_0_12px_rgba(79,70,229,0.8)] btn-gradient hover:-translate-y-0.5 hover:scale-[1.02] hover:shadow-[0_12px_32px_rgba(79,70,229,0.95),0_0_20px_rgba(212,175,55,0.4)] active:-translate-y-px active:scale-100 active:shadow-[0_8px_20px_rgba(79,70,229,0.8)]">
           📋 Copy Payout Summary
         </button>
 
-        <button id="sortWeekBtn" class="btn">
+        <button id="sortWeekBtn" class="px-[14px] py-[5px] rounded-full border-none bg-transparent text-kintsugi-text-secondary text-sm font-sans cursor-pointer transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap relative overflow-hidden hover:bg-kintsugi-accent-hover hover:text-kintsugi-text-primary hover:-translate-y-px active:translate-y-0 active:scale-[0.98]">
           Sort by Week Ending (Newest)
         </button>
 
-        <button id="sortMonthBtn" class="btn">
+        <button id="sortMonthBtn" class="px-[14px] py-[5px] rounded-full border-none bg-transparent text-kintsugi-text-secondary text-sm font-sans cursor-pointer transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap relative overflow-hidden hover:bg-kintsugi-accent-hover hover:text-kintsugi-text-primary hover:-translate-y-px active:translate-y-0 active:scale-[0.98]">
           Sort by Month Ending (Newest)
         </button>
 
-        <div class="seg-tabs">
-          <button class="seg-btn active" data-view="weekly">Weekly (Mechanics)</button>
-          <button class="seg-btn" data-view="monthly">Monthly (Repairs)</button>
-          <button class="seg-btn" data-view="jobs">Jobs</button>
+        <div class="inline-flex p-[3px] rounded-full bg-gradient-to-br from-[rgba(10,16,32,0.98)] to-[rgba(15,23,42,0.95)] border border-[rgba(79,70,229,0.15)] gap-0.5 ml-auto shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
+          <button class="seg-btn active px-[14px] py-1.5 rounded-full text-sm text-white cursor-pointer border-none transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden seg-btn-active" data-view="weekly">Weekly (Mechanics)</button>
+          <button class="seg-btn px-[14px] py-1.5 rounded-full text-sm text-kintsugi-text-secondary cursor-pointer border-none bg-transparent transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden hover:bg-kintsugi-accent-hover hover:text-kintsugi-text-primary" data-view="monthly">Monthly (Repairs)</button>
+          <button class="seg-btn px-[14px] py-1.5 rounded-full text-sm text-kintsugi-text-secondary cursor-pointer border-none bg-transparent transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden hover:bg-kintsugi-accent-hover hover:text-kintsugi-text-primary" data-view="jobs">Jobs</button>
         </div>
       </div>
 
       <!-- Quick presets -->
-      <div class="controls presets-row">
-        <span class="label-soft">Quick filters:</span>
-        <button class="btn quick-btn" data-preset="this-week">This Week</button>
-        <button class="btn quick-btn" data-preset="last-week">Last Week</button>
-        <button class="btn quick-btn" data-preset="this-month">This Month</button>
-        <button class="btn quick-btn" data-preset="last-month">Last Month</button>
+      <div class="flex flex-wrap gap-2 items-center mt-0 mb-1 text-base">
+        <span class="text-kintsugi-text-secondary text-sm">Quick filters:</span>
+        <button class="px-[14px] py-[5px] rounded-full border-none bg-transparent text-kintsugi-text-secondary text-sm font-sans cursor-pointer transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap relative overflow-hidden hover:bg-kintsugi-accent-hover hover:text-kintsugi-text-primary hover:-translate-y-px active:translate-y-0 active:scale-[0.98]" data-preset="this-week">This Week</button>
+        <button class="px-[14px] py-[5px] rounded-full border-none bg-transparent text-kintsugi-text-secondary text-sm font-sans cursor-pointer transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap relative overflow-hidden hover:bg-kintsugi-accent-hover hover:text-kintsugi-text-primary hover:-translate-y-px active:translate-y-0 active:scale-[0.98]" data-preset="last-week">Last Week</button>
+        <button class="px-[14px] py-[5px] rounded-full border-none bg-transparent text-kintsugi-text-secondary text-sm font-sans cursor-pointer transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap relative overflow-hidden hover:bg-kintsugi-accent-hover hover:text-kintsugi-text-primary hover:-translate-y-px active:translate-y-0 active:scale-[0.98]" data-preset="this-month">This Month</button>
+        <button class="px-[14px] py-[5px] rounded-full border-none bg-transparent text-kintsugi-text-secondary text-sm font-sans cursor-pointer transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap relative overflow-hidden hover:bg-kintsugi-accent-hover hover:text-kintsugi-text-primary hover:-translate-y-px active:translate-y-0 active:scale-[0.98]" data-preset="last-month">Last Month</button>
 
-        <button id="toggleAdvancedFilters" class="btn advanced-toggle">
+        <button id="toggleAdvancedFilters" class="px-[14px] py-[5px] rounded-full border-none bg-transparent text-kintsugi-text-secondary text-sm font-sans cursor-pointer transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap relative overflow-hidden ml-auto hover:bg-kintsugi-accent-hover hover:text-kintsugi-text-primary hover:-translate-y-px active:translate-y-0 active:scale-[0.98]">
           Advanced Filters ▾
         </button>
       </div>
@@ -120,123 +235,123 @@
       <div id="activeFilterChips"></div>
 
       <!-- Advanced filters panel -->
-      <div id="advancedFilters" class="advanced-filters hidden">
-        <div class="advanced-field">
-          <label for="ownerFilter">Owner contains</label>
+      <div id="advancedFilters" class="hidden rounded-md border border-kintsugi-border-subtle bg-kintsugi-bg-primary p-2 px-4 mb-2 flex flex-wrap gap-4 items-end">
+        <div class="flex flex-col gap-1">
+          <label for="ownerFilter" class="text-sm text-kintsugi-text-secondary">Owner contains</label>
           <input
             id="ownerFilter"
             type="text"
-            class="advanced-input"
             placeholder="Owner name"
+            class="min-w-[180px] px-[10px] py-1.5 rounded-full border border-kintsugi-border-strong bg-kintsugi-bg-primary text-kintsugi-text-primary text-base font-sans outline-none transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-kintsugi-accent focus:border-kintsugi-accent focus:shadow-[0_0_0_3px_rgba(79,70,229,0.22)] focus:scale-[1.01]"
           />
         </div>
-        <div class="advanced-field">
-          <label for="plateFilter">Plate contains</label>
+        <div class="flex flex-col gap-1">
+          <label for="plateFilter" class="text-sm text-kintsugi-text-secondary">Plate contains</label>
           <input
             id="plateFilter"
             type="text"
-            class="advanced-input"
             placeholder="Plate"
+            class="min-w-[180px] px-[10px] py-1.5 rounded-full border border-kintsugi-border-strong bg-kintsugi-bg-primary text-kintsugi-text-primary text-base font-sans outline-none transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-kintsugi-accent focus:border-kintsugi-accent focus:shadow-[0_0_0_3px_rgba(79,70,229,0.22)] focus:scale-[1.01]"
           />
         </div>
-        <div class="advanced-note">
+        <div class="text-sm text-kintsugi-text-secondary">
           Advanced filters currently apply to the <strong>Jobs</strong> view.
         </div>
       </div>
 
-      <div id="weeklySummary" class="status"></div>
+      <div id="weeklySummary" class="text-xs text-kintsugi-text-secondary mt-1 text-center"></div>
 
       <!-- Mechanic summary -->
-      <div id="mechanicSummary" class="mech-summary hidden">
-        <div class="mech-summary-header">
-          <div class="mech-summary-title">
+      <div id="mechanicSummary" class="hidden mt-4 p-4 rounded-md border border-kintsugi-border-subtle bg-gradient-to-br from-[rgba(15,23,42,0.95)] to-[rgba(15,23,42,0.7)] shadow-kintsugi-soft">
+        <div class="flex items-center justify-between mb-2 gap-2">
+          <div class="text-base text-kintsugi-text-secondary">
             Mechanic summary:
-            <span id="mechSummaryName" class="mech-summary-name"></span>
+            <span id="mechSummaryName" class="font-semibold text-kintsugi-text-primary ml-1"></span>
           </div>
-          <div class="mech-summary-actions">
-            <button id="mechSummaryBankBtn" class="link-btn">View bank records</button>
-            <button id="mechSummaryClearBtn" class="link-btn">Clear</button>
+          <div class="flex gap-2 items-center">
+            <button id="mechSummaryBankBtn" class="border-none bg-none p-0 m-0 text-base text-kintsugi-accent-secondary cursor-pointer transition-all duration-[150ms] hover:underline hover:decoration-2">View bank records</button>
+            <button id="mechSummaryClearBtn" class="border-none bg-none p-0 m-0 text-base text-kintsugi-accent-secondary cursor-pointer transition-all duration-[150ms] hover:underline hover:decoration-2">Clear</button>
           </div>
         </div>
 
-        <div class="mech-summary-grid">
-          <div class="mech-summary-item">
-            <div class="label-soft">Repairs (Total Across)</div>
-            <div id="mechSummaryTotalRepairs" class="mech-summary-value">–</div>
+        <div class="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-2 gap-x-4">
+          <div>
+            <div class="text-xs text-kintsugi-text-secondary uppercase tracking-[0.04em]">Repairs (Total Across)</div>
+            <div id="mechSummaryTotalRepairs" class="text-md font-medium mt-0.5 text-kintsugi-text-primary">–</div>
           </div>
 
-          <div class="mech-summary-item">
-            <div class="label-soft">Weeks Worked</div>
-            <div id="mechSummaryWeeksWorked" class="mech-summary-value">–</div>
+          <div>
+            <div class="text-xs text-kintsugi-text-secondary uppercase tracking-[0.04em]">Weeks Worked</div>
+            <div id="mechSummaryWeeksWorked" class="text-md font-medium mt-0.5 text-kintsugi-text-primary">–</div>
           </div>
 
-          <div class="mech-summary-item">
-            <div class="label-soft">Avg Repairs / Week</div>
-            <div id="mechSummaryAvgPerWeek" class="mech-summary-value">–</div>
+          <div>
+            <div class="text-xs text-kintsugi-text-secondary uppercase tracking-[0.04em]">Avg Repairs / Week</div>
+            <div id="mechSummaryAvgPerWeek" class="text-md font-medium mt-0.5 text-kintsugi-text-primary">–</div>
           </div>
 
-          <div class="mech-summary-item">
-            <div class="label-soft">Total Payout @ $700</div>
-            <div id="mechSummaryTotalPayout" class="mech-summary-value">–</div>
+          <div>
+            <div class="text-xs text-kintsugi-text-secondary uppercase tracking-[0.04em]">Total Payout @ $700</div>
+            <div id="mechSummaryTotalPayout" class="text-md font-medium mt-0.5 text-kintsugi-text-primary">–</div>
           </div>
 
-          <div class="mech-summary-item">
-            <div class="label-soft">Last Job Date</div>
-            <div id="mechSummaryLastJob" class="mech-summary-value">–</div>
+          <div>
+            <div class="text-xs text-kintsugi-text-secondary uppercase tracking-[0.04em]">Last Job Date</div>
+            <div id="mechSummaryLastJob" class="text-md font-medium mt-0.5 text-kintsugi-text-primary">–</div>
           </div>
         </div>
       </div>
 
-      <div id="status" class="status"></div>
+      <div id="status" class="text-xs text-kintsugi-text-secondary mt-1 text-center"></div>
 
       <!-- Weekly -->
-      <div id="weeklyWrap" class="table-wrap">
-        <table>
+      <div id="weeklyWrap" class="mt-4 rounded-md border border-kintsugi-border-subtle bg-kintsugi-bg-primary shadow-[0_12px_40px_rgba(0,0,0,0.6)] overflow-auto max-h-[calc(100vh-140px)] w-full">
+        <table class="w-full table-fixed text-md">
           <thead>
             <tr>
-              <th>Mechanic</th>
-              <th>Week Ending</th>
-              <th>Repairs (Total Across)</th>
-              <th>Pay ($700/repair)</th>
-              <th>Actions</th>
+              <th class="p-3 border-b border-[#0f172a] whitespace-nowrap overflow-hidden text-ellipsis text-left align-middle h-11 bg-gradient-to-r from-[#020617] to-[#020817] text-sm uppercase tracking-[0.16em] text-kintsugi-text-secondary font-semibold w-1/4 pl-4">Mechanic</th>
+              <th class="p-3 border-b border-[#0f172a] whitespace-nowrap overflow-hidden text-ellipsis text-center align-middle h-11 bg-gradient-to-r from-[#020617] to-[#020817] text-sm uppercase tracking-[0.16em] text-kintsugi-text-secondary font-semibold w-[18%]">Week Ending</th>
+              <th class="p-3 border-b border-[#0f172a] whitespace-nowrap overflow-hidden text-ellipsis text-center align-middle h-11 bg-gradient-to-r from-[#020617] to-[#020817] text-sm uppercase tracking-[0.16em] text-kintsugi-text-secondary font-semibold w-[17%]">Repairs (Total Across)</th>
+              <th class="p-3 border-b border-[#0f172a] whitespace-nowrap overflow-hidden text-ellipsis text-right align-middle h-11 bg-gradient-to-r from-[#020617] to-[#020817] text-sm uppercase tracking-[0.16em] text-kintsugi-text-secondary font-semibold w-1/4 pr-4">Pay ($700/repair)</th>
+              <th class="p-3 border-b border-[#0f172a] whitespace-nowrap overflow-hidden text-ellipsis text-center align-middle h-11 bg-gradient-to-r from-[#020617] to-[#020817] text-sm uppercase tracking-[0.16em] text-kintsugi-text-secondary font-semibold w-[15%] pr-4">Actions</th>
             </tr>
           </thead>
-          <tbody id="weeklyBody"></tbody>
+          <tbody id="weeklyBody" class="[&>tr]:transition-all [&>tr]:duration-200 [&>tr]:ease-[cubic-bezier(0.4,0,0.2,1)] [&>tr]:relative [&>tr:nth-child(even)]:bg-kintsugi-bg-tertiary [&>tr:hover]:bg-[rgba(79,70,229,0.18)] [&>tr:hover]:scale-[1.01] [&>tr:hover]:shadow-[0_2px_8px_rgba(79,70,229,0.3)] [&>tr:active]:scale-[0.99] [&>tr>td]:p-3 [&>tr>td]:border-b [&>tr>td]:border-[#0f172a] [&>tr>td]:whitespace-nowrap [&>tr>td]:overflow-hidden [&>tr>td]:text-ellipsis [&>tr>td]:text-center [&>tr>td]:align-middle [&>tr>td]:h-11"></tbody>
         </table>
       </div>
 
       <!-- Monthly -->
-      <div id="monthlyWrap" class="table-wrap hidden">
-        <table>
+      <div id="monthlyWrap" class="hidden mt-4 rounded-md border border-kintsugi-border-subtle bg-kintsugi-bg-primary shadow-[0_12px_40px_rgba(0,0,0,0.6)] overflow-auto max-h-[calc(100vh-140px)] w-full">
+        <table class="w-full table-fixed text-md">
           <thead>
             <tr>
-              <th>Month Ending</th>
-              <th>Repairs (Total Across)</th>
-              <th>Engine Replacements</th>
-              <th id="monthlyTotalHeader">Total Repair Value ($2,500/repair)</th>
+              <th class="p-3 border-b border-[#0f172a] whitespace-nowrap overflow-hidden text-ellipsis text-center align-middle h-11 bg-gradient-to-r from-[#020617] to-[#020817] text-sm uppercase tracking-[0.16em] text-kintsugi-text-secondary font-semibold">Month Ending</th>
+              <th class="p-3 border-b border-[#0f172a] whitespace-nowrap overflow-hidden text-ellipsis text-center align-middle h-11 bg-gradient-to-r from-[#020617] to-[#020817] text-sm uppercase tracking-[0.16em] text-kintsugi-text-secondary font-semibold">Repairs (Total Across)</th>
+              <th class="p-3 border-b border-[#0f172a] whitespace-nowrap overflow-hidden text-ellipsis text-center align-middle h-11 bg-gradient-to-r from-[#020617] to-[#020817] text-sm uppercase tracking-[0.16em] text-kintsugi-text-secondary font-semibold">Engine Replacements</th>
+              <th id="monthlyTotalHeader" class="p-3 border-b border-[#0f172a] whitespace-nowrap overflow-hidden text-ellipsis text-center align-middle h-11 bg-gradient-to-r from-[#020617] to-[#020817] text-sm uppercase tracking-[0.16em] text-kintsugi-text-secondary font-semibold">Total Repair Value ($2,500/repair)</th>
             </tr>
           </thead>
-          <tbody id="monthlyBody"></tbody>
+          <tbody id="monthlyBody" class="[&>tr]:transition-all [&>tr]:duration-200 [&>tr]:ease-[cubic-bezier(0.4,0,0.2,1)] [&>tr]:relative [&>tr:nth-child(even)]:bg-kintsugi-bg-tertiary [&>tr:hover]:bg-[rgba(79,70,229,0.18)] [&>tr:hover]:scale-[1.01] [&>tr:hover]:shadow-[0_2px_8px_rgba(79,70,229,0.3)] [&>tr:active]:scale-[0.99] [&>tr>td]:p-3 [&>tr>td]:border-b [&>tr>td]:border-[#0f172a] [&>tr>td]:whitespace-nowrap [&>tr>td]:overflow-hidden [&>tr>td]:text-ellipsis [&>tr>td]:text-center [&>tr>td]:align-middle [&>tr>td]:h-11"></tbody>
         </table>
       </div>
 
       <!-- Jobs -->
-      <div id="jobsWrap" class="table-wrap hidden">
-        <table>
+      <div id="jobsWrap" class="hidden mt-4 rounded-md border border-kintsugi-border-subtle bg-kintsugi-bg-primary shadow-[0_12px_40px_rgba(0,0,0,0.6)] overflow-auto max-h-[calc(100vh-140px)] w-full">
+        <table class="w-full table-fixed text-md">
           <thead>
             <tr>
-              <th>Timestamp</th>
-              <th>Mechanic</th>
-              <th>Owner</th>
-              <th>Plate</th>
-              <th>Repairs (Across)</th>
-              <th>Engine Replacements</th>
-              <th>Week Ending</th>
-              <th>Month Ending</th>
-              <th>Total Value</th>
+              <th class="p-3 border-b border-[#0f172a] whitespace-nowrap overflow-hidden text-ellipsis text-center align-middle h-11 bg-gradient-to-r from-[#020617] to-[#020817] text-sm uppercase tracking-[0.16em] text-kintsugi-text-secondary font-semibold">Timestamp</th>
+              <th class="p-3 border-b border-[#0f172a] whitespace-nowrap overflow-hidden text-ellipsis text-center align-middle h-11 bg-gradient-to-r from-[#020617] to-[#020817] text-sm uppercase tracking-[0.16em] text-kintsugi-text-secondary font-semibold">Mechanic</th>
+              <th class="p-3 border-b border-[#0f172a] whitespace-nowrap overflow-hidden text-ellipsis text-center align-middle h-11 bg-gradient-to-r from-[#020617] to-[#020817] text-sm uppercase tracking-[0.16em] text-kintsugi-text-secondary font-semibold">Owner</th>
+              <th class="p-3 border-b border-[#0f172a] whitespace-nowrap overflow-hidden text-ellipsis text-center align-middle h-11 bg-gradient-to-r from-[#020617] to-[#020817] text-sm uppercase tracking-[0.16em] text-kintsugi-text-secondary font-semibold">Plate</th>
+              <th class="p-3 border-b border-[#0f172a] whitespace-nowrap overflow-hidden text-ellipsis text-center align-middle h-11 bg-gradient-to-r from-[#020617] to-[#020817] text-sm uppercase tracking-[0.16em] text-kintsugi-text-secondary font-semibold">Repairs (Across)</th>
+              <th class="p-3 border-b border-[#0f172a] whitespace-nowrap overflow-hidden text-ellipsis text-center align-middle h-11 bg-gradient-to-r from-[#020617] to-[#020817] text-sm uppercase tracking-[0.16em] text-kintsugi-text-secondary font-semibold">Engine Replacements</th>
+              <th class="p-3 border-b border-[#0f172a] whitespace-nowrap overflow-hidden text-ellipsis text-center align-middle h-11 bg-gradient-to-r from-[#020617] to-[#020817] text-sm uppercase tracking-[0.16em] text-kintsugi-text-secondary font-semibold">Week Ending</th>
+              <th class="p-3 border-b border-[#0f172a] whitespace-nowrap overflow-hidden text-ellipsis text-center align-middle h-11 bg-gradient-to-r from-[#020617] to-[#020817] text-sm uppercase tracking-[0.16em] text-kintsugi-text-secondary font-semibold">Month Ending</th>
+              <th class="p-3 border-b border-[#0f172a] whitespace-nowrap overflow-hidden text-ellipsis text-center align-middle h-11 bg-gradient-to-r from-[#020617] to-[#020817] text-sm uppercase tracking-[0.16em] text-kintsugi-text-secondary font-semibold">Total Value</th>
             </tr>
           </thead>
-          <tbody id="jobsBody"></tbody>
+          <tbody id="jobsBody" class="[&>tr]:transition-all [&>tr]:duration-200 [&>tr]:ease-[cubic-bezier(0.4,0,0.2,1)] [&>tr]:relative [&>tr:nth-child(even)]:bg-kintsugi-bg-tertiary [&>tr:hover]:bg-[rgba(79,70,229,0.18)] [&>tr:hover]:scale-[1.01] [&>tr:hover]:shadow-[0_2px_8px_rgba(79,70,229,0.3)] [&>tr:active]:scale-[0.99] [&>tr>td]:p-3 [&>tr>td]:border-b [&>tr>td]:border-[#0f172a] [&>tr>td]:whitespace-nowrap [&>tr>td]:overflow-hidden [&>tr>td]:text-ellipsis [&>tr>td]:text-center [&>tr>td]:align-middle [&>tr>td]:h-11"></tbody>
         </table>
       </div>
     </main>
