@@ -1,6 +1,10 @@
 // =======================================
 // Kintsugi Audit View Component
 // Payout audit and data validation display
+//
+// Dependencies (must be loaded before this file):
+// - payout-helpers.js (kAuditPayouts, kFormatCurrency, kFormatDateTime)
+// - ui-enhancements.js (kShowToast)
 // =======================================
 
 class PayoutAuditView {

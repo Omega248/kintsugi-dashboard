@@ -1,6 +1,9 @@
 // =======================================
 // Kintsugi Filter Chips Component
 // Visual filter management with quick remove
+//
+// Dependencies (must be loaded before this file):
+// - utils.js (kGetDateRange, kGet)
 // =======================================
 
 class FilterChipsManager {

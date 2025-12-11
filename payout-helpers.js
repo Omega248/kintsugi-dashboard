@@ -1,6 +1,10 @@
 // =======================================
 // Kintsugi Payout Helpers
 // Specialized utilities for payout summary generation and audit
+// 
+// Dependencies (must be loaded before this file):
+// - utils.js (kGet, kStorageSet, kStorageGet, kIsValidDate, kSortBy)
+// - constants.js (PAYMENT_RATES)
 // =======================================
 
 /**
