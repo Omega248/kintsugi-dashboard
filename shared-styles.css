@@ -100,7 +100,7 @@
 
 body {
   margin: 0;
-  padding: 14px 18px 18px;
+  padding: 18px 18px 18px;
   font-family: var(--font-family);
   color: var(--text-primary);
   background-color: #000;
@@ -160,18 +160,18 @@ p {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-md);
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
 .brand-title {
-  font-size: var(--font-size-3xl);
+  font-size: 39px;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-align: center;
   color: var(--text-primary);
   position: relative;
-  padding-bottom: 8px;
+  padding-bottom: 4px;
   background: linear-gradient(135deg, var(--text-primary) 0%, var(--gold-primary) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -184,15 +184,15 @@ p {
   bottom: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 80px;
+  width: 90px;
   height: 2px;
   background: linear-gradient(90deg, transparent, var(--gold-primary), transparent);
-  box-shadow: 0 0 8px var(--gold-glow);
+  box-shadow: 0 0 10px var(--gold-glow);
 }
 
 .brand-sub {
-  margin-top: 2px;
-  font-size: var(--font-size-base);
+  margin-top: 6px;
+  font-size: var(--font-size-md);
   text-transform: uppercase;
   letter-spacing: 0.22em;
   color: var(--text-secondary);
@@ -205,22 +205,33 @@ p {
   display: inline-flex;
   padding: var(--space-xs);
   border-radius: var(--radius-full);
-  background: rgba(10, 16, 32, 0.98);
-  border: 1px solid var(--border-subtle);
+  background: linear-gradient(135deg, rgba(10, 16, 32, 0.98), rgba(15, 23, 42, 0.95));
+  border: 1px solid rgba(79, 70, 229, 0.15);
   gap: var(--space-xs);
-  box-shadow: var(--shadow-soft);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7), 0 0 1px rgba(79, 70, 229, 0.5);
+  backdrop-filter: blur(8px);
 }
 
 .nav-pill {
-  padding: 7px 20px;
+  padding: 8px 22px;
   border-radius: var(--radius-full);
   font-size: var(--font-size-base);
   color: var(--text-secondary);
   text-decoration: none;
   border: 1px solid transparent;
-  transition: all var(--duration-fast) var(--ease-smooth);
+  transition: all 0.18s var(--ease-smooth);
   cursor: pointer;
   position: relative;
+  overflow: hidden;
+}
+
+.nav-pill::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, var(--accent-hover), transparent);
+  opacity: 0;
+  transition: opacity 0.18s var(--ease-smooth);
 }
 
 .nav-pill::after {
@@ -232,7 +243,7 @@ p {
   width: 0;
   height: 2px;
   background: var(--accent-primary);
-  transition: width var(--duration-fast) var(--ease-smooth);
+  transition: width 0.18s var(--ease-smooth);
 }
 
 .nav-pill:hover {
@@ -242,6 +253,10 @@ p {
   transform: translateY(-1px);
 }
 
+.nav-pill:hover::before {
+  opacity: 1;
+}
+
 .nav-pill:hover::after {
   width: 80%;
 }
@@ -249,7 +264,8 @@ p {
 .nav-pill.active {
   background: radial-gradient(circle at top left, var(--accent-secondary), var(--accent-primary));
   color: var(--text-inverse);
-  box-shadow: var(--shadow-glow);
+  box-shadow: 0 0 16px rgba(79, 70, 229, 0.9), 0 0 4px rgba(212, 175, 55, 0.3);
+  border-color: rgba(212, 175, 55, 0.2);
 }
 
 .nav-pill.active::after {
@@ -440,13 +456,14 @@ input:focus::placeholder {
 /* ===== Tables ===== */
 
 .table-wrap {
-  margin-top: var(--space-xs);
+  margin-top: var(--space-md);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
   background: var(--bg-primary);
-  box-shadow: var(--shadow-soft);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
   overflow: auto;
   max-height: calc(100vh - 140px);
+  width: 100%;
 }
 
 .table-wrap.hidden {
@@ -462,13 +479,15 @@ table {
 
 th,
 td {
-  padding: 6px 10px;
+  padding: 10px 12px;
   border-bottom: 1px solid #0f172a;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: center;
   vertical-align: middle;
+  min-height: 44px;
+  height: 44px;
 }
 
 th {
@@ -481,6 +500,8 @@ th {
   letter-spacing: 0.16em;
   color: var(--text-secondary);
   font-weight: 600;
+  text-align: center;
+  vertical-align: middle;
 }
 
 /* Sortable table headers */
