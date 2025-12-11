@@ -4,8 +4,192 @@
   <meta charset="UTF-8" />
   <title>Kintsugi Motorworks · Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="shared-styles.css" />
-  <link rel="stylesheet" href="dashboard-style.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            // Background colors
+            'kintsugi-bg-primary': '#020817',
+            'kintsugi-bg-secondary': '#050816',
+            'kintsugi-bg-tertiary': '#030712',
+            'kintsugi-bg-elevated': 'rgba(10, 14, 28, 0.92)',
+            // Border colors
+            'kintsugi-border-subtle': '#111827',
+            'kintsugi-border-default': '#1f2937',
+            'kintsugi-border-strong': '#374151',
+            // Text colors
+            'kintsugi-text-primary': '#e5e7eb',
+            'kintsugi-text-secondary': '#9ca3af',
+            'kintsugi-text-tertiary': '#6b7280',
+            // Accent colors
+            'kintsugi-accent': '#4f46e5',
+            'kintsugi-accent-secondary': '#6366f1',
+            'kintsugi-accent-soft': 'rgba(79, 70, 229, 0.22)',
+            'kintsugi-accent-hover': 'rgba(148, 163, 253, 0.12)',
+            // Gold accents
+            'kintsugi-gold': '#d4af37',
+            'kintsugi-gold-secondary': '#f4c430',
+            'kintsugi-gold-soft': 'rgba(212, 175, 55, 0.15)',
+            'kintsugi-gold-glow': 'rgba(212, 175, 55, 0.4)',
+          },
+          fontFamily: {
+            'sans': ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+          },
+          fontSize: {
+            'xs': '9px',
+            'sm': '10px',
+            'base': '11px',
+            'md': '13px',
+            'lg': '14px',
+            'xl': '18px',
+            '2xl': '24px',
+            '3xl': '34px',
+            '4xl': '39px',
+          },
+          borderRadius: {
+            'sm': '8px',
+            'md': '12px',
+            'lg': '18px',
+            'xl': '22px',
+          },
+          boxShadow: {
+            'kintsugi-soft': '0 24px 70px rgba(0, 0, 0, 0.9)',
+            'kintsugi-elevated': '0 20px 60px rgba(0, 0, 0, 0.65)',
+            'kintsugi-glow': '0 0 18px rgba(79, 70, 229, 0.9)',
+            'kintsugi-glow-strong': '0 8px 20px rgba(79, 70, 229, 0.7)',
+            'kintsugi-card': '0 20px 60px rgba(0, 0, 0, 0.75)',
+            'kintsugi-card-hover': '0 28px 80px rgba(0, 0, 0, 0.95)',
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    /* Custom gradient backgrounds and effects that can't be done with Tailwind utilities */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: -40vh -40vw;
+      z-index: -1;
+      pointer-events: none;
+      background: radial-gradient(circle at top, #111827 0%, #020817 35%, #000 75%);
+      opacity: 1;
+    }
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+      opacity: 0.03;
+      mix-blend-mode: overlay;
+    }
+    .brand-title-gradient {
+      background: linear-gradient(135deg, #e5e7eb 0%, #d4af37 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .brand-title-line::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 90px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #d4af37, transparent);
+      box-shadow: 0 0 10px rgba(212, 175, 55, 0.4);
+    }
+    /* Card gradient overlays */
+    .stat-box-overlay::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at top left, rgba(148, 163, 253, 0.15), transparent);
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+    .stat-box-overlay:hover::before {
+      opacity: 1;
+    }
+    .stat-box-overlay::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at bottom right, rgba(212, 175, 55, 0.05), transparent);
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+    .stat-box-overlay:hover::after {
+      opacity: 1;
+    }
+    /* Nav pill active gradient */
+    .nav-pill-active {
+      background: radial-gradient(circle at top left, #6366f1, #4f46e5);
+      box-shadow: 0 0 16px rgba(79, 70, 229, 0.9), 0 0 4px rgba(212, 175, 55, 0.3);
+    }
+    /* Button gradient for primary buttons */
+    .btn-gradient {
+      background: radial-gradient(circle at top left, #6366f1, #4f46e5);
+    }
+    .btn-gradient::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, transparent, rgba(212, 175, 55, 0.3), transparent);
+      transform: translateX(-100%) skewX(-15deg);
+      transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .btn-gradient:hover::before {
+      transform: translateX(200%) skewX(-15deg);
+    }
+    /* Card background gradients */
+    .stat-card-bg {
+      background: radial-gradient(circle at top left, rgba(148, 163, 253, 0.10), transparent), rgba(6, 11, 25, 0.98);
+    }
+    .cta-card-bg {
+      background: rgba(5, 9, 20, 0.98);
+    }
+    /* Staggered animation for stat cards */
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    .animate-fade-in-up {
+      animation: fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+    }
+    .delay-50 { animation-delay: 0.05s; }
+    .delay-100 { animation-delay: 0.1s; }
+    .delay-150 { animation-delay: 0.15s; }
+    .delay-200 { animation-delay: 0.2s; }
+    .delay-250 { animation-delay: 0.25s; }
+    .delay-300 { animation-delay: 0.3s; }
+    .delay-350 { animation-delay: 0.35s; }
+    .delay-400 { animation-delay: 0.4s; }
+    .delay-450 { animation-delay: 0.45s; }
+    
+    /* Responsive adjustments */
+    @media (max-width: 767px) {
+      body {
+        padding: 10px;
+      }
+      .stat-card-bg {
+        padding: 8px;
+      }
+    }
+  </style>
   <script src="constants.js"></script>
   <script src="utils.js"></script>
   <script src="payout-helpers.js"></script>
@@ -14,96 +198,99 @@
   <script src="ui-enhancements.js"></script>
   <script src="kintsugi-core.js"></script>
 </head>
-<body>
-  <div class="app">
+<body class="m-0 p-[18px] font-sans text-kintsugi-text-primary bg-black overflow-x-hidden leading-normal">
+  <div class="max-w-[1600px] mx-auto">
     <!-- Top Navigation -->
-    <header class="top-bar">
+    <header class="flex flex-col items-center justify-start gap-3 mb-5">
       <div>
-        <div class="brand-title">Kintsugi Motorworks</div>
-        <div class="brand-sub">Performance &amp; payouts overview</div>
+        <div class="text-4xl font-bold tracking-wide text-center relative pb-1 brand-title-gradient brand-title-line">
+          Kintsugi Motorworks
+        </div>
+        <div class="mt-1.5 text-md uppercase tracking-[0.22em] text-kintsugi-text-secondary text-center">
+          Performance &amp; payouts overview
+        </div>
       </div>
-      <nav class="nav-tabs">
-        <a href="index.html" class="nav-pill active">Dashboard</a>
-        <a href="Payouts/payouts-index.html" class="nav-pill">Payouts</a>
-        <a href="Mechanics/mechanics-index.html" class="nav-pill">Mechanics</a>
-        <a href="Bank_Record/bank-index.html" class="nav-pill">Bank</a>
+      <nav class="inline-flex p-1 rounded-full bg-gradient-to-br from-[rgba(10,16,32,0.98)] to-[rgba(15,23,42,0.95)] border border-[rgba(79,70,229,0.15)] gap-1 shadow-[0_8px_24px_rgba(0,0,0,0.7),0_0_1px_rgba(79,70,229,0.5)] backdrop-blur-sm">
+        <a href="index.html" class="px-[22px] py-2 rounded-full text-base text-white border border-[rgba(212,175,55,0.2)] transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] cursor-pointer relative overflow-hidden nav-pill-active">Dashboard</a>
+        <a href="Payouts/payouts-index.html" class="px-[22px] py-2 rounded-full text-base text-kintsugi-text-secondary border border-transparent transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] cursor-pointer relative overflow-hidden hover:text-kintsugi-text-primary hover:bg-kintsugi-accent-hover hover:border-[rgba(79,70,229,0.35)] hover:-translate-y-px">Payouts</a>
+        <a href="Mechanics/mechanics-index.html" class="px-[22px] py-2 rounded-full text-base text-kintsugi-text-secondary border border-transparent transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] cursor-pointer relative overflow-hidden hover:text-kintsugi-text-primary hover:bg-kintsugi-accent-hover hover:border-[rgba(79,70,229,0.35)] hover:-translate-y-px">Mechanics</a>
+        <a href="Bank_Record/bank-index.html" class="px-[22px] py-2 rounded-full text-base text-kintsugi-text-secondary border border-transparent transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] cursor-pointer relative overflow-hidden hover:text-kintsugi-text-primary hover:bg-kintsugi-accent-hover hover:border-[rgba(79,70,229,0.35)] hover:-translate-y-px">Bank</a>
       </nav>
     </header>
 
     <!-- Stat cards -->
-    <section class="stat-boxes">
-      <div class="stat-box">
-        <h3 id="title-totalRepairs">All-Time Repairs</h3>
-        <p id="totalRepairs">–</p>
-        <p class="sub" id="tileSub-totalRepairs"></p>
+    <section class="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-5 mb-6 mt-4 max-w-full">
+      <div class="p-[18px] rounded-lg border border-kintsugi-border-default shadow-kintsugi-card flex flex-col items-start gap-1 transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden stat-card-bg stat-box-overlay hover:-translate-y-[3px] hover:shadow-[0_28px_80px_rgba(0,0,0,0.95),0_0_32px_rgba(79,70,229,0.4)] hover:border-kintsugi-accent hover:brightness-[1.02] animate-fade-in-up delay-50">
+        <h3 id="title-totalRepairs" class="m-0 text-sm uppercase tracking-[0.18em] text-kintsugi-text-secondary font-semibold flex items-center gap-1">All-Time Repairs</h3>
+        <p id="totalRepairs" class="m-0 text-2xl font-semibold text-kintsugi-text-primary leading-tight transition-colors duration-200">–</p>
+        <p class="m-0 text-sm text-kintsugi-text-secondary flex items-center gap-1" id="tileSub-totalRepairs"></p>
       </div>
 
-      <div class="stat-box">
-        <h3 id="title-totalPayout">All-Time Mechanic Payout @ $700/Repair</h3>
-        <p id="totalPayout">–</p>
-        <p class="sub" id="tileSub-totalPayout"></p>
+      <div class="p-[18px] rounded-lg border border-kintsugi-border-default shadow-kintsugi-card flex flex-col items-start gap-1 transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden stat-card-bg stat-box-overlay hover:-translate-y-[3px] hover:shadow-[0_28px_80px_rgba(0,0,0,0.95),0_0_32px_rgba(79,70,229,0.4)] hover:border-kintsugi-accent hover:brightness-[1.02] animate-fade-in-up delay-100">
+        <h3 id="title-totalPayout" class="m-0 text-sm uppercase tracking-[0.18em] text-kintsugi-text-secondary font-semibold flex items-center gap-1">All-Time Mechanic Payout @ $700/Repair</h3>
+        <p id="totalPayout" class="m-0 text-2xl font-semibold text-kintsugi-text-primary leading-tight transition-colors duration-200">–</p>
+        <p class="m-0 text-sm text-kintsugi-text-secondary flex items-center gap-1" id="tileSub-totalPayout"></p>
       </div>
 
-      <div class="stat-box">
-        <h3 id="title-latestWeek">Latest Week Ending</h3>
-        <p id="latestWeek">–</p>
-        <p class="sub" id="tileSub-latestWeek"></p>
+      <div class="p-[18px] rounded-lg border border-kintsugi-border-default shadow-kintsugi-card flex flex-col items-start gap-1 transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden stat-card-bg stat-box-overlay hover:-translate-y-[3px] hover:shadow-[0_28px_80px_rgba(0,0,0,0.95),0_0_32px_rgba(79,70,229,0.4)] hover:border-kintsugi-accent hover:brightness-[1.02] animate-fade-in-up delay-150">
+        <h3 id="title-latestWeek" class="m-0 text-sm uppercase tracking-[0.18em] text-kintsugi-text-secondary font-semibold flex items-center gap-1">Latest Week Ending</h3>
+        <p id="latestWeek" class="m-0 text-2xl font-semibold text-kintsugi-text-primary leading-tight transition-colors duration-200">–</p>
+        <p class="m-0 text-sm text-kintsugi-text-secondary flex items-center gap-1" id="tileSub-latestWeek"></p>
       </div>
 
-
-<div class="stat-box">
-  <h3 id="title-activeMechanics">Active Mechanics</h3>
-  <p id="activeMechanics">–</p>
-  <p class="sub" id="tileSub-activeMechanics"></p>
-</div>
-
-<div class="stat-box">
-  <h3 id="title-weekStats">This Week</h3>
-  <p id="repairsThisWeek">–</p>
-  <p class="sub" id="payoutThisWeek">Payout: –</p>
-</div>
-
-<div class="stat-box">
-  <h3 id="title-monthStats">This Month</h3>
-  <p id="repairsThisMonth">–</p>
-  <p class="sub" id="payoutThisMonth">Payout: –</p>
-</div>
-
-<div class="stat-box">
-  <h3 id="title-topMechWeek">Top mechanic this week</h3>
-  <p id="topMechWeekName">–</p>
-  <p class="sub" id="topMechWeekStats">–</p>
-</div>
-
-<div class="stat-box">
-  <h3 id="title-betRemaining">BET Remaining</h3>
-        <p id="manualBetLeft">–</p>
-        <p class="sub" id="tileSub-manualBetLeft"></p>
+      <div class="p-[18px] rounded-lg border border-kintsugi-border-default shadow-kintsugi-card flex flex-col items-start gap-1 transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden stat-card-bg stat-box-overlay hover:-translate-y-[3px] hover:shadow-[0_28px_80px_rgba(0,0,0,0.95),0_0_32px_rgba(79,70,229,0.4)] hover:border-kintsugi-accent hover:brightness-[1.02] animate-fade-in-up delay-200">
+        <h3 id="title-activeMechanics" class="m-0 text-sm uppercase tracking-[0.18em] text-kintsugi-text-secondary font-semibold flex items-center gap-1">Active Mechanics</h3>
+        <p id="activeMechanics" class="m-0 text-2xl font-semibold text-kintsugi-text-primary leading-tight transition-colors duration-200">–</p>
+        <p class="m-0 text-sm text-kintsugi-text-secondary flex items-center gap-1" id="tileSub-activeMechanics"></p>
       </div>
 
-      <div class="stat-box">
-        <h3 id="title-redBins">Red Bins Remaining</h3>
-        <p id="manualRedBins">–</p>
-        <p class="sub" id="tileSub-manualRedBins"></p>
+      <div class="p-[18px] rounded-lg border border-kintsugi-border-default shadow-kintsugi-card flex flex-col items-start gap-1 transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden stat-card-bg stat-box-overlay hover:-translate-y-[3px] hover:shadow-[0_28px_80px_rgba(0,0,0,0.95),0_0_32px_rgba(79,70,229,0.4)] hover:border-kintsugi-accent hover:brightness-[1.02] animate-fade-in-up delay-250">
+        <h3 id="title-weekStats" class="m-0 text-sm uppercase tracking-[0.18em] text-kintsugi-text-secondary font-semibold flex items-center gap-1">This Week</h3>
+        <p id="repairsThisWeek" class="m-0 text-2xl font-semibold text-kintsugi-text-primary leading-tight transition-colors duration-200">–</p>
+        <p class="m-0 text-sm text-kintsugi-text-secondary flex items-center gap-1" id="payoutThisWeek">Payout: –</p>
+      </div>
+
+      <div class="p-[18px] rounded-lg border border-kintsugi-border-default shadow-kintsugi-card flex flex-col items-start gap-1 transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden stat-card-bg stat-box-overlay hover:-translate-y-[3px] hover:shadow-[0_28px_80px_rgba(0,0,0,0.95),0_0_32px_rgba(79,70,229,0.4)] hover:border-kintsugi-accent hover:brightness-[1.02] animate-fade-in-up delay-300">
+        <h3 id="title-monthStats" class="m-0 text-sm uppercase tracking-[0.18em] text-kintsugi-text-secondary font-semibold flex items-center gap-1">This Month</h3>
+        <p id="repairsThisMonth" class="m-0 text-2xl font-semibold text-kintsugi-text-primary leading-tight transition-colors duration-200">–</p>
+        <p class="m-0 text-sm text-kintsugi-text-secondary flex items-center gap-1" id="payoutThisMonth">Payout: –</p>
+      </div>
+
+      <div class="p-[18px] rounded-lg border border-kintsugi-border-default shadow-kintsugi-card flex flex-col items-start gap-1 transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden stat-card-bg stat-box-overlay hover:-translate-y-[3px] hover:shadow-[0_28px_80px_rgba(0,0,0,0.95),0_0_32px_rgba(79,70,229,0.4)] hover:border-kintsugi-accent hover:brightness-[1.02] animate-fade-in-up delay-350">
+        <h3 id="title-topMechWeek" class="m-0 text-sm uppercase tracking-[0.18em] text-kintsugi-text-secondary font-semibold flex items-center gap-1">Top mechanic this week</h3>
+        <p id="topMechWeekName" class="m-0 text-2xl font-semibold text-kintsugi-text-primary leading-tight transition-colors duration-200">–</p>
+        <p class="m-0 text-sm text-kintsugi-text-secondary flex items-center gap-1" id="topMechWeekStats">–</p>
+      </div>
+
+      <div class="p-[18px] rounded-lg border border-kintsugi-border-default shadow-kintsugi-card flex flex-col items-start gap-1 transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden stat-card-bg stat-box-overlay hover:-translate-y-[3px] hover:shadow-[0_28px_80px_rgba(0,0,0,0.95),0_0_32px_rgba(79,70,229,0.4)] hover:border-kintsugi-accent hover:brightness-[1.02] animate-fade-in-up delay-400">
+        <h3 id="title-betRemaining" class="m-0 text-sm uppercase tracking-[0.18em] text-kintsugi-text-secondary font-semibold flex items-center gap-1">BET Remaining</h3>
+        <p id="manualBetLeft" class="m-0 text-2xl font-semibold text-kintsugi-text-primary leading-tight transition-colors duration-200">–</p>
+        <p class="m-0 text-sm text-kintsugi-text-secondary flex items-center gap-1" id="tileSub-manualBetLeft"></p>
+      </div>
+
+      <div class="p-[18px] rounded-lg border border-kintsugi-border-default shadow-kintsugi-card flex flex-col items-start gap-1 transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden stat-card-bg stat-box-overlay hover:-translate-y-[3px] hover:shadow-[0_28px_80px_rgba(0,0,0,0.95),0_0_32px_rgba(79,70,229,0.4)] hover:border-kintsugi-accent hover:brightness-[1.02] animate-fade-in-up delay-450">
+        <h3 id="title-redBins" class="m-0 text-sm uppercase tracking-[0.18em] text-kintsugi-text-secondary font-semibold flex items-center gap-1">Red Bins Remaining</h3>
+        <p id="manualRedBins" class="m-0 text-2xl font-semibold text-kintsugi-text-primary leading-tight transition-colors duration-200">–</p>
+        <p class="m-0 text-sm text-kintsugi-text-secondary flex items-center gap-1" id="tileSub-manualRedBins"></p>
       </div>
     </section>
 
     <!-- Quick links -->
-    <section class="cta-row">
-      <div class="cta-card">
-        <h4>Payouts</h4>
-        <p>Weekly / monthly mechanic payouts, and job-level detail.</p>
-        <a href="Payouts/payouts-index.html" class="cta-btn">Open Payouts View →</a>
+    <section class="flex justify-center items-stretch gap-6 my-[50px] mx-auto mb-4 max-w-[1200px] px-4">
+      <div class="p-5 rounded-lg border border-kintsugi-border-subtle shadow-kintsugi-card flex-[0_1_460px] transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden cta-card-bg hover:-translate-y-[3px] hover:shadow-[0_28px_80px_rgba(0,0,0,0.95),0_0_24px_rgba(79,70,229,0.3)] hover:border-kintsugi-accent hover:brightness-[1.01]">
+        <h4 class="m-0 mb-2 text-lg text-kintsugi-text-primary">Payouts</h4>
+        <p class="m-0 mb-4 text-base text-kintsugi-text-secondary leading-normal">Weekly / monthly mechanic payouts, and job-level detail.</p>
+        <a href="Payouts/payouts-index.html" class="inline-flex items-center justify-center px-[18px] py-[9px] rounded-full text-md text-white font-medium no-underline shadow-kintsugi-glow-strong transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden btn-gradient hover:-translate-y-0.5 hover:scale-[1.03] hover:shadow-[0_16px_36px_rgba(79,70,229,0.95),0_0_20px_rgba(212,175,55,0.3)] active:translate-y-[-1px] active:scale-[1.01] active:shadow-[0_8px_20px_rgba(79,70,229,0.8)]">Open Payouts View →</a>
       </div>
 
-      <div class="cta-card">
-        <h4>Bank Records</h4>
-        <p>Transaction viewer, filters &amp; flags with BET / bins metrics.</p>
-        <a href="Bank_Record/bank-index.html" class="cta-btn">Open Bank View →</a>
+      <div class="p-5 rounded-lg border border-kintsugi-border-subtle shadow-kintsugi-card flex-[0_1_460px] transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden cta-card-bg hover:-translate-y-[3px] hover:shadow-[0_28px_80px_rgba(0,0,0,0.95),0_0_24px_rgba(79,70,229,0.3)] hover:border-kintsugi-accent hover:brightness-[1.01]">
+        <h4 class="m-0 mb-2 text-lg text-kintsugi-text-primary">Bank Records</h4>
+        <p class="m-0 mb-4 text-base text-kintsugi-text-secondary leading-normal">Transaction viewer, filters &amp; flags with BET / bins metrics.</p>
+        <a href="Bank_Record/bank-index.html" class="inline-flex items-center justify-center px-[18px] py-[9px] rounded-full text-md text-white font-medium no-underline shadow-kintsugi-glow-strong transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden btn-gradient hover:-translate-y-0.5 hover:scale-[1.03] hover:shadow-[0_16px_36px_rgba(79,70,229,0.95),0_0_20px_rgba(212,175,55,0.3)] active:translate-y-[-1px] active:scale-[1.01] active:shadow-[0_8px_20px_rgba(79,70,229,0.8)]">Open Bank View →</a>
       </div>
     </section>
 
-    <div id="status" class="status">Loading overview…</div>
+    <div id="status" class="text-xs text-kintsugi-text-secondary mt-1 text-center">Loading overview…</div>
   </div>
 
   <script src="dashboard-script.js"></script>
