@@ -73,6 +73,76 @@ function commentForWeek(weekEndDate) {
   return `Payout for week ending ${fmtDate(weekEndDate)}`;
 }
 
+// Generate copy summary for a weekly payout entry
+function generateWeeklyCopySummary(mechanic, weekEndDate, repairs, engineReplacementsByDept, totalPayout) {
+  const stateId = stateIdByMechanic.get(mechanic) || "N/A";
+  const weekEndStr = fmtDate(weekEndDate);
+  const engineReplacements = Object.values(engineReplacementsByDept).reduce((sum, count) => sum + count, 0);
+  const enginePay = calculateEnginePayment(engineReplacementsByDept);
+  
+  let summary = `Kintsugi Motorworks - Weekly Payout\n`;
+  summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  summary += `Mechanic: ${mechanic}\n`;
+  summary += `State ID: ${stateId}\n`;
+  summary += `Week Ending: ${weekEndStr}\n`;
+  summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  summary += `Repairs: ${repairs}\n`;
+  
+  if (engineReplacements > 0) {
+    summary += `Engine Replacements: ${engineReplacements}\n`;
+    summary += `Engine Reimbursement: ${fmtMoney(enginePay)}\n`;
+  }
+  
+  summary += `Total Payout: ${fmtMoney(totalPayout)}\n`;
+  summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  
+  return summary;
+}
+
+// Copy weekly payout summary to clipboard
+async function copyWeeklySummary(btn, mechanic, weekEndDate, repairs, engineReplacementsByDept, totalPayout) {
+  const summary = generateWeeklyCopySummary(mechanic, weekEndDate, repairs, engineReplacementsByDept, totalPayout);
+  
+  try {
+    // Use clipboard API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(summary);
+    } else {
+      // Fallback for older browsers
+      const textarea = document.createElement("textarea");
+      textarea.value = summary;
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    
+    // Show success feedback
+    const originalText = btn.textContent;
+    btn.textContent = "Copied!";
+    btn.classList.add("btn-success");
+    btn.disabled = true;
+    
+    setTimeout(() => {
+      btn.textContent = originalText;
+      btn.classList.remove("btn-success");
+      btn.disabled = false;
+    }, 1500);
+    
+    // Show toast notification
+    if (typeof kShowToast === "function") {
+      kShowToast("✓ Payout summary copied to clipboard!", "success", 2000);
+    }
+  } catch (error) {
+    console.error("Failed to copy:", error);
+    if (typeof kShowToast === "function") {
+      kShowToast("✗ Failed to copy summary", "error", 3000);
+    }
+  }
+}
+
 // Calculate engine replacement billing value by department
 function calculateEngineValue(engineReplacementsByDept) {
   let totalValue = 0;
@@ -425,7 +495,7 @@ function renderWeekly() {
 
   if (!filtered.length) {
     weeklyBody.innerHTML =
-      '<tr><td colspan="4" style="padding:8px; color:#6b7280;">No weekly records for this selection.</td></tr>';
+      '<tr><td colspan="5" style="padding:8px; color:#6b7280;">No weekly records for this selection.</td></tr>';
     if (weeklySummaryEl) weeklySummaryEl.textContent = "";
     return;
   }
@@ -476,7 +546,22 @@ function renderWeekly() {
           ${fmtMoney(pay)}
           <div class="payout-comment">${comment}</div>
         </td>
+        <td class="col-actions">
+          <button class="btn btn-copy-summary" title="Copy payout summary to clipboard">
+            📋 Copy
+          </button>
+        </td>
       `;
+      
+      // Add click handler for copy button
+      const copyBtn = tr.querySelector(".btn-copy-summary");
+      if (copyBtn) {
+        copyBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          copyWeeklySummary(copyBtn, r.mechanic, r.weekEnd, r.repairs, r.engineReplacementsByDept, pay);
+        });
+      }
+      
       fragment.appendChild(tr);
     });
 
@@ -492,7 +577,7 @@ function renderWeekly() {
       .join(" · ");
 
     totalRow.innerHTML = `
-      <td colspan="4">Total for week ending ${fmtDate(
+      <td colspan="5">Total for week ending ${fmtDate(
         weekEnd
       )}${mechBreakdown ? " — " + mechBreakdown : ""}</td>
     `;
