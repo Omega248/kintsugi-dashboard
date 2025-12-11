@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="payouts-style.css" />
   <script src="../constants.js"></script>
   <script src="../utils.js"></script>
+  <script src="../payout-helpers.js"></script>
+  <script src="../filter-chips.js"></script>
   <script src="../ui-enhancements.js"></script>
   <script src="../kintsugi-core.js"></script>
 </head>
@@ -82,6 +84,10 @@
           Generate Bill (Dept + Month)
         </button>
 
+        <button id="copyPayoutSummaryBtn" class="btn btn-primary">
+          📋 Copy Payout Summary
+        </button>
+
         <button id="sortWeekBtn" class="btn">
           Sort by Week Ending (Newest)
         </button>
@@ -109,6 +115,9 @@
           Advanced Filters ▾
         </button>
       </div>
+
+      <!-- Active filter chips -->
+      <div id="activeFilterChips"></div>
 
       <!-- Advanced filters panel -->
       <div id="advancedFilters" class="advanced-filters hidden">

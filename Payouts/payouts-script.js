@@ -1342,6 +1342,74 @@ document.addEventListener("DOMContentLoaded", () => {
     })();
   generateBillBtn.addEventListener("click", generateBill);
 
+  // Copy Payout Summary button
+  const copyPayoutSummaryBtn = document.getElementById("copyPayoutSummaryBtn");
+  if (copyPayoutSummaryBtn) {
+    copyPayoutSummaryBtn.addEventListener("click", async () => {
+      const { mech, week } = getFilters();
+      
+      if (mech === "all") {
+        kShowToast("Please select a specific mechanic first", "warning", 3000);
+        return;
+      }
+      
+      // Find mechanic data
+      const mechanicData = weeklyAgg.filter(w => w.mechanic === mech);
+      
+      if (mechanicData.length === 0) {
+        kShowToast("No data found for selected mechanic", "error", 3000);
+        return;
+      }
+      
+      // Calculate totals
+      const totalRepairs = mechanicData.reduce((sum, w) => sum + w.repairs, 0);
+      const totalEngines = mechanicData.reduce((sum, w) => sum + w.engineReplacements, 0);
+      
+      // Calculate total engine pay
+      let totalEnginePay = 0;
+      mechanicData.forEach(w => {
+        totalEnginePay += calculateEnginePayment(w.engineReplacementsByDept);
+      });
+      
+      const totalPayout = totalRepairs * PAY_PER_REPAIR + totalEnginePay;
+      const stateId = stateIdByMechanic.get(mech) || "";
+      
+      // Get date range
+      const dates = mechanicData.map(w => w.weekEnd).sort((a, b) => a - b);
+      const startDate = dates[0];
+      const endDate = dates[dates.length - 1];
+      
+      // Get week number if single week selected
+      let weekNumber = null;
+      if (week !== "all" && mechanicData.length === 1) {
+        weekNumber = kGetWeekNumber(mechanicData[0].weekEnd);
+      }
+      
+      // Generate summary
+      const summary = kGeneratePayoutSummary({
+        name: mech,
+        stateId: stateId,
+        totalRepairs: totalRepairs,
+        engineReplacements: totalEngines,
+        totalPayout: totalPayout
+      }, {
+        startDate: startDate,
+        endDate: endDate,
+        weekNumber: weekNumber,
+        notes: `${mechanicData.length} week(s) of work`
+      });
+      
+      // Copy to clipboard
+      const success = await kCopyToClipboard(summary);
+      
+      if (success) {
+        kShowToast("Payout summary copied to clipboard!", "success", 3000);
+      } else {
+        kShowToast("Failed to copy. Please try again.", "error", 3000);
+      }
+    });
+  }
+
   sortWeekBtn =
     document.getElementById("sortWeekBtn") ||
     (() => {
