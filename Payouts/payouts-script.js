@@ -73,6 +73,64 @@ function commentForWeek(weekEndDate) {
   return `Payout for week ending ${fmtDate(weekEndDate)}`;
 }
 
+// Generate copy summary for a weekly payout entry
+function generateWeeklyCopySummary(mechanic, weekEndDate, repairs, engineReplacementsByDept, totalPayout) {
+  const stateId = stateIdByMechanic.get(mechanic) || "N/A";
+  const weekEndStr = fmtDate(weekEndDate);
+  const engineReplacements = Object.values(engineReplacementsByDept).reduce((sum, count) => sum + count, 0);
+  const enginePay = calculateEnginePayment(engineReplacementsByDept);
+  
+  let summary = `Kintsugi Motorworks - Weekly Payout\n`;
+  summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  summary += `Mechanic: ${mechanic}\n`;
+  summary += `State ID: ${stateId}\n`;
+  summary += `Week Ending: ${weekEndStr}\n`;
+  summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  summary += `Repairs: ${repairs}\n`;
+  
+  if (engineReplacements > 0) {
+    summary += `Engine Replacements: ${engineReplacements}\n`;
+    summary += `Engine Reimbursement: ${fmtMoney(enginePay)}\n`;
+  }
+  
+  summary += `Total Payout: ${fmtMoney(totalPayout)}\n`;
+  summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  
+  return summary;
+}
+
+// Copy weekly payout summary to clipboard
+async function copyWeeklySummary(btn, mechanic, weekEndDate, repairs, engineReplacementsByDept, totalPayout) {
+  const summary = generateWeeklyCopySummary(mechanic, weekEndDate, repairs, engineReplacementsByDept, totalPayout);
+  
+  // Use existing helper function from payout-helpers.js
+  const success = await kCopyToClipboard(summary);
+  
+  if (success) {
+    // Show success feedback
+    const originalText = btn.textContent;
+    btn.textContent = "Copied!";
+    btn.classList.add("btn-success");
+    btn.disabled = true;
+    
+    setTimeout(() => {
+      btn.textContent = originalText;
+      btn.classList.remove("btn-success");
+      btn.disabled = false;
+    }, 1500);
+    
+    // Show toast notification
+    if (typeof kShowToast === "function") {
+      kShowToast("✓ Payout summary copied to clipboard!", "success", 2000);
+    }
+  } else {
+    // Show error feedback
+    if (typeof kShowToast === "function") {
+      kShowToast("✗ Failed to copy summary", "error", 3000);
+    }
+  }
+}
+
 // Calculate engine replacement billing value by department
 function calculateEngineValue(engineReplacementsByDept) {
   let totalValue = 0;
@@ -425,7 +483,7 @@ function renderWeekly() {
 
   if (!filtered.length) {
     weeklyBody.innerHTML =
-      '<tr><td colspan="4" style="padding:8px; color:#6b7280;">No weekly records for this selection.</td></tr>';
+      '<tr><td colspan="5" style="padding:8px; color:#6b7280;">No weekly records for this selection.</td></tr>';
     if (weeklySummaryEl) weeklySummaryEl.textContent = "";
     return;
   }
@@ -476,7 +534,19 @@ function renderWeekly() {
           ${fmtMoney(pay)}
           <div class="payout-comment">${comment}</div>
         </td>
+        <td class="col-actions">
+          <button class="btn btn-copy-summary" 
+                  title="Copy payout summary to clipboard"
+                  data-mechanic="${r.mechanic}"
+                  data-week-end="${r.weekEnd.toISOString()}"
+                  data-repairs="${r.repairs}"
+                  data-engine-depts='${JSON.stringify(r.engineReplacementsByDept)}'
+                  data-total-pay="${pay}">
+            📋 Copy
+          </button>
+        </td>
       `;
+      
       fragment.appendChild(tr);
     });
 
@@ -492,7 +562,7 @@ function renderWeekly() {
       .join(" · ");
 
     totalRow.innerHTML = `
-      <td colspan="4">Total for week ending ${fmtDate(
+      <td colspan="5">Total for week ending ${fmtDate(
         weekEnd
       )}${mechBreakdown ? " — " + mechBreakdown : ""}</td>
     `;
@@ -1285,6 +1355,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (weeklyBody) {
     weeklyBody.addEventListener("click", onMechanicClickFromTable);
+    // Event delegation for copy summary buttons
+    weeklyBody.addEventListener("click", (e) => {
+      const copyBtn = e.target.closest(".btn-copy-summary");
+      if (copyBtn) {
+        e.stopPropagation();
+        const mechanic = copyBtn.dataset.mechanic;
+        const weekEnd = new Date(copyBtn.dataset.weekEnd);
+        const repairs = parseInt(copyBtn.dataset.repairs, 10);
+        const engineReplacementsByDept = JSON.parse(copyBtn.dataset.engineDepts || "{}");
+        const totalPay = parseFloat(copyBtn.dataset.totalPay);
+        
+        copyWeeklySummary(copyBtn, mechanic, weekEnd, repairs, engineReplacementsByDept, totalPay);
+      }
+    });
   }
   if (jobsBody) {
     jobsBody.addEventListener("click", onMechanicClickFromTable);
