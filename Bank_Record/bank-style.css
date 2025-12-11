@@ -477,7 +477,6 @@ td {
   text-overflow: ellipsis;
   text-align: left;
   position: relative;
-  min-height: 44px;
   height: 44px;
   vertical-align: middle;
 }
@@ -492,7 +491,6 @@ th {
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: #9ca3af;
-  vertical-align: middle;
 }
 
 /* Resize handle */
