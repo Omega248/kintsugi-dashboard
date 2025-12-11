@@ -67,23 +67,35 @@
 
 .seg-tabs {
   display: inline-flex;
-  padding: 2px;
+  padding: 3px;
   border-radius: var(--radius-full);
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
+  background: linear-gradient(135deg, rgba(10, 16, 32, 0.98), rgba(15, 23, 42, 0.95));
+  border: 1px solid rgba(79, 70, 229, 0.15);
   gap: 2px;
   margin-left: auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
 .seg-btn {
-  padding: 4px 12px;
+  padding: 6px 14px;
   border-radius: var(--radius-full);
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   cursor: pointer;
   border: none;
   background: transparent;
-  transition: all var(--transition-base);
+  transition: all 0.18s var(--ease-smooth);
+  position: relative;
+  overflow: hidden;
+}
+
+.seg-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, var(--accent-hover), transparent);
+  opacity: 0;
+  transition: opacity 0.18s var(--ease-smooth);
 }
 
 .seg-btn:hover {
@@ -91,9 +103,14 @@
   color: var(--text-primary);
 }
 
+.seg-btn:hover::before {
+  opacity: 1;
+}
+
 .seg-btn.active {
   background: radial-gradient(circle at top left, var(--accent-secondary), var(--accent-primary));
   color: var(--text-inverse);
+  box-shadow: 0 0 12px rgba(79, 70, 229, 0.8);
 }
 
 /* ===== Week total row ===== */
