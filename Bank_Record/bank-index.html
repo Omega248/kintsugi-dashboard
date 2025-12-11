@@ -4,29 +4,115 @@
   <meta charset="UTF-8" />
   <title>Kintsugi Motorworks · Bank Records</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="../shared-styles.css" />
-  <link rel="stylesheet" href="bank-style.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'kintsugi-bg-primary': '#020817',
+            'kintsugi-bg-secondary': '#050816',
+            'kintsugi-border-subtle': '#111827',
+            'kintsugi-border-default': '#1f2937',
+            'kintsugi-border-strong': '#374151',
+            'kintsugi-text-primary': '#e5e7eb',
+            'kintsugi-text-secondary': '#9ca3af',
+            'kintsugi-accent': '#4f46e5',
+            'kintsugi-accent-secondary': '#6366f1',
+            'kintsugi-accent-hover': 'rgba(148, 163, 253, 0.12)',
+          },
+          fontSize: {
+            'xs': '9px',
+            'sm': '10px',
+            'base': '11px',
+            'md': '13px',
+            'lg': '14px',
+            'xl': '18px',
+            '4xl': '39px',
+          },
+          borderRadius: {
+            'md': '12px',
+            'lg': '18px',
+            'xl': '22px',
+          },
+          boxShadow: {
+            'kintsugi-card': '0 20px 60px rgba(0, 0, 0, 0.75)',
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    body::before {
+      content: "";
+      position: fixed;
+      inset: -40vh -40vw;
+      z-index: -1;
+      pointer-events: none;
+      background: radial-gradient(circle at top, #111827 0%, #020817 35%, #000 75%);
+      opacity: 1;
+    }
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+      opacity: 0.03;
+      mix-blend-mode: overlay;
+    }
+    .brand-title-gradient {
+      background: linear-gradient(135deg, #e5e7eb 0%, #d4af37 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .brand-title-line::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 90px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #d4af37, transparent);
+      box-shadow: 0 0 10px rgba(212, 175, 55, 0.4);
+    }
+    .nav-pill-active {
+      background: radial-gradient(circle at top left, #6366f1, #4f46e5);
+      box-shadow: 0 0 16px rgba(79, 70, 229, 0.9), 0 0 4px rgba(212, 175, 55, 0.3);
+    }
+    table { border-collapse: collapse; }
+    th { position: sticky; top: 0; z-index: 5; }
+    /* Preserve existing custom classes from bank-style.css for minimal changes */
+    .ledger-header, .ledger-title, .ledger-badge, .controls-bar, .filter-group, 
+    .file-pill, .search-wrap, .col-meta, .col-toggle, .col-summary, 
+    .table-wrap, .transaction-row, .col-time, .col-type, .col-from, .col-to, 
+    .col-reason, .col-amount, .col-flag, .col-actions { /* Keep existing styles */ }
+  </style>
   <script src="../constants.js"></script>
   <script src="../utils.js"></script>
   <script src="../payout-helpers.js"></script>
   <script src="../ui-enhancements.js"></script>
   <script src="../kintsugi-core.js"></script>
 </head>
-<body>
-  <div class="app">
+<body class="m-0 p-[18px] font-sans text-kintsugi-text-primary bg-black overflow-x-hidden leading-normal">
+  <div class="max-w-[1600px] mx-auto">
     <!-- Top nav shared across pages -->
-    <div class="top-bar">
+    <header class="flex flex-col items-center justify-start gap-3 mb-5">
       <div>
-        <div class="brand-title">Kintsugi Motorworks</div>
+        <div class="text-4xl font-bold tracking-wide text-center relative pb-1 brand-title-gradient brand-title-line">
+          Kintsugi Motorworks
+        </div>
       </div>
-      <div class="nav-tabs">
-        <!-- adjust paths if your structure differs -->
-        <a href="../index.html" class="nav-pill">Dashboard</a>
-        <a href="../Payouts/payouts-index.html" class="nav-pill">Payouts</a>
-        <a href="../Mechanics/mechanics-index.html" class="nav-pill">Mechanics</a>
-        <a href="./bank-index.html" class="nav-pill active">Bank</a>
-      </div>
-    </div>
+      <nav class="inline-flex p-1 rounded-full bg-gradient-to-br from-[rgba(10,16,32,0.98)] to-[rgba(15,23,42,0.95)] border border-[rgba(79,70,229,0.15)] gap-1 shadow-[0_8px_24px_rgba(0,0,0,0.7),0_0_1px_rgba(79,70,229,0.5)] backdrop-blur-sm">
+        <a href="../index.html" class="px-[22px] py-2 rounded-full text-base text-kintsugi-text-secondary border border-transparent transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] cursor-pointer relative overflow-hidden hover:text-kintsugi-text-primary hover:bg-kintsugi-accent-hover hover:border-[rgba(79,70,229,0.35)] hover:-translate-y-px">Dashboard</a>
+        <a href="../Payouts/payouts-index.html" class="px-[22px] py-2 rounded-full text-base text-kintsugi-text-secondary border border-transparent transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] cursor-pointer relative overflow-hidden hover:text-kintsugi-text-primary hover:bg-kintsugi-accent-hover hover:border-[rgba(79,70,229,0.35)] hover:-translate-y-px">Payouts</a>
+        <a href="../Mechanics/mechanics-index.html" class="px-[22px] py-2 rounded-full text-base text-kintsugi-text-secondary border border-transparent transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] cursor-pointer relative overflow-hidden hover:text-kintsugi-text-primary hover:bg-kintsugi-accent-hover hover:border-[rgba(79,70,229,0.35)] hover:-translate-y-px">Mechanics</a>
+        <a href="./bank-index.html" class="px-[22px] py-2 rounded-full text-base text-white border border-[rgba(212,175,55,0.2)] transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] cursor-pointer relative overflow-hidden nav-pill-active">Bank</a>
+      </nav>
+    </header>
 
     <!-- Ledger title -->
     <div class="ledger-header">

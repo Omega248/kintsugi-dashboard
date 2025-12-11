@@ -1,6 +1,11 @@
 /* =============================================
    Kintsugi Dashboard - Shared Design System
    Common styles for all pages
+   
+   ⚠️ DEPRECATED - BEING REPLACED BY TAILWIND CSS
+   This file is kept for reference and backward compatibility.
+   New pages use Tailwind CSS via CDN.
+   See TAILWIND_MIGRATION.md for details.
    ============================================= */
 
 /* ===== CSS Variables (Design Tokens) ===== */
