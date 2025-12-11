@@ -67,6 +67,13 @@ function mechBuildStateIdMap(stateRows) {
   }
 }
 
+// ===== Calculation helpers =====
+function mechCalculateEngineValue(engineCount) {
+  // LSPD/Other: £12k reimbursement + £1.5k bonus
+  // BCSO: £12k reimbursement only (but we don't track dept here, using LSPD rate)
+  return engineCount * (MECH_ENGINE_REIMBURSEMENT + MECH_ENGINE_BONUS_LSPD);
+}
+
 // ===== Date helpers =====
 // ===== Date/Money helpers (using kintsugi-core.js) =====
 function mechIsValidDate(d) {
@@ -176,11 +183,14 @@ function mechBuildWeeklyStats(mechanicName, sourceJobs) {
     let weekEndDate;
     
     if (j.weekEnd && mechIsValidDate(j.weekEnd)) {
+      // Use the week ending date from the data (preferred)
       weekKey = j.weekEnd.toISOString().slice(0, 10);
       weekEndDate = j.weekEnd;
     } else {
+      // Fallback: use ISO week standard for grouping
       weekKey = mechWeekKeyFromDate(d);
-      // Calculate week ending date (Sunday) for display
+      // Calculate week ending date (Sunday) for display purposes
+      // Note: This is for display only and may differ from ISO week boundaries
       const dayNum = d.getDay();
       const daysUntilSunday = dayNum === 0 ? 0 : 7 - dayNum;
       weekEndDate = new Date(d);
@@ -219,7 +229,7 @@ function mechBuildWeeklyStats(mechanicName, sourceJobs) {
   // Calculate payouts
   for (const week of weeklyStats) {
     const basePay = week.totalRepairs * MECH_PAY_PER_REPAIR;
-    const enginePay = week.engineReplacements * (MECH_ENGINE_REIMBURSEMENT + MECH_ENGINE_BONUS_LSPD);
+    const enginePay = mechCalculateEngineValue(week.engineReplacements);
     week.totalPayout = basePay + enginePay;
   }
   
@@ -508,7 +518,7 @@ function mechRenderWeeklySummary(mechanicName) {
     mechAddSummaryRow(card, "Repairs", week.totalRepairs.toString());
     if (week.engineReplacements > 0) {
       mechAddSummaryRow(card, "Engine Replacements", week.engineReplacements.toString());
-      const engineValue = week.engineReplacements * (MECH_ENGINE_REIMBURSEMENT + MECH_ENGINE_BONUS_LSPD);
+      const engineValue = mechCalculateEngineValue(week.engineReplacements);
       mechAddSummaryRow(card, "Engine Value", mechFmtMoney(engineValue));
     }
     mechAddSummaryRow(card, "Total Payout", mechFmtMoney(week.totalPayout));
@@ -559,7 +569,7 @@ async function mechCopyWeekSummary(mechanicName, week) {
   summary += `Repairs: ${week.totalRepairs}\n`;
   if (week.engineReplacements > 0) {
     summary += `Engine Replacements: ${week.engineReplacements}\n`;
-    const engineValue = week.engineReplacements * (MECH_ENGINE_REIMBURSEMENT + MECH_ENGINE_BONUS_LSPD);
+    const engineValue = mechCalculateEngineValue(week.engineReplacements);
     summary += `Engine Reimbursement: ${mechFmtMoney(engineValue)}\n`;
   }
   summary += `Total Payout: ${mechFmtMoney(week.totalPayout)}\n`;
