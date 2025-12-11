@@ -11,7 +11,7 @@
 
 /* Page shell override for mechanics layout */
 .page-shell {
-  margin-top: var(--space-sm);
+  margin-top: var(--space-md);
   border-radius: var(--radius-xl);
   border: 1px solid rgba(255, 255, 255, 0.03);
   background: linear-gradient(
@@ -19,8 +19,8 @@
       rgba(10, 14, 28, 0.92),
       rgba(6, 10, 20, 0.96)
     );
-  box-shadow: var(--shadow-elevated);
-  padding: var(--space-lg) 26px 26px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75);
+  padding: 28px 28px 28px;
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
@@ -35,23 +35,26 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 4px;
-  margin-bottom: 2px;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
 }
 
 .summary-main {
-  max-width: 540px;
+  max-width: 600px;
 }
 
 .summary-title {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
 }
 
 .summary-sub {
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--text-soft);
+  margin-top: 6px;
+  font-size: var(--font-size-md);
+  color: var(--text-secondary);
+  line-height: 1.6;
 }
 
 .link-soft {
@@ -72,10 +75,10 @@
 /* Metric cards row */
 
 .mechanics-summary-row {
-  margin-top: 6px;
+  margin-top: var(--space-md);
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 20px;
 }
 
 @media (max-width: 900px) {
@@ -91,10 +94,21 @@
 }
 
 .mechanics-summary-card {
-  padding: 14px 16px;
-  border-radius: 16px;
-  border: 1px solid rgba(24, 32, 56, 0.9);
-  background: linear-gradient(135deg, #070f23, #050b1d);
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  background:
+    radial-gradient(circle at top left, rgba(148, 163, 253, 0.10), transparent),
+    rgba(6, 11, 25, 0.98);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75);
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+
+.mechanics-summary-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.95), 0 0 32px rgba(79, 70, 229, 0.4);
+  border-color: var(--accent-primary);
+  filter: brightness(1.02);
 }
 
 .mechanics-summary-label {
