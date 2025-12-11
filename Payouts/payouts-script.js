@@ -103,22 +103,10 @@ function generateWeeklyCopySummary(mechanic, weekEndDate, repairs, engineReplace
 async function copyWeeklySummary(btn, mechanic, weekEndDate, repairs, engineReplacementsByDept, totalPayout) {
   const summary = generateWeeklyCopySummary(mechanic, weekEndDate, repairs, engineReplacementsByDept, totalPayout);
   
-  try {
-    // Use clipboard API
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(summary);
-    } else {
-      // Fallback for older browsers
-      const textarea = document.createElement("textarea");
-      textarea.value = summary;
-      textarea.style.position = "fixed";
-      textarea.style.left = "-9999px";
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textarea);
-    }
-    
+  // Use existing helper function from payout-helpers.js
+  const success = await kCopyToClipboard(summary);
+  
+  if (success) {
     // Show success feedback
     const originalText = btn.textContent;
     btn.textContent = "Copied!";
@@ -135,8 +123,8 @@ async function copyWeeklySummary(btn, mechanic, weekEndDate, repairs, engineRepl
     if (typeof kShowToast === "function") {
       kShowToast("✓ Payout summary copied to clipboard!", "success", 2000);
     }
-  } catch (error) {
-    console.error("Failed to copy:", error);
+  } else {
+    // Show error feedback
     if (typeof kShowToast === "function") {
       kShowToast("✗ Failed to copy summary", "error", 3000);
     }
@@ -547,20 +535,17 @@ function renderWeekly() {
           <div class="payout-comment">${comment}</div>
         </td>
         <td class="col-actions">
-          <button class="btn btn-copy-summary" title="Copy payout summary to clipboard">
+          <button class="btn btn-copy-summary" 
+                  title="Copy payout summary to clipboard"
+                  data-mechanic="${r.mechanic}"
+                  data-week-end="${r.weekEnd.toISOString()}"
+                  data-repairs="${r.repairs}"
+                  data-engine-depts='${JSON.stringify(r.engineReplacementsByDept)}'
+                  data-total-pay="${pay}">
             📋 Copy
           </button>
         </td>
       `;
-      
-      // Add click handler for copy button
-      const copyBtn = tr.querySelector(".btn-copy-summary");
-      if (copyBtn) {
-        copyBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          copyWeeklySummary(copyBtn, r.mechanic, r.weekEnd, r.repairs, r.engineReplacementsByDept, pay);
-        });
-      }
       
       fragment.appendChild(tr);
     });
@@ -1370,6 +1355,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (weeklyBody) {
     weeklyBody.addEventListener("click", onMechanicClickFromTable);
+    // Event delegation for copy summary buttons
+    weeklyBody.addEventListener("click", (e) => {
+      const copyBtn = e.target.closest(".btn-copy-summary");
+      if (copyBtn) {
+        e.stopPropagation();
+        const mechanic = copyBtn.dataset.mechanic;
+        const weekEnd = new Date(copyBtn.dataset.weekEnd);
+        const repairs = parseInt(copyBtn.dataset.repairs, 10);
+        const engineReplacementsByDept = JSON.parse(copyBtn.dataset.engineDepts || "{}");
+        const totalPay = parseFloat(copyBtn.dataset.totalPay);
+        
+        copyWeeklySummary(copyBtn, mechanic, weekEnd, repairs, engineReplacementsByDept, totalPay);
+      }
+    });
   }
   if (jobsBody) {
     jobsBody.addEventListener("click", onMechanicClickFromTable);
