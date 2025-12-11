@@ -195,10 +195,13 @@
   box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.35);
 }
 
-/* Mechanics main area – no extra outer card, just content on shell */
+/* Mechanics main area – two-column layout */
 
 .mechanics-layout {
   margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 400px;
+  gap: 16px;
 }
 
 .mechanics-panel {
@@ -208,6 +211,15 @@
   border-radius: 0;
   padding: 0;
   margin: 0;
+}
+
+.weekly-summary-panel {
+  border: 1px solid rgba(24, 32, 56, 0.9);
+  background: linear-gradient(135deg, #050a1b, #020617);
+  border-radius: 16px;
+  padding: 16px;
+  max-height: 600px;
+  overflow-y: auto;
 }
 
 .panel-header {
@@ -387,7 +399,108 @@
   text-align: center;
 }
 
+/* Weekly summary content styles */
+
+.weekly-summary-content {
+  margin-top: 8px;
+}
+
+.weekly-summary-empty {
+  font-size: 11px;
+  color: var(--text-soft);
+  line-height: 1.5;
+  text-align: center;
+  padding: 20px;
+}
+
+.weekly-summary-card {
+  margin-bottom: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(24, 32, 56, 0.9);
+  background: var(--panel-soft);
+}
+
+.weekly-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(24, 32, 56, 0.7);
+}
+
+.weekly-summary-week {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.weekly-summary-copy-btn {
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(24, 32, 56, 0.9);
+  background: rgba(79, 70, 229, 0.1);
+  color: var(--accent-strong);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.weekly-summary-copy-btn:hover {
+  background: rgba(79, 70, 229, 0.2);
+  border-color: var(--accent);
+}
+
+.weekly-summary-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+.weekly-summary-label {
+  color: var(--text-soft);
+}
+
+.weekly-summary-value {
+  color: var(--text-main);
+  font-weight: 500;
+}
+
+.weekly-summary-copy-all {
+  margin-top: 16px;
+  padding: 10px 16px;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--accent);
+  background: rgba(79, 70, 229, 0.15);
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.weekly-summary-copy-all:hover {
+  background: rgba(79, 70, 229, 0.25);
+  border-color: var(--accent-strong);
+}
+
 /* Responsive tweaks */
+
+@media (max-width: 1200px) {
+  .mechanics-layout {
+    grid-template-columns: 1fr;
+  }
+  
+  .weekly-summary-panel {
+    max-height: none;
+  }
+}
 
 @media (max-width: 900px) {
   .controls {

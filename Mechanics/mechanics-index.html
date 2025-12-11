@@ -116,8 +116,9 @@
         </span>
       </section>
 
-      <!-- Mechanics table + details in a single panel -->
+      <!-- Mechanics table + details + weekly summary -->
       <section class="mechanics-layout">
+        <!-- Left side: Mechanics table and lifetime details -->
         <div class="mechanics-panel">
           <div class="panel-header">
             <div class="panel-title">Mechanics</div>
@@ -156,6 +157,22 @@
                 No mechanic selected. Choose a mechanic to see breakdown for
                 repairs, weeks worked and payout.
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right side: Weekly payout summary -->
+        <div class="weekly-summary-panel">
+          <div class="panel-header">
+            <div class="panel-title">Weekly Payout Summary</div>
+            <div id="weeklySummarySubtitle" class="panel-subtitle">
+              Select a mechanic to view weekly breakdown.
+            </div>
+          </div>
+          
+          <div id="weeklySummaryContent" class="weekly-summary-content">
+            <div class="weekly-summary-empty">
+              No mechanic selected. Choose a mechanic to see their weekly payout summary.
             </div>
           </div>
         </div>

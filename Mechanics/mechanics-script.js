@@ -1,10 +1,15 @@
 // ===== Config (using KINTSUGI_SHEET_ID from kintsugi-core.js) =====
 const MECH_JOBS_SHEET = "Form responses 1";
+const MECH_STATE_ID_SHEET = "State ID's";
 const MECH_PAY_PER_REPAIR = 700;
+const MECH_ENGINE_REIMBURSEMENT = 12000;
+const MECH_ENGINE_BONUS_LSPD = 1500;
 
 // ===== State =====
 let mechJobs = [];      // raw parsed jobs
 let mechStats = [];     // aggregated per-mechanic stats
+let stateIdByMechanic = new Map();  // mechanic -> state ID
+let selectedMechanicName = null;  // currently selected mechanic
 
 // DOM refs
 let statusEl;
@@ -28,9 +33,45 @@ let detailSubtitleEl;
 let mechanicDetailEl;
 let mechanicsTableSubEl;
 
+let weeklySummarySubtitleEl;
+let weeklySummaryContentEl;
+
 // ===== CSV fetch (using kintsugi-core.js) =====
 async function mechFetchCSV(sheetName) {
   return await kFetchCSV(sheetName, { header: false });
+}
+
+// ===== State ID helpers =====
+function mechBuildStateIdMap(stateRows) {
+  stateIdByMechanic.clear();
+  if (!stateRows || stateRows.length < 2) return;
+
+  const headers = stateRows[0].map((h) => h.trim());
+  const lower = headers.map((h) => h.toLowerCase());
+
+  const iMech = lower.findIndex(
+    (h) => h.includes("mechanic") || h.includes("name")
+  );
+  const iState = lower.findIndex(
+    (h) => h.includes("state") && h.includes("id")
+  );
+  if (iMech === -1 || iState === -1) return;
+
+  for (let r = 1; r < stateRows.length; r++) {
+    const row = stateRows[r];
+    if (!row) continue;
+    const mech = (row[iMech] || "").trim();
+    const sid = (row[iState] || "").trim();
+    if (!mech || !sid) continue;
+    stateIdByMechanic.set(mech, sid);
+  }
+}
+
+// ===== Calculation helpers =====
+function mechCalculateEngineValue(engineCount) {
+  // LSPD/Other: £12k reimbursement + £1.5k bonus
+  // BCSO: £12k reimbursement only (but we don't track dept here, using LSPD rate)
+  return engineCount * (MECH_ENGINE_REIMBURSEMENT + MECH_ENGINE_BONUS_LSPD);
 }
 
 // ===== Date helpers =====
@@ -122,6 +163,77 @@ function mechFilterJobsByTime(jobs, timeKey) {
   }
 
   return jobs;
+}
+
+// ===== Weekly aggregation for a specific mechanic =====
+function mechBuildWeeklyStats(mechanicName, sourceJobs) {
+  if (!mechanicName) return [];
+  
+  const mechanicJobs = sourceJobs.filter(j => j.mechanic === mechanicName);
+  if (mechanicJobs.length === 0) return [];
+  
+  const weekMap = new Map();
+  
+  for (const j of mechanicJobs) {
+    const d = j.bestDate;
+    if (!mechIsValidDate(d)) continue;
+    
+    // Use week ending date if available, otherwise calculate week key
+    let weekKey;
+    let weekEndDate;
+    
+    if (j.weekEnd && mechIsValidDate(j.weekEnd)) {
+      // Use the week ending date from the data (preferred)
+      weekKey = j.weekEnd.toISOString().slice(0, 10);
+      weekEndDate = j.weekEnd;
+    } else {
+      // Fallback: use ISO week standard for grouping
+      weekKey = mechWeekKeyFromDate(d);
+      // Calculate week ending date (Sunday) for display purposes
+      // Note: This is for display only and may differ from ISO week boundaries
+      const dayNum = d.getDay();
+      const daysUntilSunday = dayNum === 0 ? 0 : 7 - dayNum;
+      weekEndDate = new Date(d);
+      weekEndDate.setDate(d.getDate() + daysUntilSunday);
+    }
+    
+    if (!weekKey) continue;
+    
+    let weekRec = weekMap.get(weekKey);
+    if (!weekRec) {
+      weekRec = {
+        weekKey,
+        weekEndDate,
+        mechanic: mechanicName,
+        totalRepairs: 0,
+        engineReplacements: 0,
+        jobs: []
+      };
+      weekMap.set(weekKey, weekRec);
+    }
+    
+    weekRec.totalRepairs += j.across || 0;
+    weekRec.engineReplacements += j.engineReplacements || 0;
+    weekRec.jobs.push(j);
+  }
+  
+  // Convert to array and sort by week (newest first)
+  const weeklyStats = Array.from(weekMap.values());
+  weeklyStats.sort((a, b) => {
+    if (a.weekEndDate && b.weekEndDate) {
+      return b.weekEndDate - a.weekEndDate;
+    }
+    return b.weekKey.localeCompare(a.weekKey);
+  });
+  
+  // Calculate payouts
+  for (const week of weeklyStats) {
+    const basePay = week.totalRepairs * MECH_PAY_PER_REPAIR;
+    const enginePay = mechCalculateEngineValue(week.engineReplacements);
+    week.totalPayout = basePay + enginePay;
+  }
+  
+  return weeklyStats;
 }
 
 // ===== Aggregation =====
@@ -330,6 +442,231 @@ function mechRenderDetail(selected) {
   mechanicDetailEl.appendChild(grid);
 }
 
+// ===== Weekly summary rendering =====
+function mechRenderWeeklySummary(mechanicName) {
+  if (!weeklySummaryContentEl) return;
+  
+  weeklySummaryContentEl.innerHTML = "";
+  
+  if (!mechanicName) {
+    const div = document.createElement("div");
+    div.className = "weekly-summary-empty";
+    div.textContent = "No mechanic selected. Choose a mechanic to see their weekly payout summary.";
+    weeklySummaryContentEl.appendChild(div);
+    
+    if (weeklySummarySubtitleEl) {
+      weeklySummarySubtitleEl.textContent = "Select a mechanic to view weekly breakdown.";
+    }
+    return;
+  }
+  
+  // Get current time filter
+  const timeFilter = timeFilterEl ? timeFilterEl.value : "all";
+  const scopedJobs = mechFilterJobsByTime(mechJobs, timeFilter);
+  
+  const weeklyStats = mechBuildWeeklyStats(mechanicName, scopedJobs);
+  
+  if (weeklyStats.length === 0) {
+    const div = document.createElement("div");
+    div.className = "weekly-summary-empty";
+    div.textContent = "No repairs found for this mechanic in the selected time period.";
+    weeklySummaryContentEl.appendChild(div);
+    
+    if (weeklySummarySubtitleEl) {
+      weeklySummarySubtitleEl.textContent = "No data available.";
+    }
+    return;
+  }
+  
+  // Update subtitle
+  if (weeklySummarySubtitleEl) {
+    const stateId = stateIdByMechanic.get(mechanicName) || "N/A";
+    weeklySummarySubtitleEl.textContent = `${mechanicName} (State ID: ${stateId})`;
+  }
+  
+  // Create weekly cards
+  const fragment = document.createDocumentFragment();
+  
+  for (const week of weeklyStats) {
+    const card = document.createElement("div");
+    card.className = "weekly-summary-card";
+    
+    const header = document.createElement("div");
+    header.className = "weekly-summary-header";
+    
+    const weekLabel = document.createElement("div");
+    weekLabel.className = "weekly-summary-week";
+    weekLabel.textContent = week.weekEndDate ? 
+      `Week ending ${mechFmtDate(week.weekEndDate)}` : 
+      week.weekKey;
+    
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "weekly-summary-copy-btn";
+    copyBtn.textContent = "Copy";
+    copyBtn.dataset.weekKey = week.weekKey;
+    copyBtn.addEventListener("click", () => mechCopyWeekSummary(mechanicName, week));
+    
+    header.appendChild(weekLabel);
+    header.appendChild(copyBtn);
+    card.appendChild(header);
+    
+    // Add summary rows
+    const stateId = stateIdByMechanic.get(mechanicName) || "N/A";
+    
+    mechAddSummaryRow(card, "Mechanic", mechanicName);
+    mechAddSummaryRow(card, "State ID", stateId);
+    mechAddSummaryRow(card, "Repairs", week.totalRepairs.toString());
+    if (week.engineReplacements > 0) {
+      mechAddSummaryRow(card, "Engine Replacements", week.engineReplacements.toString());
+      const engineValue = mechCalculateEngineValue(week.engineReplacements);
+      mechAddSummaryRow(card, "Engine Value", mechFmtMoney(engineValue));
+    }
+    mechAddSummaryRow(card, "Total Payout", mechFmtMoney(week.totalPayout));
+    
+    fragment.appendChild(card);
+  }
+  
+  // Add "Copy All" button if there are multiple weeks
+  if (weeklyStats.length > 1) {
+    const copyAllBtn = document.createElement("button");
+    copyAllBtn.className = "weekly-summary-copy-all";
+    copyAllBtn.textContent = `Copy All ${weeklyStats.length} Weeks`;
+    copyAllBtn.addEventListener("click", () => mechCopyAllWeeks(mechanicName, weeklyStats));
+    fragment.appendChild(copyAllBtn);
+  }
+  
+  weeklySummaryContentEl.appendChild(fragment);
+}
+
+function mechAddSummaryRow(container, label, value) {
+  const row = document.createElement("div");
+  row.className = "weekly-summary-row";
+  
+  const labelEl = document.createElement("div");
+  labelEl.className = "weekly-summary-label";
+  labelEl.textContent = label + ":";
+  
+  const valueEl = document.createElement("div");
+  valueEl.className = "weekly-summary-value";
+  valueEl.textContent = value;
+  
+  row.appendChild(labelEl);
+  row.appendChild(valueEl);
+  container.appendChild(row);
+}
+
+// ===== Copy functions =====
+async function mechCopyWeekSummary(mechanicName, week) {
+  const stateId = stateIdByMechanic.get(mechanicName) || "N/A";
+  const weekEndStr = week.weekEndDate ? mechFmtDate(week.weekEndDate) : week.weekKey;
+  
+  let summary = `Kintsugi Motorworks - Weekly Payout\n`;
+  summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  summary += `Mechanic: ${mechanicName}\n`;
+  summary += `State ID: ${stateId}\n`;
+  summary += `Week Ending: ${weekEndStr}\n`;
+  summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  summary += `Repairs: ${week.totalRepairs}\n`;
+  if (week.engineReplacements > 0) {
+    summary += `Engine Replacements: ${week.engineReplacements}\n`;
+    const engineValue = mechCalculateEngineValue(week.engineReplacements);
+    summary += `Engine Reimbursement: ${mechFmtMoney(engineValue)}\n`;
+  }
+  summary += `Total Payout: ${mechFmtMoney(week.totalPayout)}\n`;
+  summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(summary);
+      mechShowNotification("✓ Copied to clipboard!");
+    } else {
+      // Fallback
+      const textarea = document.createElement("textarea");
+      textarea.value = summary;
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      mechShowNotification("✓ Copied to clipboard!");
+    }
+  } catch (err) {
+    console.error("Failed to copy:", err);
+    mechShowNotification("✗ Failed to copy");
+  }
+}
+
+async function mechCopyAllWeeks(mechanicName, weeklyStats) {
+  const stateId = stateIdByMechanic.get(mechanicName) || "N/A";
+  
+  let summary = `Kintsugi Motorworks - Multi-Week Payout Summary\n`;
+  summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  summary += `Mechanic: ${mechanicName}\n`;
+  summary += `State ID: ${stateId}\n`;
+  summary += `Period: ${weeklyStats.length} weeks\n`;
+  summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  
+  let totalRepairs = 0;
+  let totalEngineReplacements = 0;
+  let totalPayout = 0;
+  
+  for (const week of weeklyStats) {
+    const weekEndStr = week.weekEndDate ? mechFmtDate(week.weekEndDate) : week.weekKey;
+    summary += `Week ending ${weekEndStr}:\n`;
+    summary += `  Repairs: ${week.totalRepairs}\n`;
+    if (week.engineReplacements > 0) {
+      summary += `  Engine Replacements: ${week.engineReplacements}\n`;
+    }
+    summary += `  Payout: ${mechFmtMoney(week.totalPayout)}\n\n`;
+    
+    totalRepairs += week.totalRepairs;
+    totalEngineReplacements += week.engineReplacements;
+    totalPayout += week.totalPayout;
+  }
+  
+  summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  summary += `TOTALS:\n`;
+  summary += `Total Repairs: ${totalRepairs}\n`;
+  if (totalEngineReplacements > 0) {
+    summary += `Total Engine Replacements: ${totalEngineReplacements}\n`;
+  }
+  summary += `Total Payout: ${mechFmtMoney(totalPayout)}\n`;
+  summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(summary);
+      mechShowNotification("✓ All weeks copied to clipboard!");
+    } else {
+      // Fallback
+      const textarea = document.createElement("textarea");
+      textarea.value = summary;
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      mechShowNotification("✓ All weeks copied to clipboard!");
+    }
+  } catch (err) {
+    console.error("Failed to copy:", err);
+    mechShowNotification("✗ Failed to copy");
+  }
+}
+
+function mechShowNotification(message) {
+  if (statusEl) {
+    statusEl.textContent = message;
+    statusEl.style.color = message.startsWith("✓") ? "#10b981" : "#ef4444";
+    setTimeout(() => {
+      statusEl.textContent = "";
+      statusEl.style.color = "";
+    }, 2000);
+  }
+}
+
 // ===== Mechanic dropdown / filters =====
 function mechPopulateMechanicDropdown() {
   if (!mechanicFilterEl) return;
@@ -416,6 +753,10 @@ function mechApplyFiltersAndRender() {
       ? filtered.find((s) => s.mechanic === mechFilter) || null
       : null;
   mechRenderDetail(selected);
+  
+  // Update selected mechanic and render weekly summary
+  selectedMechanicName = mechFilter && mechFilter !== "all" ? mechFilter : null;
+  mechRenderWeeklySummary(selectedMechanicName);
 }
 
 // ===== Data load =====
@@ -423,18 +764,36 @@ async function mechLoad() {
   try {
     if (statusEl) statusEl.textContent = "Loading mechanics…";
 
-    const data = await mechFetchCSV(MECH_JOBS_SHEET);
+    // Load State IDs and jobs in parallel
+    const [stateRows, data] = await Promise.all([
+      mechFetchCSV(MECH_STATE_ID_SHEET),
+      mechFetchCSV(MECH_JOBS_SHEET),
+    ]);
+
+    mechBuildStateIdMap(stateRows);
+
     if (!data.length || data.length < 2) {
       throw new Error("No rows in Form responses 1.");
     }
 
     const headers = data[0].map((h) => (h || "").trim());
+    const headersLower = headers.map((h) => h.toLowerCase());
 
     const iTime = headers.indexOf("Timestamp");
     const iMech = headers.indexOf("Mechanic");
     const iAcross = headers.indexOf("How many Across");
     const iWeek = headers.indexOf("Week Ending");
     const iMonth = headers.indexOf("Month Ending");
+    
+    // Find engine replacement column
+    const iEngine = headersLower.findIndex(
+      (h) => h.includes("engine") && h.includes("replacement")
+    );
+    
+    // Find department column
+    const iDept = headersLower.findIndex(
+      (h) => h.includes("department")
+    );
 
     if (iTime === -1 || iMech === -1 || iAcross === -1) {
       throw new Error(
@@ -455,6 +814,22 @@ async function mechLoad() {
       const across = acrossRaw ? parseInt(acrossRaw, 10) || 0 : 0;
       if (!across) continue;
 
+      // Engine replacements: allow numeric count or yes/no
+      let engineCount = 0;
+      if (iEngine !== -1) {
+        const rawEngine = (row[iEngine] || "").trim();
+        if (rawEngine) {
+          const num = Number(rawEngine);
+          if (!Number.isNaN(num) && num > 0) {
+            engineCount = num;
+          } else if (/^(yes|y|true)$/i.test(rawEngine)) {
+            engineCount = 1;
+          }
+        }
+      }
+      
+      const dept = iDept !== -1 ? (row[iDept] || "").trim() : "";
+
       const tsRaw = iTime !== -1 ? row[iTime] : "";
       const weekRaw = iWeek !== -1 ? row[iWeek] : "";
       const monthRaw = iMonth !== -1 ? row[iMonth] : "";
@@ -467,6 +842,8 @@ async function mechLoad() {
       jobs.push({
         mechanic: mech,
         across,
+        engineReplacements: engineCount,
+        department: dept,
         tsDate,
         weekEnd,
         monthEnd,
@@ -521,6 +898,9 @@ document.addEventListener("DOMContentLoaded", () => {
   detailSubtitleEl = document.getElementById("detailSubtitle");
   mechanicDetailEl = document.getElementById("mechanicDetail");
   mechanicsTableSubEl = document.getElementById("mechanicsTableSub");
+
+  weeklySummarySubtitleEl = document.getElementById("weeklySummarySubtitle");
+  weeklySummaryContentEl = document.getElementById("weeklySummaryContent");
 
   if (mechanicsBody) {
     mechanicsBody.addEventListener("click", mechOnTableClick);
