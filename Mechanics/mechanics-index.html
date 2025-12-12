@@ -92,6 +92,118 @@
     }
     table { border-collapse: collapse; }
     th { position: sticky; top: 0; z-index: 5; }
+    
+    /* Dynamic Mechanic Detail Elements */
+    .mechanic-detail-empty {
+      font-size: 11px;
+      color: #9ca3af;
+      line-height: 1.5;
+      text-align: center;
+    }
+    .mechanic-detail-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .mechanic-detail-item {
+      padding: 10px 10px 8px;
+      border-radius: 12px;
+      border: 1px solid rgba(24, 32, 56, 0.9);
+      background: #060b1a;
+    }
+    .mechanic-detail-item-label {
+      font-size: 10px;
+      color: #9ca3af;
+      margin-bottom: 2px;
+    }
+    .mechanic-detail-item-value {
+      font-size: 12px;
+      font-weight: 500;
+      color: #e5e7eb;
+    }
+    
+    /* Weekly Summary Dynamic Elements */
+    .weekly-summary-empty {
+      font-size: 11px;
+      color: #9ca3af;
+      line-height: 1.5;
+      text-align: center;
+      padding: 20px;
+    }
+    .weekly-summary-card {
+      margin-bottom: 12px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(24, 32, 56, 0.9);
+      background: #060b1a;
+    }
+    .weekly-summary-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(24, 32, 56, 0.7);
+    }
+    .weekly-summary-week {
+      font-size: 11px;
+      font-weight: 600;
+      color: #6366f1;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .weekly-summary-copy-btn {
+      padding: 4px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(24, 32, 56, 0.9);
+      background: rgba(79, 70, 229, 0.1);
+      color: #6366f1;
+      font-size: 10px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .weekly-summary-copy-btn:hover {
+      background: rgba(79, 70, 229, 0.2);
+      border-color: #4f46e5;
+    }
+    .weekly-summary-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      font-size: 11px;
+    }
+    .weekly-summary-label {
+      color: #9ca3af;
+    }
+    .weekly-summary-value {
+      color: #e5e7eb;
+      font-weight: 500;
+    }
+    .weekly-summary-copy-all {
+      margin-top: 16px;
+      padding: 10px 16px;
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid #4f46e5;
+      background: rgba(79, 70, 229, 0.15);
+      color: #6366f1;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-align: center;
+    }
+    .weekly-summary-copy-all:hover {
+      background: rgba(79, 70, 229, 0.25);
+      border-color: #6366f1;
+    }
+    
+    /* Responsive */
+    @media (max-width: 900px) {
+      .mechanic-detail-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
   </style>
   <script src="../constants.js"></script>
   <script src="../utils.js"></script>
