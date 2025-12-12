@@ -96,6 +96,72 @@
     .value.in { color: #22c55e; font-weight: 600; }
     .value.out { color: #f97316; font-weight: 600; }
     .value.net { color: #38bdf8; font-weight: 600; }
+    
+    /* Dynamic table elements created by bank-script.js */
+    th .col-resizer {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 6px;
+      height: 100%;
+      cursor: col-resize;
+      user-select: none;
+    }
+    .row-bet {
+      background: rgba(56, 189, 248, 0.05) !important;
+    }
+    .amount-in,
+    .amount-out {
+      font-weight: 600;
+      text-align: right;
+    }
+    .amount-in {
+      color: #22c55e;
+    }
+    .amount-out {
+      color: #f97316;
+    }
+    th.col-date,
+    td.col-date {
+      font-size: 10px;
+      color: #9ca3af;
+    }
+    .pill-type,
+    .pill-cat,
+    .flag-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3px 7px;
+      border-radius: 999px;
+      font-size: 9px;
+      text-transform: uppercase;
+      gap: 4px;
+    }
+    .type-purchase { background: rgba(56,189,248,0.18); color:#38bdf8; }
+    .type-transfer { background: rgba(168,85,247,0.20); color:#a855f7; }
+    .type-business { background: rgba(22,163,74,0.18); color:#22c55e; }
+    .type-tax { background: rgba(250,204,21,0.22); color:#facc15; }
+    .type-other { background: rgba(148,163,253,0.14); color:#818cf8; }
+    .cat-bet-purchase { background: rgba(56,189,248,0.16); color:#38bdf8; }
+    .cat-bet-refund { background: rgba(22,163,74,0.16); color:#22c55e; }
+    .cat-grant { background: rgba(250,204,21,0.18); color:#facc15; }
+    .cat-repair { background: rgba(79,70,229,0.18); color:#a5b4fc; }
+    .cat-tax { background: rgba(248,250,252,0.06); color:#fbbf24; }
+    .cat-other { background: rgba(75,85,99,0.40); color:#9ca3af; }
+    .flag-pill {
+      background: rgba(250,204,21,0.18);
+      color: #facc15;
+    }
+    #detailsPanel .label {
+      text-transform: uppercase;
+      font-size: 9px;
+      letter-spacing: 0.09em;
+      color: #6b7280;
+    }
+    #detailsPanel strong {
+      color: #e5e7eb;
+    }
   </style>
   <script src="../constants.js"></script>
   <script src="../utils.js"></script>
