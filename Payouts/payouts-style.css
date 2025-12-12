@@ -1,6 +1,10 @@
 /* =============================================
    Payouts Page - Specific Styles
    Common styles are in ../shared-styles.css
+   
+   ⚠️ DEPRECATED - REPLACED BY TAILWIND CSS
+   This file is no longer used by payouts-index.html.
+   Kept for reference only.
    ============================================= */
 
 /* ===== Controls row (extends shared-styles.css) ===== */

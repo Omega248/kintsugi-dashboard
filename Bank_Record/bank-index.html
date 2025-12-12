@@ -4,138 +4,298 @@
   <meta charset="UTF-8" />
   <title>Kintsugi Motorworks · Bank Records</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="../shared-styles.css" />
-  <link rel="stylesheet" href="bank-style.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'kintsugi-bg-primary': '#020817',
+            'kintsugi-bg-secondary': '#050816',
+            'kintsugi-bg-tertiary': '#030712',
+            'kintsugi-border-subtle': '#111827',
+            'kintsugi-border-default': '#1f2937',
+            'kintsugi-border-strong': '#374151',
+            'kintsugi-text-primary': '#e5e7eb',
+            'kintsugi-text-secondary': '#9ca3af',
+            'kintsugi-text-tertiary': '#6b7280',
+            'kintsugi-accent': '#4f46e5',
+            'kintsugi-accent-secondary': '#6366f1',
+            'kintsugi-accent-hover': 'rgba(148, 163, 253, 0.12)',
+          },
+          fontSize: {
+            'xs': '9px',
+            'sm': '10px',
+            'base': '11px',
+            'md': '13px',
+            'lg': '14px',
+            'xl': '18px',
+            '2xl': '24px',
+            '3xl': '34px',
+            '4xl': '39px',
+          },
+          borderRadius: {
+            'sm': '8px',
+            'md': '12px',
+            'lg': '18px',
+            'xl': '22px',
+          },
+          boxShadow: {
+            'kintsugi-soft': '0 24px 70px rgba(0, 0, 0, 0.9)',
+            'kintsugi-card': '0 20px 60px rgba(0, 0, 0, 0.75)',
+            'kintsugi-glow': '0 0 18px rgba(79, 70, 229, 0.9)',
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    body::before {
+      content: "";
+      position: fixed;
+      inset: -40vh -40vw;
+      z-index: -1;
+      pointer-events: none;
+      background: radial-gradient(circle at top, #111827 0%, #020817 35%, #000 75%);
+      opacity: 1;
+    }
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+      opacity: 0.03;
+      mix-blend-mode: overlay;
+    }
+    .brand-title-gradient {
+      background: linear-gradient(135deg, #e5e7eb 0%, #d4af37 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .brand-title-line::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 90px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #d4af37, transparent);
+      box-shadow: 0 0 10px rgba(212, 175, 55, 0.4);
+    }
+    .nav-pill-active {
+      background: radial-gradient(circle at top left, #6366f1, #4f46e5);
+      box-shadow: 0 0 16px rgba(79, 70, 229, 0.9), 0 0 4px rgba(212, 175, 55, 0.3);
+    }
+    table { border-collapse: collapse; }
+    th { position: sticky; top: 0; z-index: 5; }
+    /* Custom styles for Bank page specific elements */
+    .value.in { color: #22c55e; font-weight: 600; }
+    .value.out { color: #f97316; font-weight: 600; }
+    .value.net { color: #38bdf8; font-weight: 600; }
+    
+    /* Dynamic table elements created by bank-script.js */
+    th .col-resizer {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 6px;
+      height: 100%;
+      cursor: col-resize;
+      user-select: none;
+    }
+    .row-bet {
+      background: rgba(56, 189, 248, 0.05) !important;
+    }
+    .amount-in,
+    .amount-out {
+      font-weight: 600;
+      text-align: right;
+    }
+    .amount-in {
+      color: #22c55e;
+    }
+    .amount-out {
+      color: #f97316;
+    }
+    th.col-date,
+    td.col-date {
+      font-size: 10px;
+      color: #9ca3af;
+    }
+    .pill-type,
+    .pill-cat,
+    .flag-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3px 7px;
+      border-radius: 999px;
+      font-size: 9px;
+      text-transform: uppercase;
+      gap: 4px;
+    }
+    .type-purchase { background: rgba(56,189,248,0.18); color:#38bdf8; }
+    .type-transfer { background: rgba(168,85,247,0.20); color:#a855f7; }
+    .type-business { background: rgba(22,163,74,0.18); color:#22c55e; }
+    .type-tax { background: rgba(250,204,21,0.22); color:#facc15; }
+    .type-other { background: rgba(148,163,253,0.14); color:#818cf8; }
+    .cat-bet-purchase { background: rgba(56,189,248,0.16); color:#38bdf8; }
+    .cat-bet-refund { background: rgba(22,163,74,0.16); color:#22c55e; }
+    .cat-grant { background: rgba(250,204,21,0.18); color:#facc15; }
+    .cat-repair { background: rgba(79,70,229,0.18); color:#a5b4fc; }
+    .cat-tax { background: rgba(248,250,252,0.06); color:#fbbf24; }
+    .cat-other { background: rgba(75,85,99,0.40); color:#9ca3af; }
+    .flag-pill {
+      background: rgba(250,204,21,0.18);
+      color: #facc15;
+    }
+    #detailsPanel .label {
+      text-transform: uppercase;
+      font-size: 9px;
+      letter-spacing: 0.09em;
+      color: #6b7280;
+    }
+    #detailsPanel strong {
+      color: #e5e7eb;
+    }
+  </style>
   <script src="../constants.js"></script>
   <script src="../utils.js"></script>
   <script src="../payout-helpers.js"></script>
   <script src="../ui-enhancements.js"></script>
   <script src="../kintsugi-core.js"></script>
 </head>
-<body>
-  <div class="app">
+<body class="m-0 p-[18px] font-sans text-kintsugi-text-primary bg-black overflow-x-hidden leading-normal">
+  <div class="max-w-[1600px] mx-auto">
     <!-- Top nav shared across pages -->
-    <div class="top-bar">
+    <header class="flex flex-col items-center justify-start gap-3 mb-5">
       <div>
-        <div class="brand-title">Kintsugi Motorworks</div>
+        <div class="text-4xl font-bold tracking-wide text-center relative pb-1 brand-title-gradient brand-title-line">
+          Kintsugi Motorworks
+        </div>
       </div>
-      <div class="nav-tabs">
-        <!-- adjust paths if your structure differs -->
-        <a href="../index.html" class="nav-pill">Dashboard</a>
-        <a href="../Payouts/payouts-index.html" class="nav-pill">Payouts</a>
-        <a href="../Mechanics/mechanics-index.html" class="nav-pill">Mechanics</a>
-        <a href="./bank-index.html" class="nav-pill active">Bank</a>
-      </div>
-    </div>
+      <nav class="inline-flex p-1 rounded-full bg-gradient-to-br from-[rgba(10,16,32,0.98)] to-[rgba(15,23,42,0.95)] border border-[rgba(79,70,229,0.15)] gap-1 shadow-[0_8px_24px_rgba(0,0,0,0.7),0_0_1px_rgba(79,70,229,0.5)] backdrop-blur-sm">
+        <a href="../index.html" class="px-[22px] py-2 rounded-full text-base text-kintsugi-text-secondary border border-transparent transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] cursor-pointer relative overflow-hidden hover:text-kintsugi-text-primary hover:bg-kintsugi-accent-hover hover:border-[rgba(79,70,229,0.35)] hover:-translate-y-px">Dashboard</a>
+        <a href="../Payouts/payouts-index.html" class="px-[22px] py-2 rounded-full text-base text-kintsugi-text-secondary border border-transparent transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] cursor-pointer relative overflow-hidden hover:text-kintsugi-text-primary hover:bg-kintsugi-accent-hover hover:border-[rgba(79,70,229,0.35)] hover:-translate-y-px">Payouts</a>
+        <a href="../Mechanics/mechanics-index.html" class="px-[22px] py-2 rounded-full text-base text-kintsugi-text-secondary border border-transparent transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] cursor-pointer relative overflow-hidden hover:text-kintsugi-text-primary hover:bg-kintsugi-accent-hover hover:border-[rgba(79,70,229,0.35)] hover:-translate-y-px">Mechanics</a>
+        <a href="./bank-index.html" class="px-[22px] py-2 rounded-full text-base text-white border border-[rgba(212,175,55,0.2)] transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] cursor-pointer relative overflow-hidden nav-pill-active">Bank</a>
+      </nav>
+    </header>
 
     <!-- Ledger title -->
-    <div class="ledger-header">
-      <div class="ledger-title">Transaction Viewer</div>
-      <div class="ledger-badge">Ledger</div>
+    <div class="flex items-center justify-between mb-6 pb-4 border-b border-kintsugi-border-subtle">
+      <div class="text-3xl font-bold text-kintsugi-text-primary tracking-wide">Transaction Viewer</div>
+      <div class="px-4 py-1.5 rounded-full bg-gradient-to-r from-kintsugi-accent to-kintsugi-accent-secondary text-white text-sm font-semibold uppercase tracking-wider shadow-kintsugi-glow">Ledger</div>
     </div>
 
     <!-- Controls: filters, file, search, toggles, export -->
-    <div class="controls-bar">
-      <div class="filter-group">
-        <button class="btn active" data-filter="all">All</button>
-        <button class="btn" data-filter="in">In</button>
-        <button class="btn" data-filter="out">Out</button>
-        <button class="btn" data-qfilter="bet">BET Only</button>
-        <button class="btn" data-qfilter="grant">Grant Only</button>
-        <button class="btn" id="clearQuick">Clear Quick Filters</button>
+    <div class="flex flex-wrap gap-2 items-center mb-4 p-4 rounded-lg bg-kintsugi-bg-secondary border border-kintsugi-border-subtle">
+      <div class="flex flex-wrap gap-1">
+        <button class="px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 bg-kintsugi-accent text-white shadow-kintsugi-glow hover:scale-105" data-filter="all">All</button>
+        <button class="px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 bg-transparent text-kintsugi-text-secondary border border-kintsugi-border-strong hover:bg-kintsugi-accent-hover hover:text-kintsugi-text-primary" data-filter="in">In</button>
+        <button class="px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 bg-transparent text-kintsugi-text-secondary border border-kintsugi-border-strong hover:bg-kintsugi-accent-hover hover:text-kintsugi-text-primary" data-filter="out">Out</button>
+        <button class="px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 bg-transparent text-kintsugi-text-secondary border border-kintsugi-border-strong hover:bg-kintsugi-accent-hover hover:text-kintsugi-text-primary" data-qfilter="bet">BET Only</button>
+        <button class="px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 bg-transparent text-kintsugi-text-secondary border border-kintsugi-border-strong hover:bg-kintsugi-accent-hover hover:text-kintsugi-text-primary" data-qfilter="grant">Grant Only</button>
+        <button class="px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 bg-transparent text-kintsugi-text-secondary border border-kintsugi-border-strong hover:bg-kintsugi-accent-hover hover:text-kintsugi-text-primary" id="clearQuick">Clear Quick Filters</button>
       </div>
 
-      <label class="file-pill">
+      <label class="px-4 py-1.5 rounded-full bg-kintsugi-bg-primary border border-kintsugi-border-strong text-kintsugi-text-primary text-sm cursor-pointer transition-all duration-200 hover:border-kintsugi-accent hover:bg-kintsugi-accent-hover">
         <span>Choose CSV file</span>
-        <input type="file" id="fileInput" accept=".csv" />
+        <input type="file" id="fileInput" accept=".csv" class="hidden" />
       </label>
 
       <input
         id="searchInput"
-        class="search-input"
         type="text"
         placeholder="Search comment / name / id / category..."
+        class="min-w-[280px] px-[10px] py-1.5 rounded-full border border-kintsugi-border-strong bg-kintsugi-bg-primary text-kintsugi-text-primary text-base font-sans outline-none transition-all duration-200 hover:border-kintsugi-accent focus:border-kintsugi-accent focus:shadow-[0_0_0_3px_rgba(79,70,229,0.22)]"
       />
 
-      <label class="toggle">
-        <input type="checkbox" id="toggleBalance" />
+      <label class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-kintsugi-bg-primary border border-kintsugi-border-strong text-kintsugi-text-primary text-sm cursor-pointer transition-all duration-200 hover:border-kintsugi-accent">
+        <input type="checkbox" id="toggleBalance" class="w-4 h-4 rounded border-kintsugi-border-strong bg-kintsugi-bg-secondary text-kintsugi-accent focus:ring-2 focus:ring-kintsugi-accent" />
         <span>Show Balance</span>
       </label>
 
-      <button class="btn" id="toggleTax">Show Tax</button>
+      <button class="px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 bg-transparent text-kintsugi-text-secondary border border-kintsugi-border-strong hover:bg-kintsugi-accent-hover hover:text-kintsugi-text-primary" id="toggleTax">Show Tax</button>
 
-      <button class="btn" id="exportCsvBtn">Export Filtered as CSV</button>
+      <button class="px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 bg-transparent text-kintsugi-text-secondary border border-kintsugi-border-strong hover:bg-kintsugi-accent-hover hover:text-kintsugi-text-primary" id="exportCsvBtn">Export Filtered as CSV</button>
 
-      <div id="status" class="status"></div>
+      <div id="status" class="text-xs text-kintsugi-text-secondary ml-auto"></div>
     </div>
 
     <!-- Config toggle -->
-    <div class="controls-bar">
-      <div id="configToggle" class="btn config-toggle">
+    <div class="flex mb-4">
+      <div id="configToggle" class="px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 bg-kintsugi-bg-secondary text-kintsugi-text-primary border border-kintsugi-border-strong cursor-pointer hover:bg-kintsugi-accent-hover hover:border-kintsugi-accent">
         Config ▾
       </div>
     </div>
 
     <!-- Config panel -->
-    <div class="config-panel" id="configPanel">
-      <label>
-        BET rate ($/BET)
-        <input id="cfgBetRate" type="number" step="1" />
-      </label>
-      <label>
-        Bins per 15 BET
-        <input id="cfgBinsPer15" type="number" step="1" />
-      </label>
-      <label>
-        Manual BET left
-        <input id="cfgManualBetLeft" type="number" step="1" />
-      </label>
-      <label>
-        Manual red bins left
-        <input id="cfgManualRedBins" type="number" step="1" />
-      </label>
-      <button id="applyConfig" class="btn">Apply</button>
+    <div id="configPanel" class="hidden mb-4 p-4 rounded-lg bg-kintsugi-bg-secondary border border-kintsugi-border-subtle">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <label class="flex flex-col gap-1">
+          <span class="text-sm text-kintsugi-text-secondary">BET rate ($/BET)</span>
+          <input id="cfgBetRate" type="number" step="1" class="px-3 py-2 rounded-md border border-kintsugi-border-strong bg-kintsugi-bg-primary text-kintsugi-text-primary outline-none transition-all duration-200 focus:border-kintsugi-accent focus:shadow-[0_0_0_3px_rgba(79,70,229,0.22)]" />
+        </label>
+        <label class="flex flex-col gap-1">
+          <span class="text-sm text-kintsugi-text-secondary">Bins per 15 BET</span>
+          <input id="cfgBinsPer15" type="number" step="1" class="px-3 py-2 rounded-md border border-kintsugi-border-strong bg-kintsugi-bg-primary text-kintsugi-text-primary outline-none transition-all duration-200 focus:border-kintsugi-accent focus:shadow-[0_0_0_3px_rgba(79,70,229,0.22)]" />
+        </label>
+        <label class="flex flex-col gap-1">
+          <span class="text-sm text-kintsugi-text-secondary">Manual BET left</span>
+          <input id="cfgManualBetLeft" type="number" step="1" class="px-3 py-2 rounded-md border border-kintsugi-border-strong bg-kintsugi-bg-primary text-kintsugi-text-primary outline-none transition-all duration-200 focus:border-kintsugi-accent focus:shadow-[0_0_0_3px_rgba(79,70,229,0.22)]" />
+        </label>
+        <label class="flex flex-col gap-1">
+          <span class="text-sm text-kintsugi-text-secondary">Manual red bins left</span>
+          <input id="cfgManualRedBins" type="number" step="1" class="px-3 py-2 rounded-md border border-kintsugi-border-strong bg-kintsugi-bg-primary text-kintsugi-text-primary outline-none transition-all duration-200 focus:border-kintsugi-accent focus:shadow-[0_0_0_3px_rgba(79,70,229,0.22)]" />
+        </label>
+      </div>
+      <button id="applyConfig" class="mt-4 px-4 py-2 rounded-full text-sm font-medium bg-kintsugi-accent text-white shadow-kintsugi-glow transition-all duration-200 hover:scale-105">Apply</button>
     </div>
 
     <!-- Summary row -->
-    <div class="summary-row">
-      <div class="summary-card">
-        <div class="label">Total In (visible)</div>
-        <div id="totalIn" class="value in">$0</div>
-        <div id="countIn" class="hint">0 in transactions</div>
+    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+      <div class="p-4 rounded-lg border border-kintsugi-border-default bg-gradient-to-br from-[rgba(10,14,28,0.85)] to-[rgba(6,10,20,0.90)] shadow-[0_12px_40px_rgba(0,0,0,0.6)] transition-all duration-200 hover:-translate-y-1">
+        <div class="text-xs uppercase tracking-wider text-kintsugi-text-secondary mb-2">Total In (visible)</div>
+        <div id="totalIn" class="text-xl font-semibold mb-1 value in">$0</div>
+        <div id="countIn" class="text-xs text-kintsugi-text-tertiary">0 in transactions</div>
       </div>
-      <div class="summary-card">
-        <div class="label">Total Out (visible)</div>
-        <div id="totalOut" class="value out">$0</div>
-        <div id="countOut" class="hint">0 out transactions</div>
+      <div class="p-4 rounded-lg border border-kintsugi-border-default bg-gradient-to-br from-[rgba(10,14,28,0.85)] to-[rgba(6,10,20,0.90)] shadow-[0_12px_40px_rgba(0,0,0,0.6)] transition-all duration-200 hover:-translate-y-1">
+        <div class="text-xs uppercase tracking-wider text-kintsugi-text-secondary mb-2">Total Out (visible)</div>
+        <div id="totalOut" class="text-xl font-semibold mb-1 value out">$0</div>
+        <div id="countOut" class="text-xs text-kintsugi-text-tertiary">0 out transactions</div>
       </div>
-      <div class="summary-card">
-        <div class="label">Net (visible)</div>
-        <div id="netTotal" class="value net">$0</div>
-        <div class="hint">In − Out (visible rows)</div>
+      <div class="p-4 rounded-lg border border-kintsugi-border-default bg-gradient-to-br from-[rgba(10,14,28,0.85)] to-[rgba(6,10,20,0.90)] shadow-[0_12px_40px_rgba(0,0,0,0.6)] transition-all duration-200 hover:-translate-y-1">
+        <div class="text-xs uppercase tracking-wider text-kintsugi-text-secondary mb-2">Net (visible)</div>
+        <div id="netTotal" class="text-xl font-semibold mb-1 value net">$0</div>
+        <div class="text-xs text-kintsugi-text-tertiary">In − Out (visible rows)</div>
       </div>
-      <div class="summary-card">
-        <div class="label">Total BET (all BET tx)</div>
-        <div id="betTotal" class="value">$0 BET</div>
-        <div id="betNote" class="hint"></div>
+      <div class="p-4 rounded-lg border border-kintsugi-border-default bg-gradient-to-br from-[rgba(10,14,28,0.85)] to-[rgba(6,10,20,0.90)] shadow-[0_12px_40px_rgba(0,0,0,0.6)] transition-all duration-200 hover:-translate-y-1">
+        <div class="text-xs uppercase tracking-wider text-kintsugi-text-secondary mb-2">Total BET (all BET tx)</div>
+        <div id="betTotal" class="text-xl font-semibold text-kintsugi-text-primary mb-1">$0 BET</div>
+        <div id="betNote" class="text-xs text-kintsugi-text-tertiary"></div>
       </div>
-      <div class="summary-card">
-        <div class="label">Bins from BET</div>
-        <div id="binsTotal" class="value">0 bins</div>
-        <div id="binsNote" class="hint"></div>
+      <div class="p-4 rounded-lg border border-kintsugi-border-default bg-gradient-to-br from-[rgba(10,14,28,0.85)] to-[rgba(6,10,20,0.90)] shadow-[0_12px_40px_rgba(0,0,0,0.6)] transition-all duration-200 hover:-translate-y-1">
+        <div class="text-xs uppercase tracking-wider text-kintsugi-text-secondary mb-2">Bins from BET</div>
+        <div id="binsTotal" class="text-xl font-semibold text-kintsugi-text-primary mb-1">0 bins</div>
+        <div id="binsNote" class="text-xs text-kintsugi-text-tertiary"></div>
       </div>
     </div>
 
     <!-- Table -->
-    <div class="table-wrap">
-      <table id="table">
+    <div class="overflow-auto rounded-lg border border-kintsugi-border-subtle bg-kintsugi-bg-primary shadow-[0_12px_40px_rgba(0,0,0,0.6)] max-h-[600px] mb-6">
+      <table id="table" class="w-full text-sm [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_thead_th]:p-3 [&_thead_th]:border-b [&_thead_th]:border-[#0f172a] [&_thead_th]:bg-gradient-to-r [&_thead_th]:from-[#020617] [&_thead_th]:to-[#020817] [&_thead_th]:text-xs [&_thead_th]:uppercase [&_thead_th]:tracking-[0.16em] [&_thead_th]:text-kintsugi-text-secondary [&_thead_th]:font-semibold [&_thead_th]:text-center [&_tbody_tr]:transition-all [&_tbody_tr]:duration-200 [&_tbody_tr:nth-child(even)]:bg-kintsugi-bg-tertiary [&_tbody_tr:hover]:bg-[rgba(79,70,229,0.18)] [&_tbody_tr:hover]:scale-[1.005] [&_tbody_td]:p-3 [&_tbody_td]:border-b [&_tbody_td]:border-[#0f172a] [&_tbody_td]:text-center">
         <thead></thead>
         <tbody></tbody>
       </table>
     </div>
 
     <!-- Details -->
-    <div id="detailsPanel"></div>
+    <div id="detailsPanel" class="p-5 rounded-lg border border-kintsugi-border-subtle bg-kintsugi-bg-secondary shadow-[0_12px_40px_rgba(0,0,0,0.6)]"></div>
   </div>
 
   <script src="bank-script.js"></script>
