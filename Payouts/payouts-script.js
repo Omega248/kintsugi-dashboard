@@ -1,13 +1,6 @@
 // ===== Config (using KINTSUGI_SHEET_ID from kintsugi-core.js) =====
-const PAYOUTS_SHEET = "Form responses 1";
-const STATE_ID_SHEET = "State ID's";
-
-const PAY_PER_REPAIR = 700;
-const REPAIR_RATE = 2500;              // per across, customer billing
-const ENGINE_REPLACEMENT_RATE = 15000; // per engine replacement, customer billing (LSPD)
-const ENGINE_REPLACEMENT_RATE_BCSO = 12100; // per engine replacement, customer billing (BCSO)
-const ENGINE_REIMBURSEMENT = 12000; // reimbursement to mechanic for buying engine
-const ENGINE_BONUS_LSPD = 1500; // 50% of 3k profit on LSPD engine replacements (mechanic share)
+const ORDERS_SHEET = "Orders";
+const DEPUTIES_SHEET = "Deputies";
 
 // ===== State =====
 let weeklyAgg = [];   // mechanic-week aggregates
@@ -68,9 +61,9 @@ function monthKey(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-// Weekly payout comment helper
+// Weekly order comment helper
 function commentForWeek(weekEndDate) {
-  return `Payout for week ending ${fmtDate(weekEndDate)}`;
+  return `Orders for week ending ${fmtDate(weekEndDate)}`;
 }
 
 // Generate copy summary for a weekly payout entry
@@ -80,20 +73,20 @@ function generateWeeklyCopySummary(mechanic, weekEndDate, repairs, engineReplace
   const engineReplacements = Object.values(engineReplacementsByDept).reduce((sum, count) => sum + count, 0);
   const enginePay = calculateEnginePayment(engineReplacementsByDept);
   
-  let summary = `Kintsugi Motorworks - Weekly Payout\n`;
+  let summary = `Kaneshiro Enterprises - Weekly Orders\n`;
   summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  summary += `Mechanic: ${mechanic}\n`;
+  summary += `Deputy: ${mechanic}\n`;
   summary += `State ID: ${stateId}\n`;
   summary += `Week Ending: ${weekEndStr}\n`;
   summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  summary += `Repairs: ${repairs}\n`;
+  summary += `Orders: ${repairs}\n`;
   
   if (engineReplacements > 0) {
-    summary += `Engine Replacements: ${engineReplacements}\n`;
-    summary += `Engine Reimbursement: ${fmtMoney(enginePay)}\n`;
+    summary += `Special Orders: ${engineReplacements}\n`;
+    summary += `Additional Amount: ${fmtMoney(enginePay)}\n`;
   }
   
-  summary += `Total Payout: ${fmtMoney(totalPayout)}\n`;
+  summary += `Total Amount: ${fmtMoney(totalPayout)}\n`;
   summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
   
   return summary;
@@ -121,7 +114,7 @@ async function copyWeeklySummary(btn, mechanic, weekEndDate, repairs, engineRepl
     
     // Show toast notification
     if (typeof kShowToast === "function") {
-      kShowToast("✓ Payout summary copied to clipboard!", "success", 2000);
+      kShowToast("✓ Order summary copied to clipboard!", "success", 2000);
     }
   } else {
     // Show error feedback
@@ -216,37 +209,35 @@ async function loadPayouts() {
   try {
     if (statusEl) statusEl.textContent = "";
 
-    // Load State IDs and payouts in parallel
-    const [stateRows, data] = await Promise.all([
-      fetchCSV(STATE_ID_SHEET),
-      fetchCSV(PAYOUTS_SHEET),
+    // Load Deputies sheet for state IDs (optional) and orders
+    const [deputiesRows, data] = await Promise.all([
+      fetchCSV(DEPUTIES_SHEET).catch(() => []),
+      fetchCSV(ORDERS_SHEET),
     ]);
 
-    buildStateIdMap(stateRows);
+    if (deputiesRows && deputiesRows.length > 0) {
+      buildStateIdMap(deputiesRows);
+    }
 
-    if (data.length < 2) throw new Error("No rows in Form responses 1.");
+    if (data.length < 2) throw new Error("No rows in Orders sheet.");
 
     const headers = data[0].map((h) => h.trim());
     const headersLower = headers.map((h) => h.toLowerCase());
 
-    const iTime = headers.indexOf("Timestamp");
-    const iMech = headers.indexOf("Mechanic");
-    const iOwner = headers.indexOf("Owner of Vehicle");
-    const iPlate = headers.indexOf("Vehicle Plate");
-    const iAcross = headers.indexOf("How many Across");
-    const iWeek = headers.indexOf("Week Ending");
-    const iMonth = headers.indexOf("Month Ending");
-    // any header that contains both "engine" and "replacement"
-    const iEngine = headersLower.findIndex(
-      (h) => h.includes("engine") && h.includes("replacement")
-    );
-    // find department column
-    const iDept = headersLower.findIndex(
-      (h) => h.includes("department")
-    );
+    // Find columns by flexible matching
+    const iTime = headersLower.findIndex((h) => h.includes("time") || h.includes("date"));
+    const iMech = headersLower.findIndex((h) => h.includes("deputy") || h.includes("mechanic") || h.includes("name"));
+    const iOwner = headersLower.findIndex((h) => h.includes("owner") || h.includes("customer"));
+    const iPlate = headersLower.findIndex((h) => h.includes("plate") || h.includes("id"));
+    const iAcross = headersLower.findIndex((h) => h.includes("quantity") || h.includes("qty") || h.includes("across") || h.includes("amount"));
+    const iWeek = headersLower.findIndex((h) => h.includes("week"));
+    const iMonth = headersLower.findIndex((h) => h.includes("month"));
+    const iEngine = headersLower.findIndex((h) => h.includes("engine") && h.includes("replacement"));
+    const iDept = headersLower.findIndex((h) => h.includes("department") || h.includes("agency"));
 
-    if (iMech === -1 || iAcross === -1 || iWeek === -1 || iMonth === -1) {
-      throw new Error("Missing required columns.");
+    // For Orders sheet, we need at least deputy/name and quantity
+    if (iMech === -1 || iAcross === -1) {
+      throw new Error("Missing required columns (Deputy and Quantity).");
     }
 
     weeklyAgg = [];

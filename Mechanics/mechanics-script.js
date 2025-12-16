@@ -1,7 +1,7 @@
 // ===== Config (using KINTSUGI_SHEET_ID from kintsugi-core.js) =====
-const MECH_JOBS_SHEET = "Form responses 1";
-const MECH_STATE_ID_SHEET = "State ID's";
-const MECH_PAY_PER_REPAIR = 700;
+const MECH_JOBS_SHEET = "Orders";
+const MECH_STATE_ID_SHEET = "Deputies";
+const MECH_PAY_PER_REPAIR = 50; // Average order price
 const MECH_ENGINE_REIMBURSEMENT = 12000;
 const MECH_ENGINE_BONUS_LSPD = 1500;
 
