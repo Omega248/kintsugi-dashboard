@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kintsugi · Craftsmanship Dashboard</title>
+  
+  <!-- Core Dependencies -->
+  <script src="../core/models/order.js"></script>
+  <script src="../core/models/payout.js"></script>
+  <script src="../core/models/staff.js"></script>
+  <script src="../core/data/ingestion.js"></script>
+  <script src="../core/utils/subsidiary-rules.js"></script>
+  <script src="../core/utils/time-controls.js"></script>
+  <script src="../core/utils/aggregations.js"></script>
+  <script src="../core/components/kpi-card.js"></script>
+  <script src="../core/theme-engine/theme-engine.js"></script>
+  <script src="../core/navigation/navigation.js"></script>
+  
+  <!-- Kintsugi Specific -->
+  <script src="kintsugi-rules.js"></script>
+  <script src="kintsugi-theme.js"></script>
+  <link rel="stylesheet" href="kintsugi-style.css" />
+  <script defer src="kintsugi-script.js"></script>
+  
+  <!-- Google Fonts for elegant heading -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app">
+    <!-- Navigation -->
+    <div id="nav-container"></div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Page Header -->
+      <header class="page-header">
+        <div class="header-content">
+          <h1 class="page-title">Kintsugi Motorworks</h1>
+          <div class="gold-vein"></div>
+          <p class="page-subtitle">Craftsmanship &amp; Repair Excellence</p>
+        </div>
+        
+        <!-- Time Controls -->
+        <div class="time-controls">
+          <button class="time-btn" data-period="week">Week</button>
+          <button class="time-btn active" data-period="month">Month</button>
+          <button class="time-btn" data-period="custom">Custom</button>
+        </div>
+      </header>
+
+      <!-- Date Range Display -->
+      <div class="date-range-display" id="dateRangeDisplay">
+        Loading...
+      </div>
+
+      <!-- Repair KPIs -->
+      <section class="kpi-section">
+        <h2 class="section-title">
+          <span class="gold-accent">Repair Overview</span>
+        </h2>
+        <div class="kpi-grid" id="repairKPIs">
+          <!-- KPIs will be injected here -->
+        </div>
+      </section>
+
+      <div class="gold-vein"></div>
+
+      <!-- Category Breakdown -->
+      <section class="category-section">
+        <h2 class="section-title">
+          <span class="gold-accent">Repair Categories</span>
+        </h2>
+        <div class="category-grid" id="categoryGrid">
+          <!-- Category cards will be injected here -->
+        </div>
+      </section>
+
+      <div class="gold-vein"></div>
+
+      <!-- Mechanic Craftsmanship View -->
+      <section class="mechanics-section">
+        <h2 class="section-title">
+          <span class="gold-accent">Mechanic Performance</span>
+        </h2>
+        <div class="mechanics-grid" id="mechanicsGrid">
+          <!-- Mechanic cards will be injected here -->
+        </div>
+      </section>
+
+      <div class="gold-vein"></div>
+
+      <!-- Weekly Summary -->
+      <section class="summary-section">
+        <div class="summary-tabs">
+          <button class="summary-tab active" data-tab="weekly">Weekly Summary</button>
+          <button class="summary-tab" data-tab="monthly">Monthly Summary</button>
+        </div>
+        
+        <div class="summary-content">
+          <!-- Weekly Summary -->
+          <div class="summary-panel active" id="weeklySummary">
+            <div class="summary-header">
+              <h3 class="summary-title">Week Ending: <span id="weekEnding">--</span></h3>
+              <button class="btn-copy-summary" id="copyWeeklySummary">Copy Summary</button>
+            </div>
+            <div class="summary-stats" id="weeklyStats">
+              <!-- Stats will be injected -->
+            </div>
+          </div>
+
+          <!-- Monthly Summary -->
+          <div class="summary-panel" id="monthlySummary">
+            <div class="summary-header">
+              <h3 class="summary-title">Month: <span id="monthName">--</span></h3>
+              <button class="btn-copy-summary" id="copyMonthlySummary">Copy Summary</button>
+            </div>
+            <div class="summary-stats" id="monthlyStats">
+              <!-- Stats will be injected -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="gold-vein"></div>
+
+      <!-- Payout Summaries -->
+      <section class="payout-section">
+        <h2 class="section-title">
+          <span class="gold-accent">Mechanic Payouts</span>
+        </h2>
+        <div class="payout-grid" id="payoutGrid">
+          <!-- Payout cards will be injected here -->
+        </div>
+      </section>
+
+      <div class="gold-vein"></div>
+
+      <!-- Repair History Table -->
+      <section class="history-section">
+        <div class="history-header">
+          <h2 class="section-title">
+            <span class="gold-accent">Recent Repairs</span>
+          </h2>
+          <div class="history-controls">
+            <input 
+              type="search" 
+              class="search-input" 
+              id="repairSearch" 
+              placeholder="Search repairs..."
+            />
+            <select class="category-filter" id="categoryFilter">
+              <option value="all">All Categories</option>
+              <option value="standard_repair">Standard Repairs</option>
+              <option value="engine_replacement">Engine Replacements</option>
+              <option value="special_work">Special Work</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="table-container">
+          <table class="repair-table" id="repairTable">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Client</th>
+                <th>Category</th>
+                <th>Mechanic</th>
+                <th>Value</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="repairTableBody">
+              <!-- Rows will be injected -->
+            </tbody>
+          </table>
+        </div>
+        
+        <div class="table-pagination" id="tablePagination">
+          <!-- Pagination will be injected -->
+        </div>
+      </section>
+
+      <!-- Actions Footer -->
+      <footer class="actions-footer">
+        <button class="btn-refresh" id="refreshBtn">
+          <span>↻</span> Refresh Data
+        </button>
+        <a href="../kaneshiro/kaneshiro-index.html" class="btn-secondary">
+          ← Return to Kaneshiro
+        </a>
+      </footer>
+    </main>
+  </div>
+
+  <!-- Custom Date Range Modal -->
+  <div class="modal" id="customDateModal" style="display: none;">
+    <div class="modal-overlay" id="modalOverlay"></div>
+    <div class="modal-content">
+      <h3>Select Custom Date Range</h3>
+      <div class="gold-vein"></div>
+      <div class="date-inputs">
+        <label>
+          Start Date:
+          <input type="date" id="customStartDate" />
+        </label>
+        <label>
+          End Date:
+          <input type="date" id="customEndDate" />
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" id="cancelCustomDate">Cancel</button>
+        <button class="btn btn-primary" id="applyCustomDate">Apply</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
