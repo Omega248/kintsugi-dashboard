@@ -4,7 +4,7 @@ const DEPUTIES_SHEET = "Deputies";
 const PAYOUT_SHEET = "Payout";
 const CONFIG_SHEET = "Config";
 
-// ===== Overview from Orders and Deputies sheets =====
+// ===== Overview from Orders, Deputies, and Payout sheets =====
 
 async function loadOverview() {
   const status = document.getElementById("status");

@@ -920,5 +920,11 @@ document.addEventListener("DOMContentLoaded", () => {
     searchBoxEl.addEventListener("input", debouncedSearch);
   }
 
+  // Set the source sheet link dynamically
+  const sourceSheetLink = document.getElementById("sourceSheetLink");
+  if (sourceSheetLink && typeof KINTSUGI_SHEET_ID !== 'undefined') {
+    sourceSheetLink.href = `https://docs.google.com/spreadsheets/d/${KINTSUGI_SHEET_ID}/edit`;
+  }
+
   mechLoad();
 });
