@@ -1,195 +1,216 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Kaneshiro Enterprises</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="shared-styles.css" />
-  <style>
-    .enterprise-hub {
-      min-height: 100vh;
-      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 2rem;
-    }
-
-    .hub-header {
-      text-align: center;
-      margin-bottom: 4rem;
-    }
-
-    .hub-title {
-      font-size: 3.5rem;
-      font-weight: 700;
-      color: #f8fafc;
-      margin-bottom: 0.5rem;
-      letter-spacing: -0.02em;
-    }
-
-    .hub-subtitle {
-      font-size: 1.25rem;
-      color: #94a3b8;
-      font-weight: 400;
-    }
-
-    .business-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-      gap: 2rem;
-      max-width: 1200px;
-      width: 100%;
-    }
-
-    .business-card {
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 16px;
-      padding: 2.5rem;
-      transition: all 0.3s ease;
-      cursor: pointer;
-      text-decoration: none;
-      color: inherit;
-      display: block;
-    }
-
-    .business-card:hover {
-      background: rgba(255, 255, 255, 0.06);
-      border-color: rgba(139, 92, 246, 0.5);
-      transform: translateY(-4px);
-      box-shadow: 0 12px 40px rgba(139, 92, 246, 0.15);
-    }
-
-    .business-icon {
-      font-size: 3rem;
-      margin-bottom: 1.5rem;
-      display: block;
-    }
-
-    .business-name {
-      font-size: 1.75rem;
-      font-weight: 600;
-      color: #f8fafc;
-      margin-bottom: 0.75rem;
-    }
-
-    .business-description {
-      color: #cbd5e1;
-      font-size: 1rem;
-      line-height: 1.6;
-      margin-bottom: 1.5rem;
-    }
-
-    .business-features {
-      list-style: none;
-      padding: 0;
-      margin: 0 0 1.5rem 0;
-    }
-
-    .business-features li {
-      color: #94a3b8;
-      font-size: 0.875rem;
-      padding: 0.4rem 0;
-      display: flex;
-      align-items: center;
-    }
-
-    .business-features li:before {
-      content: "→";
-      margin-right: 0.75rem;
-      color: #8b5cf6;
-      font-weight: bold;
-    }
-
-    .business-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      color: #8b5cf6;
-      font-weight: 500;
-      font-size: 0.95rem;
-      transition: all 0.2s ease;
-    }
-
-    .business-link:hover {
-      color: #a78bfa;
-      gap: 0.75rem;
-    }
-
-    .hub-footer {
-      margin-top: 4rem;
-      text-align: center;
-      color: #64748b;
-      font-size: 0.875rem;
-    }
-
-    @media (max-width: 768px) {
-      .hub-title {
-        font-size: 2.5rem;
-      }
-      
-      .business-grid {
-        grid-template-columns: 1fr;
-      }
-      
-      .business-card {
-        padding: 2rem;
-      }
-    }
-  </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kaneshiro Enterprises - Business Management Platform</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
-<body>
-  <div class="enterprise-hub">
-    <div class="hub-header">
-      <h1 class="hub-title">Kaneshiro Enterprises</h1>
-      <p class="hub-subtitle">Business Management Hub</p>
-    </div>
-
-    <div class="business-grid">
-      <!-- Kintsugi Motorworks Card -->
-      <a href="Kintsugi/index.html" class="business-card">
-        <span class="business-icon">🔧</span>
-        <h2 class="business-name">Kintsugi Motorworks</h2>
-        <p class="business-description">
-          Professional vehicle repair and maintenance services with comprehensive mechanic performance tracking.
-        </p>
-        <ul class="business-features">
-          <li>Mechanic payouts & performance</li>
-          <li>Repair tracking & analytics</li>
-          <li>Weekly & monthly reports</li>
-          <li>Bank transaction management</li>
-        </ul>
-        <span class="business-link">
-          Open Dashboard
-          <span>→</span>
-        </span>
-      </a>
-
-      <!-- TakoSoya Card -->
-      <a href="TakoSoya/index.html" class="business-card">
-        <span class="business-icon">🍜</span>
-        <h2 class="business-name">TakoSoya</h2>
-        <p class="business-description">
-          Premium food service operations tracking sales to law enforcement agencies and managing receivables.
-        </p>
-        <ul class="business-features">
-          <li>Deputy order management</li>
-          <li>Sales revenue tracking</li>
-          <li>Outstanding balance monitoring</li>
-          <li>Payment tracking (PD/Mayor)</li>
-        </ul>
-        <span class="business-link">
-          Open Dashboard
-          <span>→</span>
-        </span>
-      </a>
-    </div>
-
-    <div class="hub-footer">
-      <p>© Kaneshiro Enterprises · Unified Business Management Platform</p>
-    </div>
+<body class="theme-kaneshiro">
+  <!-- Loading Indicator -->
+  <div id="loader" class="loader">
+    <div class="loader-spinner"></div>
+    <div>Loading data...</div>
   </div>
+
+  <!-- Main Application Container -->
+  <div class="app-container">
+    <!-- Global Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <h1>Kaneshiro Enterprises</h1>
+        <p class="header-subtitle">Business Management Platform</p>
+      </div>
+      
+      <!-- Subsidiary Selector -->
+      <div class="subsidiary-selector">
+        <button class="sub-btn active" data-subsidiary="kaneshiro">
+          <span>All</span>
+        </button>
+        <button class="sub-btn" data-subsidiary="kintsugi">
+          <span>Kintsugi</span>
+        </button>
+        <button class="sub-btn" data-subsidiary="takosuya">
+          <span>Takosuya</span>
+        </button>
+      </div>
+
+      <!-- Actions -->
+      <div class="header-actions">
+        <select id="dateRange" class="date-range-select">
+          <option value="all">All Time</option>
+          <option value="today">Today</option>
+          <option value="week">Last 7 Days</option>
+          <option value="month">Last 30 Days</option>
+        </select>
+        <button class="btn-icon" data-action="refresh" title="Refresh Data">
+          🔄
+        </button>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="app-nav">
+      <button class="nav-tab active" data-view="dashboard">Dashboard</button>
+      <button class="nav-tab" data-view="orders">Orders</button>
+      <button class="nav-tab" data-view="deputies">Deputies</button>
+      <button class="nav-tab" data-view="payout">Payout</button>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="app-main">
+      <!-- Dashboard View -->
+      <div id="dashboardView" class="view-container">
+        <!-- KPI Cards -->
+        <section class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">Total Revenue</div>
+            <div id="kpiRevenue" class="kpi-value">$0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Total Orders</div>
+            <div id="kpiOrders" class="kpi-value">0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Total Payouts</div>
+            <div id="kpiPayouts" class="kpi-value">$0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Active Staff</div>
+            <div id="kpiStaff" class="kpi-value">0</div>
+          </div>
+        </section>
+
+        <!-- Subsidiary Breakdown (Kaneshiro view only) -->
+        <section id="breakdownContainer" class="breakdown-section"></section>
+
+        <!-- Recent Orders -->
+        <section class="data-section">
+          <div class="section-header">
+            <h2>Recent Orders</h2>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Customer</th>
+                  <th>Items</th>
+                  <th>Total</th>
+                  <th>Status</th>
+                  <th id="subsCol" style="display: none;">Subsidiary</th>
+                </tr>
+              </thead>
+              <tbody id="recentOrdersBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- Orders View -->
+      <div id="ordersView" class="view-container" style="display: none;">
+        <section class="view-header">
+          <h2>Orders Management</h2>
+          <p>Manage and track all orders</p>
+        </section>
+
+        <section class="data-section">
+          <div class="section-header">
+            <h3>All Orders</h3>
+            <div class="section-actions">
+              <button class="btn btn-primary" onclick="Helpers.downloadCSV('orders.csv', app.getFilteredData().orders, ['id', 'date', 'customer', 'items', 'total', 'status'])">
+                Export CSV
+              </button>
+            </div>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Date</th>
+                  <th>Customer</th>
+                  <th>Staff</th>
+                  <th>Total</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="ordersTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- Deputies View -->
+      <div id="deputiesView" class="view-container" style="display: none;">
+        <section class="view-header">
+          <h2>Deputies & Staff</h2>
+          <p>View staff performance and metrics</p>
+        </section>
+
+        <section class="data-section">
+          <div class="section-header">
+            <h3>Staff Directory</h3>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>State ID</th>
+                  <th>Orders</th>
+                  <th>Revenue</th>
+                  <th>Payouts</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="deputiesTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- Payout View -->
+      <div id="payoutView" class="view-container" style="display: none;">
+        <section class="view-header">
+          <h2>Payout Tracker</h2>
+          <p>Track payments and compensation</p>
+        </section>
+
+        <section class="data-section">
+          <div class="section-header">
+            <h3>All Payouts</h3>
+            <div class="section-actions">
+              <button class="btn btn-primary" onclick="Helpers.downloadCSV('payouts.csv', app.getFilteredData().payouts, ['person', 'stateId', 'date', 'amount', 'type'])">
+                Export CSV
+              </button>
+            </div>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Person</th>
+                  <th>State ID</th>
+                  <th>Date</th>
+                  <th>Amount</th>
+                  <th>Type</th>
+                </tr>
+              </thead>
+              <tbody id="payoutTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Scripts -->
+  <script src="config.js"></script>
+  <script src="src/data/sheetsClient.js"></script>
+  <script src="src/data/normalizer.js"></script>
+  <script src="src/utils/helpers.js"></script>
+  <script src="src/themes/themeManager.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
