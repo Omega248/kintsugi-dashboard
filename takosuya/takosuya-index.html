@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Takosuya · Operations Dashboard</title>
+  
+  <!-- Core Dependencies -->
+  <script src="../core/models/order.js"></script>
+  <script src="../core/models/payout.js"></script>
+  <script src="../core/models/staff.js"></script>
+  <script src="../core/data/ingestion.js"></script>
+  <script src="../core/utils/subsidiary-rules.js"></script>
+  <script src="../core/utils/time-controls.js"></script>
+  <script src="../core/utils/aggregations.js"></script>
+  <script src="../core/components/kpi-card.js"></script>
+  <script src="../core/theme-engine/theme-engine.js"></script>
+  <script src="../core/navigation/navigation.js"></script>
+  
+  <!-- Takosuya Specific -->
+  <script src="takosuya-rules.js"></script>
+  <script src="takosuya-theme.js"></script>
+  <link rel="stylesheet" href="takosuya-style.css" />
+  <script defer src="takosuya-script.js"></script>
+  
+  <!-- Google Fonts for friendly typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app">
+    <!-- Navigation -->
+    <div id="nav-container"></div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Page Header -->
+      <header class="page-header">
+        <div class="header-content">
+          <h1 class="page-title">🐙 Takosuya</h1>
+          <p class="page-subtitle">Fast-Paced Operations Dashboard</p>
+        </div>
+        
+        <!-- Time Controls -->
+        <div class="time-controls">
+          <button class="time-btn" data-period="day">Today</button>
+          <button class="time-btn active" data-period="week">This Week</button>
+          <button class="time-btn" data-period="month">This Month</button>
+        </div>
+      </header>
+
+      <!-- Date Range Display -->
+      <div class="date-range-display" id="dateRangeDisplay">
+        Loading...
+      </div>
+
+      <!-- Operations KPIs -->
+      <section class="kpi-section">
+        <h2 class="section-title">⚡ Operations Overview</h2>
+        <div class="kpi-grid" id="operationsKPIs">
+          <!-- KPIs will be injected here -->
+        </div>
+      </section>
+
+      <!-- Quick Stats Row -->
+      <section class="quick-stats">
+        <div class="quick-stat-card">
+          <div class="quick-stat-icon">📊</div>
+          <div class="quick-stat-content">
+            <div class="quick-stat-label">Avg Order Value</div>
+            <div class="quick-stat-value" id="avgOrderValue">$0</div>
+          </div>
+        </div>
+        
+        <div class="quick-stat-card">
+          <div class="quick-stat-icon">⏱️</div>
+          <div class="quick-stat-content">
+            <div class="quick-stat-label">Orders/Hour</div>
+            <div class="quick-stat-value" id="ordersPerHour">0</div>
+          </div>
+        </div>
+        
+        <div class="quick-stat-card">
+          <div class="quick-stat-icon">👥</div>
+          <div class="quick-stat-content">
+            <div class="quick-stat-label">Active Team</div>
+            <div class="quick-stat-value" id="activeTeam">0</div>
+          </div>
+        </div>
+        
+        <div class="quick-stat-card">
+          <div class="quick-stat-icon">🎯</div>
+          <div class="quick-stat-content">
+            <div class="quick-stat-label">Today's Target</div>
+            <div class="quick-stat-value" id="targetProgress">0%</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Team Performance -->
+      <section class="team-section">
+        <h2 class="section-title">👨‍🍳 Team Performance</h2>
+        <div class="team-grid" id="teamGrid">
+          <!-- Team member cards will be injected here -->
+        </div>
+      </section>
+
+      <!-- Category Breakdown -->
+      <section class="category-section">
+        <h2 class="section-title">🍽️ Order Categories</h2>
+        <div class="category-grid" id="categoryGrid">
+          <!-- Category cards will be injected here -->
+        </div>
+      </section>
+
+      <!-- Payouts Overview -->
+      <section class="payout-section">
+        <div class="section-header">
+          <h2 class="section-title">💰 Team Payouts</h2>
+          <button class="btn-copy" id="copyPayoutsBtn">Copy Payout Summary</button>
+        </div>
+        <div class="payout-grid" id="payoutGrid">
+          <!-- Payout cards will be injected here -->
+        </div>
+      </section>
+
+      <!-- Recent Orders Table -->
+      <section class="orders-section">
+        <div class="section-header">
+          <h2 class="section-title">📋 Recent Orders</h2>
+          <div class="table-controls">
+            <input 
+              type="search" 
+              class="search-input" 
+              id="orderSearch" 
+              placeholder="Search orders..."
+            />
+            <select class="filter-select" id="statusFilter">
+              <option value="all">All Status</option>
+              <option value="completed">Served</option>
+              <option value="pending">In Kitchen</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="table-container">
+          <table class="orders-table" id="ordersTable">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Customer</th>
+                <th>Items</th>
+                <th>Server</th>
+                <th>Amount</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="ordersTableBody">
+              <!-- Rows will be injected -->
+            </tbody>
+          </table>
+        </div>
+        
+        <div class="table-pagination" id="tablePagination"></div>
+      </section>
+
+      <!-- Daily Summary -->
+      <section class="summary-section">
+        <h2 class="section-title">📈 Daily Summary</h2>
+        <div class="summary-card">
+          <div class="summary-grid" id="dailySummary">
+            <!-- Summary stats will be injected -->
+          </div>
+          <div class="summary-actions">
+            <button class="btn-secondary" id="printSummaryBtn">Print Summary</button>
+            <button class="btn-primary" id="copySummaryBtn">Copy to Clipboard</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Actions Footer -->
+      <footer class="actions-footer">
+        <button class="btn-refresh" id="refreshBtn">
+          <span>🔄</span> Refresh Data
+        </button>
+        <a href="../kaneshiro/kaneshiro-index.html" class="btn-link">
+          ← Back to Kaneshiro
+        </a>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>
