@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kaneshiro Enterprises · Executive Dashboard</title>
+  
+  <!-- Core Dependencies -->
+  <script src="../core/models/order.js"></script>
+  <script src="../core/models/payout.js"></script>
+  <script src="../core/models/staff.js"></script>
+  <script src="../core/data/ingestion.js"></script>
+  <script src="../core/utils/subsidiary-rules.js"></script>
+  <script src="../core/utils/time-controls.js"></script>
+  <script src="../core/utils/aggregations.js"></script>
+  <script src="../core/components/kpi-card.js"></script>
+  <script src="../core/theme-engine/theme-engine.js"></script>
+  <script src="../core/navigation/navigation.js"></script>
+  
+  <!-- Page Specific -->
+  <link rel="stylesheet" href="kaneshiro-style.css" />
+  <script defer src="kaneshiro-script.js"></script>
+</head>
+<body>
+  <div class="app">
+    <!-- Navigation will be injected here -->
+    <div id="nav-container"></div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Header -->
+      <header class="page-header">
+        <div class="header-content">
+          <h1 class="page-title">Executive Dashboard</h1>
+          <p class="page-subtitle">Consolidated oversight across all enterprises</p>
+        </div>
+        
+        <!-- Time Controls -->
+        <div class="time-controls">
+          <button class="time-btn" data-period="day">Day</button>
+          <button class="time-btn" data-period="week">Week</button>
+          <button class="time-btn active" data-period="month">Month</button>
+          <button class="time-btn" data-period="custom">Custom</button>
+        </div>
+      </header>
+
+      <!-- Date Range Display -->
+      <div class="date-range-display" id="dateRangeDisplay">
+        Loading...
+      </div>
+
+      <!-- Consolidated KPIs -->
+      <section class="kpi-section">
+        <h2 class="section-title">Consolidated Performance</h2>
+        <div class="kpi-grid" id="consolidatedKPIs">
+          <!-- KPIs will be injected here -->
+        </div>
+      </section>
+
+      <!-- Subsidiary Comparison -->
+      <section class="comparison-section">
+        <h2 class="section-title">Subsidiary Performance</h2>
+        <div class="comparison-grid">
+          <!-- Kintsugi Card -->
+          <div class="subsidiary-card" id="kintsugiCard">
+            <div class="subsidiary-header">
+              <h3 class="subsidiary-name">Kintsugi</h3>
+              <a href="../kintsugi/kintsugi-index.html" class="subsidiary-link">View Dashboard →</a>
+            </div>
+            <div class="subsidiary-metrics" id="kintsugiMetrics">
+              <!-- Metrics will be injected -->
+            </div>
+          </div>
+
+          <!-- Takosuya Card -->
+          <div class="subsidiary-card" id="takosuyaCard">
+            <div class="subsidiary-header">
+              <h3 class="subsidiary-name">Takosuya</h3>
+              <a href="../takosuya/takosuya-index.html" class="subsidiary-link">View Dashboard →</a>
+            </div>
+            <div class="subsidiary-metrics" id="takosuyaMetrics">
+              <!-- Metrics will be injected -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Alerts Section -->
+      <section class="alerts-section">
+        <h2 class="section-title">Alerts & Notifications</h2>
+        <div class="alerts-container" id="alertsContainer">
+          <!-- Alerts will be injected here -->
+        </div>
+      </section>
+
+      <!-- Executive Summary -->
+      <section class="summary-section">
+        <div class="summary-header">
+          <h2 class="section-title">Executive Summary</h2>
+          <button class="btn-copy" id="copySummaryBtn">Copy Summary</button>
+        </div>
+        <pre class="summary-text" id="summaryText">Loading...</pre>
+      </section>
+
+      <!-- Actions Footer -->
+      <footer class="actions-footer">
+        <button class="btn-refresh" id="refreshBtn">Refresh Data</button>
+        <button class="btn-export" id="exportBtn">Export Report</button>
+      </footer>
+    </main>
+  </div>
+
+  <!-- Custom Date Range Modal (if needed) -->
+  <div class="modal" id="customDateModal" style="display: none;">
+    <div class="modal-content">
+      <h3>Select Custom Date Range</h3>
+      <div class="date-inputs">
+        <label>
+          Start Date:
+          <input type="date" id="customStartDate" />
+        </label>
+        <label>
+          End Date:
+          <input type="date" id="customEndDate" />
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" id="cancelCustomDate">Cancel</button>
+        <button class="btn btn-primary" id="applyCustomDate">Apply</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
