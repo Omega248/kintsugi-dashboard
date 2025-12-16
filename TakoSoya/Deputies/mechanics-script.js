@@ -1,7 +1,7 @@
 // ===== Config (using KINTSUGI_SHEET_ID from kintsugi-core.js) =====
-const MECH_JOBS_SHEET = "Form responses 1";
-const MECH_STATE_ID_SHEET = "State ID's";
-const MECH_PAY_PER_REPAIR = 700;
+const MECH_JOBS_SHEET = "Orders";
+const MECH_STATE_ID_SHEET = "Deputies";
+const MECH_PAY_PER_REPAIR = 50; // Average order price
 const MECH_ENGINE_REIMBURSEMENT = 12000;
 const MECH_ENGINE_BONUS_LSPD = 1500;
 
@@ -918,6 +918,12 @@ document.addEventListener("DOMContentLoaded", () => {
     // Debounce search for better performance
     const debouncedSearch = kDebounce(mechApplyFiltersAndRender, 300);
     searchBoxEl.addEventListener("input", debouncedSearch);
+  }
+
+  // Set the source sheet link dynamically
+  const sourceSheetLink = document.getElementById("sourceSheetLink");
+  if (sourceSheetLink && typeof KINTSUGI_SHEET_ID !== 'undefined') {
+    sourceSheetLink.href = `https://docs.google.com/spreadsheets/d/${KINTSUGI_SHEET_ID}/edit`;
   }
 
   mechLoad();

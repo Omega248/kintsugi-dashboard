@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Kaneshiro Enterprises · TakoSoya</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="../shared-styles.css" />
+  <link rel="stylesheet" href="dashboard-style.css" />
+  <script src="../constants.js"></script>
+  <script src="../utils.js"></script>
+  <script src="../payout-helpers.js"></script>
+  <script src="../preferences.js"></script>
+  <script src="../settings-ui.js"></script>
+  <script src="../ui-enhancements.js"></script>
+  <script src="../kintsugi-core.js"></script>
+</head>
+<body>
+  <div class="app">
+    <!-- Top Navigation -->
+    <header class="top-bar">
+      <div>
+        <div class="brand-title">Kaneshiro Enterprises · TakoSoya</div>
+        <div class="brand-sub">TakoSoya sales &amp; payments overview</div>
+      </div>
+      <nav class="nav-tabs">
+        <a href="../index.html" class="nav-pill">← Kaneshiro Home</a>
+        <a href="index.html" class="nav-pill active">Dashboard</a>
+        <a href="Orders/payouts-index.html" class="nav-pill">Orders</a>
+        <a href="Deputies/mechanics-index.html" class="nav-pill">Deputies</a>
+        <a href="Payout/bank-index.html" class="nav-pill">Payout</a>
+      </nav>
+    </header>
+
+    <!-- Stat cards -->
+    <section class="stat-boxes">
+      <div class="stat-box">
+        <h3 id="title-totalOrders">All-Time Orders</h3>
+        <p id="totalOrders">–</p>
+        <p class="sub" id="tileSub-totalOrders"></p>
+      </div>
+
+      <div class="stat-box">
+        <h3 id="title-totalSales">All-Time Sales Revenue</h3>
+        <p id="totalSales">–</p>
+        <p class="sub" id="tileSub-totalSales"></p>
+      </div>
+
+      <div class="stat-box">
+        <h3 id="title-outstandingBalance">Outstanding Balance Owed</h3>
+        <p id="outstandingBalance">–</p>
+        <p class="sub" id="tileSub-outstandingBalance"></p>
+      </div>
+
+      <div class="stat-box">
+        <h3 id="title-activeDeputies">Active Deputies</h3>
+        <p id="activeDeputies">–</p>
+        <p class="sub" id="tileSub-activeDeputies"></p>
+      </div>
+
+      <div class="stat-box">
+        <h3 id="title-weekStats">This Week</h3>
+        <p id="ordersThisWeek">–</p>
+        <p class="sub" id="salesThisWeek">Sales: –</p>
+      </div>
+
+      <div class="stat-box">
+        <h3 id="title-monthStats">This Month</h3>
+        <p id="ordersThisMonth">–</p>
+        <p class="sub" id="salesThisMonth">Sales: –</p>
+      </div>
+
+      <div class="stat-box">
+        <h3 id="title-topDeputyWeek">Top deputy this week</h3>
+        <p id="topDeputyWeekName">–</p>
+        <p class="sub" id="topDeputyWeekStats">–</p>
+      </div>
+
+      <div class="stat-box">
+        <h3 id="title-latestOrder">Latest Order Date</h3>
+        <p id="latestOrder">–</p>
+        <p class="sub" id="tileSub-latestOrder"></p>
+      </div>
+
+      <div class="stat-box">
+        <h3 id="title-paymentsDue">Payments Due to Business</h3>
+        <p id="paymentsDue">–</p>
+        <p class="sub" id="tileSub-paymentsDue"></p>
+      </div>
+    </section>
+
+    <!-- Quick links -->
+    <section class="cta-row">
+      <div class="cta-card">
+        <h4>Orders</h4>
+        <p>View all TakoSoya orders to deputies with detailed order history.</p>
+        <a href="Orders/payouts-index.html" class="cta-btn">Open Orders View →</a>
+      </div>
+
+      <div class="cta-card">
+        <h4>Deputies</h4>
+        <p>Deputy information and their order history with outstanding balances.</p>
+        <a href="Deputies/mechanics-index.html" class="cta-btn">Open Deputies View →</a>
+      </div>
+
+      <div class="cta-card">
+        <h4>Payout</h4>
+        <p>Track payments owed to Kaneshiro Enterprises by PD/Mayor's office.</p>
+        <a href="Payout/bank-index.html" class="cta-btn">Open Payout View →</a>
+      </div>
+    </section>
+
+    <div id="status" class="status">Loading overview…</div>
+  </div>
+
+  <script src="dashboard-script.js"></script>
+</body>
+</html>

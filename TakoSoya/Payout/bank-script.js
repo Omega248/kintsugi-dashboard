@@ -2,11 +2,10 @@
 
 // Google Sheet
 const SHEET_ID =
-  "1EJxx9BAUyBgj9XImCXQ5_3nr_o5BXyLZ9SSkaww71Ks";
+  "1dE7HwPTh07G6gvNfnd45JiZ2arRH3RnheekPFr-p5Ro";
 
-// Bank data tab (existing)
-const BANK_SHEET =
-  "bank_transactions_64952453_1761436800_1762732799_1762792939175";
+// Payout data tab
+const BANK_SHEET = "Payout";
 
 // Manual/global values tab inside SAME spreadsheet
 // Structure: columns Key | Value (see description above)

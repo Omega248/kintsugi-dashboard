@@ -2,115 +2,194 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Kaneshiro Enterprises · Dashboard</title>
+  <title>Kaneshiro Enterprises</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="shared-styles.css" />
-  <link rel="stylesheet" href="dashboard-style.css" />
-  <script src="constants.js"></script>
-  <script src="utils.js"></script>
-  <script src="payout-helpers.js"></script>
-  <script src="preferences.js"></script>
-  <script src="settings-ui.js"></script>
-  <script src="ui-enhancements.js"></script>
-  <script src="kintsugi-core.js"></script>
+  <style>
+    .enterprise-hub {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .hub-header {
+      text-align: center;
+      margin-bottom: 4rem;
+    }
+
+    .hub-title {
+      font-size: 3.5rem;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    .hub-subtitle {
+      font-size: 1.25rem;
+      color: #94a3b8;
+      font-weight: 400;
+    }
+
+    .business-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      gap: 2rem;
+      max-width: 1200px;
+      width: 100%;
+    }
+
+    .business-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 2.5rem;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+    }
+
+    .business-card:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(139, 92, 246, 0.5);
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(139, 92, 246, 0.15);
+    }
+
+    .business-icon {
+      font-size: 3rem;
+      margin-bottom: 1.5rem;
+      display: block;
+    }
+
+    .business-name {
+      font-size: 1.75rem;
+      font-weight: 600;
+      color: #f8fafc;
+      margin-bottom: 0.75rem;
+    }
+
+    .business-description {
+      color: #cbd5e1;
+      font-size: 1rem;
+      line-height: 1.6;
+      margin-bottom: 1.5rem;
+    }
+
+    .business-features {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 1.5rem 0;
+    }
+
+    .business-features li {
+      color: #94a3b8;
+      font-size: 0.875rem;
+      padding: 0.4rem 0;
+      display: flex;
+      align-items: center;
+    }
+
+    .business-features li:before {
+      content: "→";
+      margin-right: 0.75rem;
+      color: #8b5cf6;
+      font-weight: bold;
+    }
+
+    .business-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: #8b5cf6;
+      font-weight: 500;
+      font-size: 0.95rem;
+      transition: all 0.2s ease;
+    }
+
+    .business-link:hover {
+      color: #a78bfa;
+      gap: 0.75rem;
+    }
+
+    .hub-footer {
+      margin-top: 4rem;
+      text-align: center;
+      color: #64748b;
+      font-size: 0.875rem;
+    }
+
+    @media (max-width: 768px) {
+      .hub-title {
+        font-size: 2.5rem;
+      }
+      
+      .business-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .business-card {
+        padding: 2rem;
+      }
+    }
+  </style>
 </head>
 <body>
-  <div class="app">
-    <!-- Top Navigation -->
-    <header class="top-bar">
-      <div>
-        <div class="brand-title">Kaneshiro Enterprises</div>
-        <div class="brand-sub">TakoSoya sales &amp; payments overview</div>
-      </div>
-      <nav class="nav-tabs">
-        <a href="index.html" class="nav-pill active">Dashboard</a>
-        <a href="Payouts/payouts-index.html" class="nav-pill">Orders</a>
-        <a href="Mechanics/mechanics-index.html" class="nav-pill">Deputies</a>
-        <a href="Bank_Record/bank-index.html" class="nav-pill">Payout</a>
-      </nav>
-    </header>
+  <div class="enterprise-hub">
+    <div class="hub-header">
+      <h1 class="hub-title">Kaneshiro Enterprises</h1>
+      <p class="hub-subtitle">Business Management Hub</p>
+    </div>
 
-    <!-- Stat cards -->
-    <section class="stat-boxes">
-      <div class="stat-box">
-        <h3 id="title-totalOrders">All-Time Orders</h3>
-        <p id="totalOrders">–</p>
-        <p class="sub" id="tileSub-totalOrders"></p>
-      </div>
+    <div class="business-grid">
+      <!-- Kintsugi Motorworks Card -->
+      <a href="Kintsugi/index.html" class="business-card">
+        <span class="business-icon">🔧</span>
+        <h2 class="business-name">Kintsugi Motorworks</h2>
+        <p class="business-description">
+          Professional vehicle repair and maintenance services with comprehensive mechanic performance tracking.
+        </p>
+        <ul class="business-features">
+          <li>Mechanic payouts & performance</li>
+          <li>Repair tracking & analytics</li>
+          <li>Weekly & monthly reports</li>
+          <li>Bank transaction management</li>
+        </ul>
+        <span class="business-link">
+          Open Dashboard
+          <span>→</span>
+        </span>
+      </a>
 
-      <div class="stat-box">
-        <h3 id="title-totalSales">All-Time Sales Revenue</h3>
-        <p id="totalSales">–</p>
-        <p class="sub" id="tileSub-totalSales"></p>
-      </div>
+      <!-- TakoSoya Card -->
+      <a href="TakoSoya/index.html" class="business-card">
+        <span class="business-icon">🍜</span>
+        <h2 class="business-name">TakoSoya</h2>
+        <p class="business-description">
+          Premium food service operations tracking sales to law enforcement agencies and managing receivables.
+        </p>
+        <ul class="business-features">
+          <li>Deputy order management</li>
+          <li>Sales revenue tracking</li>
+          <li>Outstanding balance monitoring</li>
+          <li>Payment tracking (PD/Mayor)</li>
+        </ul>
+        <span class="business-link">
+          Open Dashboard
+          <span>→</span>
+        </span>
+      </a>
+    </div>
 
-      <div class="stat-box">
-        <h3 id="title-outstandingBalance">Outstanding Balance Owed</h3>
-        <p id="outstandingBalance">–</p>
-        <p class="sub" id="tileSub-outstandingBalance"></p>
-      </div>
-
-      <div class="stat-box">
-        <h3 id="title-activeDeputies">Active Deputies</h3>
-        <p id="activeDeputies">–</p>
-        <p class="sub" id="tileSub-activeDeputies"></p>
-      </div>
-
-      <div class="stat-box">
-        <h3 id="title-weekStats">This Week</h3>
-        <p id="ordersThisWeek">–</p>
-        <p class="sub" id="salesThisWeek">Sales: –</p>
-      </div>
-
-      <div class="stat-box">
-        <h3 id="title-monthStats">This Month</h3>
-        <p id="ordersThisMonth">–</p>
-        <p class="sub" id="salesThisMonth">Sales: –</p>
-      </div>
-
-      <div class="stat-box">
-        <h3 id="title-topDeputyWeek">Top deputy this week</h3>
-        <p id="topDeputyWeekName">–</p>
-        <p class="sub" id="topDeputyWeekStats">–</p>
-      </div>
-
-      <div class="stat-box">
-        <h3 id="title-latestOrder">Latest Order Date</h3>
-        <p id="latestOrder">–</p>
-        <p class="sub" id="tileSub-latestOrder"></p>
-      </div>
-
-      <div class="stat-box">
-        <h3 id="title-paymentsDue">Payments Due to Business</h3>
-        <p id="paymentsDue">–</p>
-        <p class="sub" id="tileSub-paymentsDue"></p>
-      </div>
-    </section>
-
-    <!-- Quick links -->
-    <section class="cta-row">
-      <div class="cta-card">
-        <h4>Orders</h4>
-        <p>View all TakoSoya orders to deputies with detailed order history.</p>
-        <a href="Payouts/payouts-index.html" class="cta-btn">Open Orders View →</a>
-      </div>
-
-      <div class="cta-card">
-        <h4>Deputies</h4>
-        <p>Deputy information and their order history with outstanding balances.</p>
-        <a href="Mechanics/mechanics-index.html" class="cta-btn">Open Deputies View →</a>
-      </div>
-
-      <div class="cta-card">
-        <h4>Payout</h4>
-        <p>Track payments owed to Kaneshiro Enterprises by PD/Mayor's office.</p>
-        <a href="Bank_Record/bank-index.html" class="cta-btn">Open Payout View →</a>
-      </div>
-    </section>
-
-    <div id="status" class="status">Loading overview…</div>
+    <div class="hub-footer">
+      <p>© Kaneshiro Enterprises · Unified Business Management Platform</p>
+    </div>
   </div>
-
-  <script src="dashboard-script.js"></script>
 </body>
 </html>

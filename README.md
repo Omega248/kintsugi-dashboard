@@ -1,47 +1,50 @@
-# Kaneshiro Enterprises - TakoSoya Sales Tracking Dashboard
+# Kaneshiro Enterprises - Business Management Hub
 
-A web-based dashboard for tracking TakoSoya sales to deputies and managing payments owed by PD/Mayor's office to Kaneshiro Enterprises.
+A unified web-based dashboard system for managing two distinct businesses under Kaneshiro Enterprises:
+1. **Kintsugi Motorworks** - Vehicle repair and mechanic performance tracking
+2. **TakoSoya** - Food service sales to law enforcement with payment tracking
 
 ## Overview
 
-This dashboard connects to a Google Sheets database to provide real-time tracking of:
+The main landing page provides access to both business dashboards:
+
+### Kintsugi Motorworks
+- Mechanic payouts and performance tracking
+- Repair job management
+- Weekly and monthly reports
+- Bank transaction management
+- Connected to the original Kintsugi Motorworks Google Sheet
+
+### TakoSoya
 - TakoSoya orders to deputies
 - Sales revenue and outstanding balances
 - Deputy order history and profiles
-- Payment tracking for amounts owed to the business
+- Payment tracking for amounts owed by PD/Mayor's office
+- Connected to the TakoSoya Google Sheet
 
 ## Google Sheet Configuration
 
-The dashboard reads data from this Google Sheet:
+### TakoSoya Google Sheet
 **Sheet ID:** `1dE7HwPTh07G6gvNfnd45JiZ2arRH3RnheekPFr-p5Ro`
 
-[Open the Google Sheet](https://docs.google.com/spreadsheets/d/1dE7HwPTh07G6gvNfnd45JiZ2arRH3RnheekPFr-p5Ro/edit?gid=175091786#gid=175091786)
+[Open the TakoSoya Google Sheet](https://docs.google.com/spreadsheets/d/1dE7HwPTh07G6gvNfnd45JiZ2arRH3RnheekPFr-p5Ro/edit?gid=175091786#gid=175091786)
 
-### Required Sheet Tabs
+Required tabs:
+1. **Orders** - Order records (Deputy/Name, Date, Quantity, Price, Agency)
+2. **Deputies** - Deputy information (Deputy/Name, State ID)
+3. **Payout** - Payment tracking (Agency, Balance Owed, Date)
 
-The dashboard expects the following tabs in your Google Sheet:
+### Kintsugi Motorworks Google Sheet
+**Sheet ID:** `1EJxx9BAUyBgj9XImCXQ5_3nr_o5BXyLZ9SSkaww71Ks`
 
-1. **Orders** - Contains order records with columns like:
-   - Deputy/Name
-   - Date/Timestamp
-   - Quantity/Amount
-   - Price/Total
-   - Agency/Department (optional)
+Required tabs:
+1. **Form responses 1** - Job records (Mechanic, How many Across, Week Ending, Month Ending)
+2. **State ID's** - Mechanic state IDs
+3. **bank_transactions_[timestamp]** - Bank transactions
 
-2. **Deputies** - Contains deputy information with columns like:
-   - Deputy/Name
-   - State ID (optional)
-   - Contact info (optional)
-
-3. **Payout** - Contains payment tracking with columns like:
-   - Agency/Department
-   - Balance/Amount Owed
-   - Date
-   - Status (optional)
-
-4. **Config** (optional) - Configuration values as Key-Value pairs
-
-5. **Manual** (optional) - Manual override values
+### Optional Tabs (both sheets)
+- **Config** - Configuration values as Key-Value pairs
+- **Manual** - Manual override values
 
 ### Sheet Sharing Settings
 
@@ -56,34 +59,22 @@ To configure:
 
 ## Features
 
-### Dashboard (index.html)
-- Overview of all-time orders and sales revenue
-- Outstanding balance owed by PD/Mayor's office
-- Active deputies count
-- This week/month statistics
-- Top deputy of the week
-- Quick navigation to detailed views
+### Main Hub (index.html)
+- Unified landing page for Kaneshiro Enterprises
+- Quick access to both business dashboards
+- Business overview cards
 
-### Orders Page (Payouts/)
-- Filterable list of all TakoSoya orders
-- Filter by deputy, agency, week, or month
-- Search functionality
-- Export to CSV
-- Copy order summaries to clipboard
-- Weekly and monthly views
+### TakoSoya Business
+**Dashboard** - Overview of orders, sales, and outstanding balances
+**Orders Page** - Filterable order list with export and search
+**Deputies Page** - Deputy performance profiles and order history
+**Payout Page** - Track payments owed to the business
 
-### Deputies Page (Mechanics/)
-- Deputy performance profiles
-- Total orders per deputy
-- Activity ranges and statistics
-- Weekly breakdown per deputy
-- Search and sort functionality
-
-### Payout Page (Bank_Record/)
-- Track payments owed to Kaneshiro Enterprises
-- View outstanding balances by agency
-- Filter and search transaction history
-- Export payment records
+### Kintsugi Motorworks Business
+**Dashboard** - Mechanic performance and payout overview
+**Payouts Page** - Weekly/monthly mechanic payouts with job details
+**Mechanics Page** - Mechanic profiles with repair statistics
+**Bank Page** - Transaction viewer with BET and bins tracking
 
 ## Technology Stack
 
@@ -96,21 +87,24 @@ To configure:
 
 ```
 /
-├── index.html                  # Main dashboard
-├── dashboard-script.js         # Dashboard logic
+├── index.html                  # Main Kaneshiro Enterprises hub
 ├── constants.js                # Configuration constants
 ├── kintsugi-core.js           # Core utilities (CSV fetch, date/money formatting)
-├── shared-styles.css          # Shared styles across pages
-├── dashboard-style.css        # Dashboard-specific styles
-├── Payouts/
-│   ├── payouts-index.html     # Orders page
-│   └── payouts-script.js      # Orders logic
-├── Mechanics/
-│   ├── mechanics-index.html   # Deputies page
-│   └── mechanics-script.js    # Deputies logic
-└── Bank_Record/
-    ├── bank-index.html        # Payout tracker page
-    └── bank-script.js         # Payout logic
+├── shared-styles.css          # Shared styles across all pages
+│
+├── TakoSoya/                   # TakoSoya business
+│   ├── index.html             # TakoSoya dashboard
+│   ├── dashboard-script.js    # TakoSoya dashboard logic
+│   ├── Orders/                # Order management
+│   ├── Deputies/              # Deputy profiles
+│   └── Payout/                # Payment tracking
+│
+└── Kintsugi/                   # Kintsugi Motorworks business
+    ├── index.html             # Kintsugi dashboard
+    ├── dashboard-script.js    # Kintsugi dashboard logic
+    ├── Payouts/               # Mechanic payouts
+    ├── Mechanics/             # Mechanic profiles
+    └── Bank_Record/           # Bank transactions
 ```
 
 ## Local Development
@@ -138,12 +132,16 @@ This makes it easy to use your existing sheet structure.
 
 ## Customization
 
-### Changing the Google Sheet
+### Changing the Google Sheets
 
-To point the dashboard to a different Google Sheet:
+**For TakoSoya:**
 1. Open `kintsugi-core.js`
-2. Update the `KINTSUGI_SHEET_ID` constant with your sheet ID
-3. Ensure your sheet has the required tabs (Orders, Deputies, Payout)
+2. Update `KINTSUGI_SHEET_ID` to your TakoSoya sheet ID
+3. Ensure your sheet has tabs: Orders, Deputies, Payout
+
+**For Kintsugi Motorworks:**
+1. The original sheet ID is already configured in `kintsugi-core.js`
+2. Kintsugi uses: Form responses 1, State ID's, bank_transactions
 
 ### Updating Sheet Names
 

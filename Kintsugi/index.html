@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Kaneshiro Enterprises · Kintsugi Motorworks</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="../shared-styles.css" />
+  <link rel="stylesheet" href="dashboard-style.css" />
+  <script src="../constants.js"></script>
+  <script src="../utils.js"></script>
+  <script src="../payout-helpers.js"></script>
+  <script src="../preferences.js"></script>
+  <script src="../settings-ui.js"></script>
+  <script src="../ui-enhancements.js"></script>
+  <script src="../kintsugi-core.js"></script>
+</head>
+<body>
+  <div class="app">
+    <!-- Top Navigation -->
+    <header class="top-bar">
+      <div>
+        <div class="brand-title">Kaneshiro Enterprises · Kintsugi Motorworks</div>
+        <div class="brand-sub">Performance &amp; payouts overview</div>
+      </div>
+      <nav class="nav-tabs">
+        <a href="../index.html" class="nav-pill">← Kaneshiro Home</a>
+        <a href="index.html" class="nav-pill active">Dashboard</a>
+        <a href="Payouts/payouts-index.html" class="nav-pill">Payouts</a>
+        <a href="Mechanics/mechanics-index.html" class="nav-pill">Mechanics</a>
+        <a href="Bank_Record/bank-index.html" class="nav-pill">Bank</a>
+      </nav>
+    </header>
+
+    <!-- Stat cards -->
+    <section class="stat-boxes">
+      <div class="stat-box">
+        <h3 id="title-totalRepairs">All-Time Repairs</h3>
+        <p id="totalRepairs">–</p>
+        <p class="sub" id="tileSub-totalRepairs"></p>
+      </div>
+
+      <div class="stat-box">
+        <h3 id="title-totalPayout">All-Time Mechanic Payout @ $700/Repair</h3>
+        <p id="totalPayout">–</p>
+        <p class="sub" id="tileSub-totalPayout"></p>
+      </div>
+
+      <div class="stat-box">
+        <h3 id="title-latestWeek">Latest Week Ending</h3>
+        <p id="latestWeek">–</p>
+        <p class="sub" id="tileSub-latestWeek"></p>
+      </div>
+
+
+<div class="stat-box">
+  <h3 id="title-activeMechanics">Active Mechanics</h3>
+  <p id="activeMechanics">–</p>
+  <p class="sub" id="tileSub-activeMechanics"></p>
+</div>
+
+<div class="stat-box">
+  <h3 id="title-weekStats">This Week</h3>
+  <p id="repairsThisWeek">–</p>
+  <p class="sub" id="payoutThisWeek">Payout: –</p>
+</div>
+
+<div class="stat-box">
+  <h3 id="title-monthStats">This Month</h3>
+  <p id="repairsThisMonth">–</p>
+  <p class="sub" id="payoutThisMonth">Payout: –</p>
+</div>
+
+<div class="stat-box">
+  <h3 id="title-topMechWeek">Top mechanic this week</h3>
+  <p id="topMechWeekName">–</p>
+  <p class="sub" id="topMechWeekStats">–</p>
+</div>
+
+<div class="stat-box">
+  <h3 id="title-betRemaining">BET Remaining</h3>
+        <p id="manualBetLeft">–</p>
+        <p class="sub" id="tileSub-manualBetLeft"></p>
+      </div>
+
+      <div class="stat-box">
+        <h3 id="title-redBins">Red Bins Remaining</h3>
+        <p id="manualRedBins">–</p>
+        <p class="sub" id="tileSub-manualRedBins"></p>
+      </div>
+    </section>
+
+    <!-- Quick links -->
+    <section class="cta-row">
+      <div class="cta-card">
+        <h4>Payouts</h4>
+        <p>Weekly / monthly mechanic payouts, and job-level detail.</p>
+        <a href="Payouts/payouts-index.html" class="cta-btn">Open Payouts View →</a>
+      </div>
+
+      <div class="cta-card">
+        <h4>Bank Records</h4>
+        <p>Transaction viewer, filters &amp; flags with BET / bins metrics.</p>
+        <a href="Bank_Record/bank-index.html" class="cta-btn">Open Bank View →</a>
+      </div>
+    </section>
+
+    <div id="status" class="status">Loading overview…</div>
+  </div>
+
+  <script src="dashboard-script.js"></script>
+</body>
+</html>
