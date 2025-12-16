@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Kintsugi Motorworks · Mechanics</title>
+  <title>Kaneshiro Enterprises · Deputies</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="../shared-styles.css" />
   <link rel="stylesheet" href="mechanics-style.css" />
@@ -17,15 +17,15 @@
     <!-- Top Navigation -->
     <header class="top-bar">
       <div>
-        <div class="brand-title">Kintsugi Motorworks</div>
-        <div class="brand-sub">Mechanic performance profiles</div>
+        <div class="brand-title">Kaneshiro Enterprises</div>
+        <div class="brand-sub">Deputy order profiles</div>
       </div>
 
       <nav class="nav-tabs" aria-label="Primary navigation">
         <a href="../index.html" class="nav-pill">Dashboard</a>
-        <a href="../Payouts/payouts-index.html" class="nav-pill">Payouts</a>
-        <a href="mechanics-index.html" class="nav-pill active">Mechanics</a>
-        <a href="../Bank_Record/bank-index.html" class="nav-pill">Bank</a>
+        <a href="../Payouts/payouts-index.html" class="nav-pill">Orders</a>
+        <a href="mechanics-index.html" class="nav-pill active">Deputies</a>
+        <a href="../Bank_Record/bank-index.html" class="nav-pill">Payout</a>
       </nav>
     </header>
 
@@ -33,13 +33,13 @@
       <!-- Summary intro -->
       <section class="summary">
         <div class="summary-main">
-          <div class="summary-title">Mechanic stats overview</div>
+          <div class="summary-title">Deputy stats overview</div>
           <p class="summary-sub">
-            Live totals and activity range pulled from jobs + payouts data.
+            Order totals and activity pulled from orders + deputies data.
           </p>
           <a
             class="link-soft"
-            href="https://docs.google.com/spreadsheets/d/1EJxx9BAUyBgj9XImCXQ5_3nr_o5BXyLZ9SSkaww71Ks/edit"
+            href="https://docs.google.com/spreadsheets/d/1dE7HwPTh07G6gvNfnd45JiZ2arRH3RnheekPFr-p5Ro/edit?gid=175091786#gid=175091786"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -49,14 +49,14 @@
       </section>
 
       <!-- Global summary cards -->
-      <section class="mechanics-summary-row" aria-label="Global mechanic summary">
+      <section class="mechanics-summary-row" aria-label="Global deputy summary">
         <div class="mechanics-summary-card">
-          <div class="mechanics-summary-label">Total mechanics</div>
+          <div class="mechanics-summary-label">Total deputies</div>
           <div id="sumTotalMechanics" class="mechanics-summary-value">–</div>
           <div id="sumTotalMechanicsSub" class="mechanics-summary-sub"></div>
         </div>
         <div class="mechanics-summary-card">
-          <div class="mechanics-summary-label">Total repairs</div>
+          <div class="mechanics-summary-label">Total orders</div>
           <div id="sumTotalRepairs" class="mechanics-summary-value">–</div>
           <div id="sumTotalRepairsSub" class="mechanics-summary-sub"></div>
         </div>

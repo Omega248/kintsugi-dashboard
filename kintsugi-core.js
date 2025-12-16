@@ -4,7 +4,8 @@
 // =======================================
 
 // Default sheet ID (can be overridden per page if needed)
-const KINTSUGI_SHEET_ID = "1EJxx9BAUyBgj9XImCXQ5_3nr_o5BXyLZ9SSkaww71Ks";
+// Updated to Kaneshiro Enterprises TakoSoya sales tracking sheet
+const KINTSUGI_SHEET_ID = "1dE7HwPTh07G6gvNfnd45JiZ2arRH3RnheekPFr-p5Ro";
 
 // Cache for parsed CSV data to avoid redundant fetches
 const kCsvCache = new Map();

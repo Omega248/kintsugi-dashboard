@@ -7,31 +7,28 @@
 // Note: KINTSUGI_SHEET_ID is defined in kintsugi-core.js
 // This object extends that configuration with additional sheet names
 const KINTSUGI_CONFIG = {
-  // Sheet names
+  // Sheet names for Kaneshiro Enterprises TakoSoya sales tracking
   SHEETS: {
-    JOBS: "Form responses 1",
-    CONFIG: "Config",
-    MANUAL: "Manual",
-    STATE_IDS: "State ID's",
-    BANK: "bank_transactions_64952453_1761436800_1762732799_1762792939175"
+    ORDERS: "Orders",        // TakoSoya orders to deputies
+    DEPUTIES: "Deputies",    // Deputy information and balances
+    PAYOUT: "Payout",        // Outstanding payments owed to business
+    CONFIG: "Config",        // Configuration values
+    MANUAL: "Manual"         // Manual overrides
   }
 };
 
 // ===== Payment Rates =====
 const PAYMENT_RATES = {
-  // Mechanic payments
-  PAY_PER_REPAIR: 700,
+  // TakoSoya sales rates (can be configured per order)
+  DEFAULT_ORDER_PRICE: 50,
   
-  // Customer billing
+  // Legacy rates (kept for backward compatibility if needed)
+  PAY_PER_REPAIR: 700,
   REPAIR_RATE: 2500,
   ENGINE_REPLACEMENT_RATE: 15000,
   ENGINE_REPLACEMENT_RATE_BCSO: 12100,
-  
-  // Engine reimbursement and bonuses
   ENGINE_REIMBURSEMENT: 12000,
   ENGINE_BONUS_LSPD: 1500,
-  
-  // BET and bins
   BET_RATE: 300,
   BINS_PER_15: 10
 };

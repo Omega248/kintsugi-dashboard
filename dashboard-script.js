@@ -1,9 +1,10 @@
 // ===== Config =====
-const JOBS_SHEET = "Form responses 1";
+const ORDERS_SHEET = "Orders";
+const DEPUTIES_SHEET = "Deputies";
+const PAYOUT_SHEET = "Payout";
 const CONFIG_SHEET = "Config";
-const PAY_PER_REPAIR = 700;
 
-// ===== Overview from jobs sheet (GLOBAL ONLY) =====
+// ===== Overview from Orders and Deputies sheets =====
 
 async function loadOverview() {
   const status = document.getElementById("status");
@@ -12,49 +13,53 @@ async function loadOverview() {
     // Show loading state
     if (status) status.textContent = "Loading dashboard...";
     
-    const { data: rows } = await kFetchCSV(JOBS_SHEET, { header: true });
+    // Load both Orders and Deputies sheets
+    const [ordersResult, deputiesResult, payoutResult] = await Promise.all([
+      kFetchCSV(ORDERS_SHEET, { header: true }).catch(err => ({ data: [] })),
+      kFetchCSV(DEPUTIES_SHEET, { header: true }).catch(err => ({ data: [] })),
+      kFetchCSV(PAYOUT_SHEET, { header: true }).catch(err => ({ data: [] }))
+    ]);
     
-    if (!rows.length) {
+    const orders = ordersResult.data || [];
+    const deputies = deputiesResult.data || [];
+    const payouts = payoutResult.data || [];
+    
+    if (!orders.length) {
       if (status) status.textContent = "";
-      kShowEmpty('stat-boxes', 'No jobs data available yet.');
+      kShowEmpty('stat-boxes', 'No orders data available yet.');
       return;
     }
 
-    // infer keys
-    const sample = rows[0];
-    const mechKey =
-      Object.keys(sample).find((k) =>
-        k.toLowerCase().includes("mechanic")
-      ) || "Mechanic";
+    // Infer column names from the Orders sheet
+    const sample = orders[0];
+    const deputyKey = Object.keys(sample).find((k) =>
+      k.toLowerCase().includes("deputy") || k.toLowerCase().includes("name")
+    ) || "Deputy";
 
-    const acrossKey =
-      Object.keys(sample).find((k) =>
-        k.toLowerCase().includes("across")
-      ) ||
-      Object.keys(sample).find((k) =>
-        k.toLowerCase().includes("repairs")
-      );
+    const quantityKey = Object.keys(sample).find((k) =>
+      k.toLowerCase().includes("quantity") || k.toLowerCase().includes("qty") || k.toLowerCase().includes("amount")
+    ) || "Quantity";
 
-    const weekKey =
-      Object.keys(sample).find((k) =>
-        k.toLowerCase().includes("week ending")
-      ) || null;
+    const priceKey = Object.keys(sample).find((k) =>
+      k.toLowerCase().includes("price") || k.toLowerCase().includes("cost") || k.toLowerCase().includes("total")
+    ) || "Price";
 
-    const tsKey =
-      Object.keys(sample).find((k) =>
-        k.toLowerCase().includes("timestamp")
-      ) || null;
+    const dateKey = Object.keys(sample).find((k) =>
+      k.toLowerCase().includes("date") || k.toLowerCase().includes("timestamp")
+    ) || "Date";
 
-    // global aggregates
-    let totalRepairs = 0;
-    const mechanics = new Set();
-    let latestWeekDate = null;
-    let lastActivity = null;
+    // Global aggregates
+    let totalOrders = 0;
+    let totalSales = 0;
+    const deputiesSet = new Set();
+    let latestOrderDate = null;
 
-    // time-bucketed aggregates
-    let repairsThisWeek = 0;
-    let repairsThisMonth = 0;
-    const perMechWeek = {};
+    // Time-bucketed aggregates
+    let ordersThisWeek = 0;
+    let salesThisWeek = 0;
+    let ordersThisMonth = 0;
+    let salesThisMonth = 0;
+    const perDeputyWeek = {};
 
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -69,126 +74,123 @@ async function loadOverview() {
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
     const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
-    rows.forEach((r) => {
-      const mech = (r[mechKey] || "").trim();
-      if (mech) mechanics.add(mech);
+    orders.forEach((r) => {
+      const deputy = (r[deputyKey] || "").trim();
+      if (deputy) deputiesSet.add(deputy);
 
-      const across = acrossKey ? Number(r[acrossKey] || 0) || 0 : 0;
-      totalRepairs += across;
+      const quantity = Number(r[quantityKey] || 1) || 1;
+      const price = Number(r[priceKey] || 0) || 0;
+      
+      totalOrders += quantity;
+      totalSales += price;
 
-      // Week ending for global latest week tile
-      let weekDate = null;
-      if (weekKey && r[weekKey]) {
-        const d = parseDateLike(r[weekKey]);
+      // Parse order date
+      let orderDate = null;
+      if (dateKey && r[dateKey]) {
+        const d = parseDateLike(r[dateKey]);
         if (d && !isNaN(d)) {
-          weekDate = d;
-          if (!latestWeekDate || d > latestWeekDate) {
-            latestWeekDate = d;
+          orderDate = d;
+          if (!latestOrderDate || d > latestOrderDate) {
+            latestOrderDate = d;
           }
         }
       }
 
-      // Prefer timestamp for "this week/month" classification, fall back to week ending
-      let jobDate = null;
-      if (tsKey && r[tsKey]) {
-        const d = parseDateLike(r[tsKey]);
-        if (d && !isNaN(d)) jobDate = d;
-      }
-      if (!jobDate) jobDate = weekDate;
-
-      if (jobDate && !isNaN(jobDate)) {
+      if (orderDate && !isNaN(orderDate)) {
         const dOnly = new Date(
-          jobDate.getFullYear(),
-          jobDate.getMonth(),
-          jobDate.getDate()
+          orderDate.getFullYear(),
+          orderDate.getMonth(),
+          orderDate.getDate()
         );
 
-        if (!lastActivity || dOnly > lastActivity) {
-          lastActivity = dOnly;
-        }
-
         if (dOnly >= weekStart && dOnly <= weekEnd) {
-          repairsThisWeek += across;
-          if (mech) {
-            perMechWeek[mech] = (perMechWeek[mech] || 0) + across;
+          ordersThisWeek += quantity;
+          salesThisWeek += price;
+          if (deputy) {
+            perDeputyWeek[deputy] = (perDeputyWeek[deputy] || 0) + quantity;
           }
         }
 
         if (dOnly >= monthStart && dOnly <= monthEnd) {
-          repairsThisMonth += across;
+          ordersThisMonth += quantity;
+          salesThisMonth += price;
         }
       }
     });
 
-    const totalPayout = totalRepairs * PAY_PER_REPAIR;
-    const payoutThisWeek = repairsThisWeek * PAY_PER_REPAIR;
-    const payoutThisMonth = repairsThisMonth * PAY_PER_REPAIR;
+    // Calculate outstanding balance from Payout sheet
+    let outstandingBalance = 0;
+    let paymentsDue = 0;
+    
+    if (payouts.length > 0) {
+      const payoutSample = payouts[0];
+      const balanceKey = Object.keys(payoutSample).find((k) =>
+        k.toLowerCase().includes("balance") || k.toLowerCase().includes("owed") || k.toLowerCase().includes("amount")
+      ) || "Balance";
+      
+      payouts.forEach((p) => {
+        const balance = Number(p[balanceKey] || 0) || 0;
+        outstandingBalance += balance;
+        if (balance > 0) paymentsDue += balance;
+      });
+    }
 
-    // Top mechanic this week
-    let topMechName = null;
-    let topMechRepairs = 0;
-    Object.entries(perMechWeek).forEach(([name, reps]) => {
-      if (reps > topMechRepairs) {
-        topMechRepairs = reps;
-        topMechName = name;
+    // Top deputy this week
+    let topDeputyName = null;
+    let topDeputyOrders = 0;
+    Object.entries(perDeputyWeek).forEach(([name, orders]) => {
+      if (orders > topDeputyOrders) {
+        topDeputyOrders = orders;
+        topDeputyName = name;
       }
     });
 
-    kSetText("totalRepairs", totalRepairs.toLocaleString());
-    kSetText("totalPayout", kFmtMoney(totalPayout));
-    kSetText("activeMechanics", mechanics.size.toLocaleString());
-    kSetText("latestWeek", latestWeekDate ? kFmtDate(latestWeekDate) : "—");
+    // Update UI
+    kSetText("totalOrders", totalOrders.toLocaleString());
+    kSetText("totalSales", kFmtMoney(totalSales));
+    kSetText("outstandingBalance", kFmtMoney(outstandingBalance));
+    kSetText("activeDeputies", deputiesSet.size.toLocaleString());
+    kSetText("latestOrder", latestOrderDate ? kFmtDate(latestOrderDate) : "—");
 
     // Week/month KPIs
-    kSetText("repairsThisWeek", repairsThisWeek.toLocaleString());
-    kSetText(
-      "payoutThisWeek",
-      "Payout: " + kFmtMoney(payoutThisWeek)
-    );
+    kSetText("ordersThisWeek", ordersThisWeek.toLocaleString());
+    kSetText("salesThisWeek", "Sales: " + kFmtMoney(salesThisWeek));
 
-    kSetText("repairsThisMonth", repairsThisMonth.toLocaleString());
-    kSetText(
-      "payoutThisMonth",
-      "Payout: " + kFmtMoney(payoutThisMonth)
-    );
+    kSetText("ordersThisMonth", ordersThisMonth.toLocaleString());
+    kSetText("salesThisMonth", "Sales: " + kFmtMoney(salesThisMonth));
 
-    // Top mechanic this week
-    if (topMechName) {
-      kSetText("topMechWeekName", topMechName);
-      kSetText(
-        "topMechWeekStats",
-        topMechRepairs.toLocaleString() +
-          " repairs · " +
-          kFmtMoney(topMechRepairs * PAY_PER_REPAIR)
-      );
+    // Top deputy this week
+    if (topDeputyName) {
+      kSetText("topDeputyWeekName", topDeputyName);
+      kSetText("topDeputyWeekStats", topDeputyOrders.toLocaleString() + " orders");
     } else {
-      kSetText("topMechWeekName", "—");
-      kSetText("topMechWeekStats", "No repairs logged this week");
+      kSetText("topDeputyWeekName", "—");
+      kSetText("topDeputyWeekStats", "No orders logged this week");
     }
 
+    // Payments due
+    kSetText("paymentsDue", kFmtMoney(paymentsDue));
+
     // Subtitles
-    kSetText("tileSub-totalRepairs", "");
-    kSetText("tileSub-totalPayout", "");
-    kSetText("tileSub-activeMechanics", "");
-    kSetText("tileSub-manualBetLeft", "");
-    kSetText("tileSub-manualRedBins", "");
-    kSetText(
-      "tileSub-latestWeek",
-      lastActivity ? "Last job: " + kFmtDate(lastActivity) : ""
-    );
+    kSetText("tileSub-totalOrders", "TakoSoya orders fulfilled");
+    kSetText("tileSub-totalSales", "Total revenue generated");
+    kSetText("tileSub-outstandingBalance", "Balance owed by PD/Mayor");
+    kSetText("tileSub-activeDeputies", "Unique deputies served");
+    kSetText("tileSub-latestOrder", "Most recent order date");
+    kSetText("tileSub-paymentsDue", "Payments pending from agencies");
 
     if (status) {
       status.textContent = "";
     }
   } catch (err) {
-    console.error("Error loading overview from jobs sheet", err);
+    console.error("Error loading overview from orders sheet", err);
     if (status) {
       status.textContent = "";
     }
     
     // Show user-friendly error message
     const errorMsg = err.message.includes('404') || err.message.includes('not found')
-      ? 'Unable to load jobs data. Please check sheet configuration.'
+      ? 'Unable to load orders data. Please check sheet configuration.'
       : err.message.includes('403') || err.message.includes('denied')
       ? 'Access denied. Please check sheet sharing settings.'
       : 'Unable to load dashboard data. Please try refreshing the page.';
@@ -197,7 +199,7 @@ async function loadOverview() {
   }
 }
 
-// ===== Config sheet (BET / bin manual overrides) =====
+// ===== Config sheet (optional configuration values) =====
 
 async function loadConfig() {
   try {
@@ -215,18 +217,8 @@ async function loadConfig() {
       map[key] = isNaN(num) ? raw : num;
     });
 
-    if (map.MANUAL_BET_LEFT !== undefined) {
-      kSetText(
-        "manualBetLeft",
-        Number(map.MANUAL_BET_LEFT || 0).toLocaleString()
-      );
-    }
-    if (map.MANUAL_RED_BINS !== undefined) {
-      kSetText(
-        "manualRedBins",
-        Number(map.MANUAL_RED_BINS || 0).toLocaleString()
-      );
-    }
+    // Apply any config values if they exist
+    // Currently no manual overrides needed for Kaneshiro Enterprises
   } catch (err) {
     console.error("Error loading Config sheet", err);
     // Config is optional, so we don't show error to user
@@ -281,12 +273,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   kSyncNavLinksWithCurrentSearch();
   initKeyboardShortcuts();
   
-  // Load overview and config in parallel for better performance
+  // Load overview first
   try {
-    await Promise.all([
-      loadOverview(),
-      loadConfig()
-    ]);
+    await loadOverview();
+    await loadConfig();
   } catch (err) {
     console.error('Error during dashboard initialization:', err);
   }

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Kintsugi Motorworks · Dashboard</title>
+  <title>Kaneshiro Enterprises · Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="shared-styles.css" />
   <link rel="stylesheet" href="dashboard-style.css" />
@@ -19,87 +19,92 @@
     <!-- Top Navigation -->
     <header class="top-bar">
       <div>
-        <div class="brand-title">Kintsugi Motorworks</div>
-        <div class="brand-sub">Performance &amp; payouts overview</div>
+        <div class="brand-title">Kaneshiro Enterprises</div>
+        <div class="brand-sub">TakoSoya sales &amp; payments overview</div>
       </div>
       <nav class="nav-tabs">
         <a href="index.html" class="nav-pill active">Dashboard</a>
-        <a href="Payouts/payouts-index.html" class="nav-pill">Payouts</a>
-        <a href="Mechanics/mechanics-index.html" class="nav-pill">Mechanics</a>
-        <a href="Bank_Record/bank-index.html" class="nav-pill">Bank</a>
+        <a href="Payouts/payouts-index.html" class="nav-pill">Orders</a>
+        <a href="Mechanics/mechanics-index.html" class="nav-pill">Deputies</a>
+        <a href="Bank_Record/bank-index.html" class="nav-pill">Payout</a>
       </nav>
     </header>
 
     <!-- Stat cards -->
     <section class="stat-boxes">
       <div class="stat-box">
-        <h3 id="title-totalRepairs">All-Time Repairs</h3>
-        <p id="totalRepairs">–</p>
-        <p class="sub" id="tileSub-totalRepairs"></p>
+        <h3 id="title-totalOrders">All-Time Orders</h3>
+        <p id="totalOrders">–</p>
+        <p class="sub" id="tileSub-totalOrders"></p>
       </div>
 
       <div class="stat-box">
-        <h3 id="title-totalPayout">All-Time Mechanic Payout @ $700/Repair</h3>
-        <p id="totalPayout">–</p>
-        <p class="sub" id="tileSub-totalPayout"></p>
+        <h3 id="title-totalSales">All-Time Sales Revenue</h3>
+        <p id="totalSales">–</p>
+        <p class="sub" id="tileSub-totalSales"></p>
       </div>
 
       <div class="stat-box">
-        <h3 id="title-latestWeek">Latest Week Ending</h3>
-        <p id="latestWeek">–</p>
-        <p class="sub" id="tileSub-latestWeek"></p>
-      </div>
-
-
-<div class="stat-box">
-  <h3 id="title-activeMechanics">Active Mechanics</h3>
-  <p id="activeMechanics">–</p>
-  <p class="sub" id="tileSub-activeMechanics"></p>
-</div>
-
-<div class="stat-box">
-  <h3 id="title-weekStats">This Week</h3>
-  <p id="repairsThisWeek">–</p>
-  <p class="sub" id="payoutThisWeek">Payout: –</p>
-</div>
-
-<div class="stat-box">
-  <h3 id="title-monthStats">This Month</h3>
-  <p id="repairsThisMonth">–</p>
-  <p class="sub" id="payoutThisMonth">Payout: –</p>
-</div>
-
-<div class="stat-box">
-  <h3 id="title-topMechWeek">Top mechanic this week</h3>
-  <p id="topMechWeekName">–</p>
-  <p class="sub" id="topMechWeekStats">–</p>
-</div>
-
-<div class="stat-box">
-  <h3 id="title-betRemaining">BET Remaining</h3>
-        <p id="manualBetLeft">–</p>
-        <p class="sub" id="tileSub-manualBetLeft"></p>
+        <h3 id="title-outstandingBalance">Outstanding Balance Owed</h3>
+        <p id="outstandingBalance">–</p>
+        <p class="sub" id="tileSub-outstandingBalance"></p>
       </div>
 
       <div class="stat-box">
-        <h3 id="title-redBins">Red Bins Remaining</h3>
-        <p id="manualRedBins">–</p>
-        <p class="sub" id="tileSub-manualRedBins"></p>
+        <h3 id="title-activeDeputies">Active Deputies</h3>
+        <p id="activeDeputies">–</p>
+        <p class="sub" id="tileSub-activeDeputies"></p>
+      </div>
+
+      <div class="stat-box">
+        <h3 id="title-weekStats">This Week</h3>
+        <p id="ordersThisWeek">–</p>
+        <p class="sub" id="salesThisWeek">Sales: –</p>
+      </div>
+
+      <div class="stat-box">
+        <h3 id="title-monthStats">This Month</h3>
+        <p id="ordersThisMonth">–</p>
+        <p class="sub" id="salesThisMonth">Sales: –</p>
+      </div>
+
+      <div class="stat-box">
+        <h3 id="title-topDeputyWeek">Top deputy this week</h3>
+        <p id="topDeputyWeekName">–</p>
+        <p class="sub" id="topDeputyWeekStats">–</p>
+      </div>
+
+      <div class="stat-box">
+        <h3 id="title-latestOrder">Latest Order Date</h3>
+        <p id="latestOrder">–</p>
+        <p class="sub" id="tileSub-latestOrder"></p>
+      </div>
+
+      <div class="stat-box">
+        <h3 id="title-paymentsDue">Payments Due to Business</h3>
+        <p id="paymentsDue">–</p>
+        <p class="sub" id="tileSub-paymentsDue"></p>
       </div>
     </section>
 
     <!-- Quick links -->
     <section class="cta-row">
       <div class="cta-card">
-        <h4>Payouts</h4>
-        <p>Weekly / monthly mechanic payouts, and job-level detail.</p>
-        <a href="Payouts/payouts-index.html" class="cta-btn">Open Payouts View →</a>
+        <h4>Orders</h4>
+        <p>View all TakoSoya orders to deputies with detailed order history.</p>
+        <a href="Payouts/payouts-index.html" class="cta-btn">Open Orders View →</a>
       </div>
 
       <div class="cta-card">
-        <h4>Bank Records</h4>
-        <p>Transaction viewer, filters &amp; flags with BET / bins metrics.</p>
-        <a href="Bank_Record/bank-index.html" class="cta-btn">Open Bank View →</a>
+        <h4>Deputies</h4>
+        <p>Deputy information and their order history with outstanding balances.</p>
+        <a href="Mechanics/mechanics-index.html" class="cta-btn">Open Deputies View →</a>
+      </div>
+
+      <div class="cta-card">
+        <h4>Payout</h4>
+        <p>Track payments owed to Kaneshiro Enterprises by PD/Mayor's office.</p>
+        <a href="Bank_Record/bank-index.html" class="cta-btn">Open Payout View →</a>
       </div>
     </section>
 

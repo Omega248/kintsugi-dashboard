@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Kintsugi Motorworks · Payouts</title>
+  <title>Kaneshiro Enterprises · Orders</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="../shared-styles.css" />
   <link rel="stylesheet" href="payouts-style.css" />
@@ -18,40 +18,40 @@
     <!-- Shared Top Nav -->
     <header class="top-bar">
       <div>
-        <div class="brand-title">Kintsugi Motorworks</div>
-        <div class="brand-sub">Payouts &amp; jobs</div>
+        <div class="brand-title">Kaneshiro Enterprises</div>
+        <div class="brand-sub">Orders &amp; sales</div>
       </div>
       <nav class="nav-tabs">
         <a href="../index.html" class="nav-pill">Dashboard</a>
-        <a href="payouts-index.html" class="nav-pill active">Payouts</a>
-        <a href="../Mechanics/mechanics-index.html" class="nav-pill">Mechanics</a>
-        <a href="../Bank_Record/bank-index.html" class="nav-pill">Bank</a>
+        <a href="payouts-index.html" class="nav-pill active">Orders</a>
+        <a href="../Mechanics/mechanics-index.html" class="nav-pill">Deputies</a>
+        <a href="../Bank_Record/bank-index.html" class="nav-pill">Payout</a>
       </nav>
     </header>
 
     <main class="page-shell">
       <section class="summary">
         <div class="summary-main">
-          <div class="summary-title">Payouts overview</div>
+          <div class="summary-title">Orders overview</div>
           <p class="summary-sub">
-            Live jobs and payout totals from the mechanic repair sheet.
+            TakoSoya orders to deputies from the orders sheet.
           </p>
         </div>
       </section>
 
       <!-- Controls -->
       <div class="controls">
-        <span class="label-soft">Mechanic:</span>
+        <span class="label-soft">Deputy:</span>
         <span class="select-wrap">
           <select id="mechanicFilter" class="select-pill">
-            <option value="all">All Mechanics</option>
+            <option value="all">All Deputies</option>
           </select>
         </span>
 
-        <span class="label-soft">Department:</span>
+        <span class="label-soft">Agency:</span>
         <span class="select-wrap">
           <select id="departmentFilter" class="select-pill">
-            <option value="all">All Departments</option>
+            <option value="all">All Agencies</option>
           </select>
         </span>
 
@@ -73,7 +73,7 @@
           id="jobsSearch"
           class="search-input"
           type="text"
-          placeholder="Search jobs by mechanic / owner / plate..."
+          placeholder="Search orders by deputy / agency..."
         />
 
         <button id="exportPayoutsBtn" class="btn">
