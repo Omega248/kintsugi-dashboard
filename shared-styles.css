@@ -493,14 +493,13 @@ table {
 
 th,
 td {
-  padding: 10px 12px;
+  padding: 7px 12px;
   border-bottom: 1px solid #0f172a;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: center;
   vertical-align: middle;
-  height: 44px;
 }
 
 th {
@@ -580,9 +579,7 @@ tbody tr:nth-child(even) {
 }
 
 tbody tr:hover {
-  background: rgba(79, 70, 229, 0.18);
-  transform: scale(1.01);
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+  background: rgba(79, 70, 229, 0.12);
 }
 
 tbody tr:hover::after {
@@ -590,7 +587,7 @@ tbody tr:hover::after {
 }
 
 tbody tr:active {
-  transform: scale(0.99);
+  background: rgba(79, 70, 229, 0.08);
 }
 
 /* Search highlighting */
