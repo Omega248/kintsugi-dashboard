@@ -7,7 +7,7 @@
 
 .stat-boxes {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 20px;
   margin-bottom: var(--space-lg);
   margin-top: var(--space-md);
@@ -129,9 +129,8 @@
 /* ===== CTA Cards ===== */
 
 .cta-row {
-  display: flex;
-  justify-content: center;
-  align-items: stretch;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: var(--space-lg);
   margin: 50px auto var(--space-md) auto;
   max-width: 1200px;
@@ -144,7 +143,6 @@
   background: rgba(5, 9, 20, 0.98);
   border: 1px solid var(--border-subtle);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75);
-  flex: 0 1 460px;
   transition: all var(--duration-fast) var(--ease-smooth);
   position: relative;
   overflow: hidden;
@@ -237,13 +235,16 @@
   box-shadow: 0 8px 20px rgba(79, 70, 229, 0.8);
 }
 
-/* ===== Responsive Design ===== */
+/* Hide empty sub-text paragraphs to avoid blank gap space */
+.stat-box .sub:empty {
+  display: none;
+}
 
 /* ===== Responsive Design ===== */
 
 @media (max-width: 767px) {
   .stat-boxes {
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: var(--space-sm);
   }
   
@@ -264,7 +265,7 @@
   }
   
   .cta-row {
-    flex-direction: column;
+    grid-template-columns: 1fr;
     padding: 0;
   }
   
@@ -273,14 +274,8 @@
   }
 }
 
-@media (min-width: 768px) and (max-width: 1023px) {
-  .stat-boxes {
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  }
-}
-
 @media (min-width: 1440px) {
   .stat-boxes {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
 }

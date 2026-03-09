@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Kintsugi Motorworks · Analytics</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="../shared-styles.css" />
+  <link rel="stylesheet" href="analytics-style.css" />
+  <script src="../constants.js"></script>
+  <script src="../utils.js"></script>
+  <script src="../payout-helpers.js"></script>
+  <script src="../ui-enhancements.js"></script>
+  <script src="../kintsugi-core.js"></script>
+</head>
+<body>
+  <div class="app">
+    <!-- Top Navigation -->
+    <header class="top-bar">
+      <div>
+        <div class="brand-title">Kintsugi Motorworks</div>
+        <div class="brand-sub">Analytics &amp; trends</div>
+      </div>
+      <nav class="nav-tabs" aria-label="Primary navigation">
+        <a href="../index.html" class="nav-pill">Dashboard</a>
+        <a href="../Payouts/payouts-index.html" class="nav-pill">Payouts</a>
+        <a href="../Mechanics/mechanics-index.html" class="nav-pill">Mechanics</a>
+        <a href="../Bank_Record/bank-index.html" class="nav-pill">Bank</a>
+        <a href="analytics-index.html" class="nav-pill active">Analytics</a>
+      </nav>
+    </header>
+
+    <main class="page-shell">
+      <!-- Summary intro -->
+      <section class="summary">
+        <div class="summary-main">
+          <div class="summary-title">Analytics overview</div>
+          <p class="summary-sub">
+            Repair trends, mechanic performance, and payout analytics over time.
+          </p>
+        </div>
+      </section>
+
+      <!-- KPI summary cards -->
+      <section class="analytics-kpi-row" aria-label="Analytics KPIs">
+        <div class="analytics-kpi-card">
+          <div class="analytics-kpi-label">Total Repairs</div>
+          <div id="kpiTotalRepairs" class="analytics-kpi-value">–</div>
+          <div id="kpiTotalRepairsSub" class="analytics-kpi-sub"></div>
+        </div>
+        <div class="analytics-kpi-card">
+          <div class="analytics-kpi-label">Total Payout</div>
+          <div id="kpiTotalPayout" class="analytics-kpi-value">–</div>
+          <div id="kpiTotalPayoutSub" class="analytics-kpi-sub"></div>
+        </div>
+        <div class="analytics-kpi-card">
+          <div class="analytics-kpi-label">Active Mechanics</div>
+          <div id="kpiActiveMechanics" class="analytics-kpi-value">–</div>
+          <div id="kpiActiveMechanicsSub" class="analytics-kpi-sub"></div>
+        </div>
+        <div class="analytics-kpi-card">
+          <div class="analytics-kpi-label">Avg Repairs / Week</div>
+          <div id="kpiAvgPerWeek" class="analytics-kpi-value">–</div>
+          <div id="kpiAvgPerWeekSub" class="analytics-kpi-sub"></div>
+        </div>
+      </section>
+
+      <!-- Controls -->
+      <section class="controls" aria-label="Analytics filters">
+        <span class="label-soft">Time range:</span>
+        <span class="select-wrap">
+          <select id="timeRange" class="select-pill">
+            <option value="all">All time</option>
+            <option value="last4w">Last 4 weeks</option>
+            <option value="last3m">Last 3 months</option>
+            <option value="last6m">Last 6 months</option>
+            <option value="last12m">Last 12 months</option>
+            <option value="thisYear">This year</option>
+          </select>
+        </span>
+
+        <span class="label-soft">Mechanic:</span>
+        <span class="select-wrap">
+          <select id="mechanicFilter" class="select-pill">
+            <option value="all">All mechanics</option>
+          </select>
+        </span>
+
+        <span class="label-soft">Group by:</span>
+        <span class="select-wrap">
+          <select id="groupBy" class="select-pill">
+            <option value="week">Week</option>
+            <option value="month">Month</option>
+          </select>
+        </span>
+      </section>
+
+      <!-- Charts row -->
+      <div class="analytics-charts-grid">
+        <!-- Repairs over time -->
+        <div class="analytics-panel">
+          <div class="panel-header">
+            <div class="panel-title">Repairs Over Time</div>
+            <div class="panel-subtitle">Total repairs per period</div>
+          </div>
+          <div class="chart-container">
+            <canvas id="repairsChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Payout over time -->
+        <div class="analytics-panel">
+          <div class="panel-header">
+            <div class="panel-title">Payout Over Time</div>
+            <div class="panel-subtitle">Mechanic payout per period</div>
+          </div>
+          <div class="chart-container">
+            <canvas id="payoutChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Mechanic breakdown -->
+        <div class="analytics-panel">
+          <div class="panel-header">
+            <div class="panel-title">Repairs by Mechanic</div>
+            <div class="panel-subtitle">All-time totals per mechanic</div>
+          </div>
+          <div class="chart-container chart-container--bar">
+            <canvas id="mechanicChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Top mechanics leaderboard -->
+        <div class="analytics-panel">
+          <div class="panel-header">
+            <div class="panel-title">Top Mechanics</div>
+            <div class="panel-subtitle">Ranked by total repairs</div>
+          </div>
+          <div id="leaderboard" class="analytics-leaderboard">
+            <div class="analytics-empty">Loading data…</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="status" class="status"></div>
+    </main>
+  </div>
+
+  <script src="analytics-script.js"></script>
+</body>
+</html>
