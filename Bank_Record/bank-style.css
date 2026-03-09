@@ -433,9 +433,9 @@ body::-webkit-scrollbar-thumb:hover {
 
 .table-wrap {
   margin-top: var(--space-md);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
-  background: #020817;
+  background: var(--bg-primary);
   overflow: auto;
   max-height: calc(100vh - 140px);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
@@ -461,36 +461,15 @@ body::-webkit-scrollbar-thumb:hover {
 
 /* Table */
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-  font-size: 13px;
-}
-
 th,
 td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #0f172a;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   text-align: left;
   position: relative;
-  height: 44px;
-  vertical-align: middle;
 }
 
 th {
-  position: sticky;
-  top: 0;
   z-index: 15;
-  background: linear-gradient(to right, #020617, #020817);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: #9ca3af;
+  letter-spacing: 0.16em;
 }
 
 /* Resize handle */
@@ -507,12 +486,10 @@ th .col-resizer {
 
 /* Stripes & hover */
 
-tbody tr:nth-child(even) {
-  background: #030712;
-}
-
 tbody tr:hover {
-  background: rgba(79, 70, 229, 0.14);
+  background: rgba(79, 70, 229, 0.18);
+  transform: scale(1.01);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
 }
 
 .row-bet {
