@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="shared-styles.css" />
   <link rel="stylesheet" href="dashboard-style.css" />
+  <link rel="stylesheet" href="analytics-style.css" />
   <script src="constants.js"></script>
   <script src="utils.js"></script>
   <script src="payout-helpers.js"></script>
@@ -13,6 +14,8 @@
   <script src="settings-ui.js"></script>
   <script src="ui-enhancements.js"></script>
   <script src="kintsugi-core.js"></script>
+  <script src="analytics-service.js"></script>
+  <script src="analytics-charts.js"></script>
 </head>
 <body>
   <div class="app">
@@ -27,10 +30,13 @@
         <a href="Payouts/payouts-index.html" class="nav-pill">Payouts</a>
         <a href="Mechanics/mechanics-index.html" class="nav-pill">Mechanics</a>
         <a href="Bank_Record/bank-index.html" class="nav-pill">Bank</a>
+        <a href="#analytics-section" class="nav-pill" id="nav-analytics">Analytics</a>
+        <button class="nav-pill" id="nav-settings" type="button" style="cursor:pointer;border:none;background:transparent;" onclick="typeof kToggleSettings!=='undefined'&&kToggleSettings()">Settings</button>
       </nav>
     </header>
 
-    <!-- Stat cards -->
+    <!-- TIER 1 – Core KPIs -->
+    <div class="tier-label">Core Metrics</div>
     <section class="stat-boxes">
       <div class="stat-box">
         <h3 id="title-totalRepairs">All-Time Repairs</h3>
@@ -45,38 +51,33 @@
       </div>
 
       <div class="stat-box">
+        <h3 id="title-activeMechanics">Active Mechanics</h3>
+        <p id="activeMechanics">–</p>
+        <p class="sub" id="tileSub-activeMechanics"></p>
+      </div>
+
+      <!-- TIER 2 – Weekly / Monthly -->
+      <div class="stat-box">
+        <h3 id="title-weekStats">This Week</h3>
+        <p id="repairsThisWeek">–</p>
+        <p class="sub" id="payoutThisWeek">Payout: –</p>
+      </div>
+
+      <div class="stat-box">
+        <h3 id="title-monthStats">This Month</h3>
+        <p id="repairsThisMonth">–</p>
+        <p class="sub" id="payoutThisMonth">Payout: –</p>
+      </div>
+
+      <div class="stat-box">
         <h3 id="title-latestWeek">Latest Week Ending</h3>
         <p id="latestWeek">–</p>
         <p class="sub" id="tileSub-latestWeek"></p>
       </div>
 
-
-<div class="stat-box">
-  <h3 id="title-activeMechanics">Active Mechanics</h3>
-  <p id="activeMechanics">–</p>
-  <p class="sub" id="tileSub-activeMechanics"></p>
-</div>
-
-<div class="stat-box">
-  <h3 id="title-weekStats">This Week</h3>
-  <p id="repairsThisWeek">–</p>
-  <p class="sub" id="payoutThisWeek">Payout: –</p>
-</div>
-
-<div class="stat-box">
-  <h3 id="title-monthStats">This Month</h3>
-  <p id="repairsThisMonth">–</p>
-  <p class="sub" id="payoutThisMonth">Payout: –</p>
-</div>
-
-<div class="stat-box">
-  <h3 id="title-topMechWeek">Top mechanic this week</h3>
-  <p id="topMechWeekName">–</p>
-  <p class="sub" id="topMechWeekStats">–</p>
-</div>
-
-<div class="stat-box">
-  <h3 id="title-betRemaining">BET Remaining</h3>
+      <!-- TIER 3 – Inventory -->
+      <div class="stat-box">
+        <h3 id="title-betRemaining">BET Remaining</h3>
         <p id="manualBetLeft">–</p>
         <p class="sub" id="tileSub-manualBetLeft"></p>
       </div>
@@ -85,10 +86,184 @@
         <h3 id="title-redBins">Red Bins Remaining</h3>
         <p id="manualRedBins">–</p>
         <p class="sub" id="tileSub-manualRedBins"></p>
+        <p class="sub" id="tileSub-redBins-usage" style="margin-top:2px"></p>
+        <p class="sub" id="tileSub-redBins-days" style="margin-top:2px"></p>
+      </div>
+
+      <div class="stat-box">
+        <h3 id="title-topMechWeek">Top mechanic this week</h3>
+        <p id="topMechWeekName">–</p>
+        <p class="sub" id="topMechWeekStats">–</p>
       </div>
     </section>
 
-    <!-- Quick links -->
+    <!-- Alerts -->
+    <section id="alerts-section" class="alerts-section" aria-live="polite" style="display:none">
+      <div id="alerts-list"></div>
+    </section>
+
+    <!-- Operational Metrics -->
+    <div class="tier-label">Operational Metrics</div>
+    <section class="operational-metrics">
+      <div class="op-metric-card">
+        <div class="op-metric-label">Avg Repairs / Mechanic</div>
+        <div class="op-metric-value" id="op-avgRepairsPerMech">–</div>
+        <div class="op-metric-sub">All-time average</div>
+      </div>
+      <div class="op-metric-card">
+        <div class="op-metric-label">Repairs / Day</div>
+        <div class="op-metric-value" id="op-repairsPerDay">–</div>
+        <div class="op-metric-sub" id="op-repairsPerDay-sub">Historical average</div>
+      </div>
+      <div class="op-metric-card">
+        <div class="op-metric-label">Payout / Repair</div>
+        <div class="op-metric-value" id="op-payoutPerRepair">–</div>
+        <div class="op-metric-sub">Fixed mechanic rate</div>
+      </div>
+      <div class="op-metric-card">
+        <div class="op-metric-label">Weekly Payout Burn Rate</div>
+        <div class="op-metric-value" id="op-weeklyBurnRate">–</div>
+        <div class="op-metric-sub">Current week</div>
+      </div>
+      <div class="op-metric-card">
+        <div class="op-metric-label">Projected Monthly Payout</div>
+        <div class="op-metric-value" id="op-projectedMonthlyPayout">–</div>
+        <div class="op-metric-sub">Based on daily rate</div>
+      </div>
+      <div class="op-metric-card">
+        <div class="op-metric-label">Cost / Mechanic (All-Time)</div>
+        <div class="op-metric-value" id="op-costPerMechanic">–</div>
+        <div class="op-metric-sub">Avg payout per mechanic</div>
+      </div>
+    </section>
+
+    <!-- Analytics Section -->
+    <div id="analytics-section" class="analytics-wrapper">
+      <div class="tier-label">Analytics</div>
+
+      <!-- Row 1: Charts -->
+      <section class="charts-row">
+        <div class="chart-card">
+          <div class="chart-card-title">Repairs Over Time</div>
+          <div class="chart-canvas-wrapper">
+            <canvas id="repairsTrendChart" aria-label="Repairs over time"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-card-title">Weekly Payouts</div>
+          <div class="chart-canvas-wrapper">
+            <canvas id="weeklyPayoutChart" aria-label="Weekly payouts"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- Row 2: Leaderboard + Distribution -->
+      <section class="analytics-row2">
+        <div class="leaderboard-card">
+          <div class="chart-card-title">Mechanic Leaderboard</div>
+          <div class="leaderboard-tabs">
+            <button class="lb-tab active" data-period="alltime" type="button">All-Time</button>
+            <button class="lb-tab" data-period="monthly" type="button">Monthly</button>
+            <button class="lb-tab" data-period="weekly" type="button">Weekly</button>
+          </div>
+          <table class="leaderboard-table" id="leaderboard-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Mechanic</th>
+                <th>Repairs</th>
+                <th>Payout</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboard-tbody">
+              <tr><td colspan="4" style="color:var(--text-secondary);text-align:center;padding:16px">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-card-title">Repair Distribution by Mechanic</div>
+          <div class="chart-canvas-wrapper" style="height:280px">
+            <canvas id="mechanicDistributionChart" aria-label="Mechanic distribution"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- Row 3: Activity Feed + Inventory -->
+      <section class="analytics-row3">
+        <div class="activity-card">
+          <div class="chart-card-title">Recent Activity</div>
+          <div class="activity-feed" id="activity-feed">
+            <div style="color:var(--text-secondary);font-size:var(--font-size-sm)">Loading…</div>
+          </div>
+        </div>
+
+        <div class="inventory-card">
+          <div class="chart-card-title">Inventory Forecast</div>
+          <div class="inventory-stat">
+            <span class="inventory-stat-label">Red Bins Remaining</span>
+            <span class="inventory-stat-value" id="inv-bins">–</span>
+          </div>
+          <div class="inventory-stat">
+            <span class="inventory-stat-label">Daily Bin Usage (est.)</span>
+            <span class="inventory-stat-value" id="inv-daily-usage">–</span>
+          </div>
+          <div class="inventory-stat">
+            <span class="inventory-stat-label">Est. Days Until Depletion</span>
+            <span class="inventory-stat-value" id="inv-days-remaining">–</span>
+          </div>
+          <div class="inventory-progress" aria-hidden="true">
+            <div class="inventory-progress-fill ok" id="inv-progress-fill" style="width:0%"></div>
+          </div>
+          <div class="inventory-stat" style="margin-top:var(--space-sm)">
+            <span class="inventory-stat-label">BET Remaining</span>
+            <span class="inventory-stat-value" id="inv-bet">–</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Financial Summary -->
+      <div class="tier-label">Financial Summary</div>
+      <div class="financial-panel">
+        <div class="financial-grid">
+          <div class="financial-stat">
+            <div class="financial-stat-label">Total Revenue (Est.)</div>
+            <div class="financial-stat-value revenue" id="fin-totalRevenue">–</div>
+            <div class="financial-stat-sub">@ $2,500 / repair</div>
+          </div>
+          <div class="financial-stat">
+            <div class="financial-stat-label">Total Mechanic Payout</div>
+            <div class="financial-stat-value payout" id="fin-totalPayout">–</div>
+            <div class="financial-stat-sub">@ $700 / repair</div>
+          </div>
+          <div class="financial-stat">
+            <div class="financial-stat-label">Estimated Net Profit</div>
+            <div class="financial-stat-value profit" id="fin-netProfit">–</div>
+            <div class="financial-stat-sub" id="fin-profitMargin"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Data Integrity -->
+      <div class="integrity-panel" id="integrity-panel" style="display:none">
+        <div id="integrity-content"></div>
+      </div>
+
+      <!-- Export -->
+      <div class="tier-label">Data Export</div>
+      <div class="export-panel">
+        <div style="color:var(--text-secondary);font-size:var(--font-size-sm);margin-bottom:var(--space-sm)">
+          Download repair data in your preferred format.
+        </div>
+        <div class="export-buttons">
+          <button class="export-btn" id="export-csv-btn" type="button">⬇ Export CSV</button>
+          <button class="export-btn" id="export-json-btn" type="button">⬇ Export JSON</button>
+          <button class="export-btn" id="export-excel-btn" type="button">⬇ Export Excel</button>
+        </div>
+      </div>
+    </div><!-- /.analytics-wrapper -->
+
+    <!-- Quick links (existing) -->
     <section class="cta-row">
       <div class="cta-card">
         <h4>Payouts</h4>
@@ -106,6 +281,8 @@
     <div id="status" class="status">Loading overview…</div>
   </div>
 
+  <!-- SheetJS for Excel export (loaded on demand via JS) -->
+  <script>window._xlsxCdnUrl='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';</script>
   <script src="dashboard-script.js"></script>
 </body>
 </html>
