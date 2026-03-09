@@ -503,29 +503,60 @@ function renderWeekly() {
   );
 
   const summarySource = [];
+  let groupCounter = 0;
 
   weekBuckets.forEach((bucket) => {
     const { weekEnd, entries } = bucket;
 
     entries.sort((a, b) => a.mechanic.localeCompare(b.mechanic));
 
+    // First pass: calculate week total for the compact header
     let weekTotal = 0;
-    const mechTotals = new Map();
+    entries.forEach((r) => {
+      const enginePay = calculateEnginePayment(r.engineReplacementsByDept);
+      weekTotal += r.repairs * PAY_PER_REPAIR + enginePay;
+    });
 
+    const groupId = `wg-${++groupCounter}`;
+
+    // Compact collapsible group header (no per-mechanic breakdown)
+    const headerRow = document.createElement("tr");
+    headerRow.className = "week-group-header";
+    headerRow.dataset.groupId = groupId;
+
+    const headerTd = document.createElement("td");
+    headerTd.colSpan = 5;
+
+    const toggleBtn = document.createElement("button");
+    toggleBtn.className = "week-group-toggle";
+    toggleBtn.textContent = "▼";
+    toggleBtn.setAttribute("aria-expanded", "true");
+    headerTd.appendChild(toggleBtn);
+
+    const labelSpan = document.createElement("span");
+    labelSpan.className = "week-group-label";
+    labelSpan.textContent = `Week ending ${fmtDate(weekEnd)}`;
+    headerTd.appendChild(labelSpan);
+
+    const metaSpan = document.createElement("span");
+    metaSpan.className = "week-group-meta";
+    metaSpan.textContent = `${entries.length} mechanic${entries.length !== 1 ? "s" : ""} · ${fmtMoney(weekTotal)}`;
+    headerTd.appendChild(metaSpan);
+
+    headerRow.appendChild(headerTd);
+    fragment.appendChild(headerRow);
+
+    // Second pass: create individual mechanic rows under this group
     entries.forEach((r) => {
       const enginePay = calculateEnginePayment(r.engineReplacementsByDept);
       const pay = r.repairs * PAY_PER_REPAIR + enginePay;
       const comment = commentForWeek(r.weekEnd);
 
-      weekTotal += pay;
-      mechTotals.set(
-        r.mechanic,
-        (mechTotals.get(r.mechanic) || 0) + pay
-      );
-
       const mechLabel = labelWithStateId(r.mechanic);
 
       const tr = document.createElement("tr");
+      tr.className = "week-group-row";
+      tr.dataset.groupId = groupId;
       tr.innerHTML = `
         <td><button class="mech-link" data-mech="${r.mechanic}">${mechLabel}</button></td>
         <td>${fmtDate(r.weekEnd)}</td>
@@ -546,29 +577,11 @@ function renderWeekly() {
           </button>
         </td>
       `;
-      
+
       fragment.appendChild(tr);
     });
 
-    const totalRow = document.createElement("tr");
-    totalRow.className = "week-total-row";
-
-    const mechBreakdown = Array.from(mechTotals.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([name, pay]) => {
-        const label = labelWithStateId(name);
-        return `${label}: ${fmtMoney(pay)}`;
-      })
-      .join(" · ");
-
-    totalRow.innerHTML = `
-      <td colspan="5">Total for week ending ${fmtDate(
-        weekEnd
-      )}${mechBreakdown ? " — " + mechBreakdown : ""}</td>
-    `;
-    fragment.appendChild(totalRow);
-
-    summarySource.push({ weekEnd, weekTotal, mechTotals });
+    summarySource.push({ weekEnd, weekTotal });
   });
 
   // Append all rows at once for better performance
@@ -1368,6 +1381,20 @@ document.addEventListener("DOMContentLoaded", () => {
         
         copyWeeklySummary(copyBtn, mechanic, weekEnd, repairs, engineReplacementsByDept, totalPay);
       }
+    });
+    // Event delegation for collapsible week group headers
+    weeklyBody.addEventListener("click", (e) => {
+      const headerRow = e.target.closest(".week-group-header");
+      if (!headerRow) return;
+      const groupId = headerRow.dataset.groupId;
+      const isCollapsed = headerRow.classList.toggle("collapsed");
+      const toggleBtn = headerRow.querySelector(".week-group-toggle");
+      if (toggleBtn) {
+        toggleBtn.textContent = isCollapsed ? "▶" : "▼";
+        toggleBtn.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
+      }
+      weeklyBody.querySelectorAll(`.week-group-row[data-group-id="${groupId}"]`)
+        .forEach((row) => row.classList.toggle("hidden", isCollapsed));
     });
   }
   if (jobsBody) {

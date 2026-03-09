@@ -113,22 +113,65 @@
   box-shadow: 0 0 12px rgba(79, 70, 229, 0.8);
 }
 
-/* ===== Week total row ===== */
+/* ===== Week group header (collapsible) ===== */
 
-.week-total-row {
-  background: rgba(79, 70, 229, 0.12);
-  border-top: 1px solid var(--border-default);
-  border-bottom: 1px solid var(--border-default);
+.week-group-header {
+  background: rgba(79, 70, 229, 0.10);
+  border-top: 2px solid rgba(79, 70, 229, 0.25);
+  cursor: pointer;
+  user-select: none;
 }
 
-.week-total-row td {
-  padding: 12px 12px;
+.week-group-header:hover {
+  background: rgba(79, 70, 229, 0.18);
+}
+
+.week-group-header td {
+  padding: 10px 12px;
   font-size: var(--font-size-md);
-  text-transform: none;
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: 600;
   text-align: left;
-  height: 48px;
+  height: 40px;
+  vertical-align: middle;
+}
+
+.week-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: rgba(79, 70, 229, 0.2);
+  color: var(--accent-secondary);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+  flex-shrink: 0;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.week-group-toggle:hover {
+  background: rgba(79, 70, 229, 0.4);
+}
+
+.week-group-label {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-right: 12px;
+}
+
+.week-group-meta {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+.week-group-row.hidden {
+  display: none;
 }
 
 /* ===== Mechanic summary panel ===== */
