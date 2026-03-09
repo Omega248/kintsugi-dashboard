@@ -116,19 +116,31 @@
 /* ===== Week total row ===== */
 
 .week-total-row {
-  background: rgba(79, 70, 229, 0.12);
-  border-top: 1px solid var(--border-default);
-  border-bottom: 1px solid var(--border-default);
+  background: rgba(79, 70, 229, 0.08);
+  border-top: 2px solid rgba(79, 70, 229, 0.25);
+  border-bottom: 2px solid rgba(79, 70, 229, 0.25);
+}
+
+/* Override even-row striping so total rows always show the accent background */
+tbody tr.week-total-row:nth-child(even) {
+  background: rgba(79, 70, 229, 0.08);
 }
 
 .week-total-row td {
-  padding: 12px 12px;
+  padding: 10px 12px;
   font-size: var(--font-size-md);
   text-transform: none;
   color: var(--text-secondary);
   font-weight: 500;
   text-align: left;
-  height: 48px;
+  height: 44px;
+}
+
+/* Prevent hover scaling on total rows (more specific selector than shared tbody tr:hover) */
+.table-wrap tbody tr.week-total-row:hover {
+  transform: none;
+  box-shadow: none;
+  background: rgba(79, 70, 229, 0.1);
 }
 
 /* ===== Mechanic summary panel ===== */

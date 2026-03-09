@@ -8,44 +8,59 @@
 .stat-boxes {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  gap: 16px;
   margin-bottom: var(--space-lg);
   margin-top: var(--space-md);
   max-width: 100%;
 }
 
 .stat-box {
-  padding: 18px;
+  padding: 20px 20px 16px;
   border-radius: var(--radius-lg);
   background:
-    radial-gradient(circle at top left, rgba(148, 163, 253, 0.10), transparent),
+    radial-gradient(circle at top left, rgba(148, 163, 253, 0.08), transparent),
     rgba(6, 11, 25, 0.98);
   border: 1px solid var(--border-default);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-xs);
+  gap: 6px;
+  min-height: 130px;
   transition: all var(--duration-fast) var(--ease-smooth);
   animation: statCardFadeIn 0.5s var(--ease-smooth) backwards;
   position: relative;
   overflow: hidden;
 }
 
+/* Left accent bar per card type */
 .stat-box::before {
   content: '';
   position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at top left, rgba(148, 163, 253, 0.15), transparent);
-  opacity: 0;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent-primary);
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+  opacity: 0.6;
   transition: opacity var(--duration-fast);
+}
+
+.stat-box--gold::before {
+  background: linear-gradient(to bottom, var(--gold-primary), var(--gold-secondary));
+}
+
+.stat-box--highlight::before {
+  background: linear-gradient(to bottom, #f59e0b, #d97706);
+  opacity: 0.9;
 }
 
 .stat-box::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at bottom right, rgba(212, 175, 55, 0.05), transparent);
+  background: radial-gradient(circle at bottom right, rgba(212, 175, 55, 0.04), transparent);
   opacity: 0;
   transition: opacity var(--duration-fast);
   pointer-events: none;
@@ -53,9 +68,18 @@
 
 .stat-box:hover {
   transform: translateY(-3px);
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.95), 0 0 32px rgba(79, 70, 229, 0.4);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.95), 0 0 32px rgba(79, 70, 229, 0.35);
   border-color: var(--accent-primary);
-  filter: brightness(1.02);
+}
+
+.stat-box--gold:hover {
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.95), 0 0 32px rgba(212, 175, 55, 0.2);
+  border-color: rgba(212, 175, 55, 0.4);
+}
+
+.stat-box--highlight:hover {
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.95), 0 0 32px rgba(245, 158, 11, 0.3);
+  border-color: rgba(245, 158, 11, 0.4);
 }
 
 .stat-box:hover::before {
@@ -91,25 +115,56 @@
   margin: 0;
   font-size: var(--font-size-sm);
   text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   color: var(--text-secondary);
   font-weight: 600;
   display: flex;
   align-items: center;
-  gap: var(--space-xs);
+  gap: 6px;
+  line-height: 1.3;
+}
+
+.stat-icon {
+  font-size: 14px;
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
+/* Divider under the title */
+.stat-box h3::after {
+  content: '';
+  display: block;
+  flex: 1;
 }
 
 .stat-box p {
   margin: 0;
   font-size: var(--font-size-2xl);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   line-height: 1.1;
+  letter-spacing: -0.01em;
   transition: color var(--duration-fast);
 }
 
+.stat-box--gold p:first-of-type {
+  color: var(--gold-secondary);
+}
+
+.stat-box--highlight p:first-of-type {
+  color: #fbbf24;
+}
+
 .stat-box:hover p {
-  color: var(--accent-secondary);
+  color: var(--text-inverse);
+}
+
+.stat-box--gold:hover p:first-of-type {
+  color: var(--gold-secondary);
+}
+
+.stat-box--highlight:hover p:first-of-type {
+  color: #fbbf24;
 }
 
 .stat-box .sub {
@@ -119,11 +174,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-}
-
-.stat-icon {
-  font-size: 16px;
-  opacity: 0.6;
+  min-height: 16px;
 }
 
 /* ===== CTA Cards ===== */
@@ -235,11 +286,6 @@
   box-shadow: 0 8px 20px rgba(79, 70, 229, 0.8);
 }
 
-/* Hide empty sub-text paragraphs to avoid blank gap space */
-.stat-box .sub:empty {
-  display: none;
-}
-
 /* ===== Responsive Design ===== */
 
 @media (max-width: 767px) {
@@ -249,7 +295,8 @@
   }
   
   .stat-box {
-    padding: var(--space-sm);
+    padding: 14px 14px 12px;
+    min-height: 110px;
   }
   
   .stat-box h3 {
@@ -279,3 +326,4 @@
     grid-template-columns: repeat(3, 1fr);
   }
 }
+

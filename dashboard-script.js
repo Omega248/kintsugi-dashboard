@@ -139,17 +139,17 @@ async function loadOverview() {
     kSetText("activeMechanics", mechanics.size.toLocaleString());
     kSetText("latestWeek", latestWeekDate ? kFmtDate(latestWeekDate) : "—");
 
-    // Week/month KPIs
-    kSetText("repairsThisWeek", repairsThisWeek.toLocaleString());
+    // Week/month KPIs – show payout as primary value, repairs as sub-text
+    kSetText("weekPayoutPrimary", kFmtMoney(payoutThisWeek));
     kSetText(
-      "payoutThisWeek",
-      "Payout: " + kFmtMoney(payoutThisWeek)
+      "weekRepairsSub",
+      repairsThisWeek.toLocaleString() + " repair" + (repairsThisWeek !== 1 ? "s" : "")
     );
 
-    kSetText("repairsThisMonth", repairsThisMonth.toLocaleString());
+    kSetText("monthPayoutPrimary", kFmtMoney(payoutThisMonth));
     kSetText(
-      "payoutThisMonth",
-      "Payout: " + kFmtMoney(payoutThisMonth)
+      "monthRepairsSub",
+      repairsThisMonth.toLocaleString() + " repair" + (repairsThisMonth !== 1 ? "s" : "")
     );
 
     // Top mechanic this week
@@ -157,24 +157,18 @@ async function loadOverview() {
       kSetText("topMechWeekName", topMechName);
       kSetText(
         "topMechWeekStats",
-        topMechRepairs.toLocaleString() +
-          " repairs · " +
-          kFmtMoney(topMechRepairs * PAY_PER_REPAIR)
+        topMechRepairs.toLocaleString() + " repair" + (topMechRepairs !== 1 ? "s" : "") +
+          " · " + kFmtMoney(topMechRepairs * PAY_PER_REPAIR)
       );
     } else {
       kSetText("topMechWeekName", "—");
-      kSetText("topMechWeekStats", "No repairs logged this week");
+      kSetText("topMechWeekStats", "No repairs this week");
     }
 
-    // Subtitles
-    kSetText("tileSub-totalRepairs", "");
-    kSetText("tileSub-totalPayout", "");
-    kSetText("tileSub-activeMechanics", "");
-    kSetText("tileSub-manualBetLeft", "");
-    kSetText("tileSub-manualRedBins", "");
+    // Subtitles (static defaults are set in HTML; only override dynamic ones)
     kSetText(
       "tileSub-latestWeek",
-      lastActivity ? "Last job: " + kFmtDate(lastActivity) : ""
+      lastActivity ? "Last job: " + kFmtDate(lastActivity) : "No jobs recorded"
     );
 
     if (status) {
