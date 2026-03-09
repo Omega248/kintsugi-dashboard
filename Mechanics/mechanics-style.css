@@ -261,9 +261,10 @@
 
 .table-wrap {
   margin-top: 2px;
-  border-radius: 16px;
-  border: 1px solid rgba(24, 32, 56, 0.9);
-  background: linear-gradient(135deg, #050a1b, #020617);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
   max-height: 460px;
   overflow: auto;
 }
@@ -271,43 +272,41 @@
 .table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--font-size-md);
   table-layout: fixed;
 }
 
 .table thead {
   position: sticky;
   top: 0;
-  background: #050a1b;
-  z-index: 1;
+  background: linear-gradient(to right, #020617, #020817);
+  z-index: 5;
 }
 
 .table th,
 .table td {
-  padding: 9px 12px;
-  border-bottom: 1px solid rgba(24, 32, 56, 0.95);
+  padding: 10px 12px;
+  height: 44px;
+  border-bottom: 1px solid #0f172a;
 }
 
 .table th {
   text-align: left;
-  font-weight: 500;
-  color: var(--text-soft);
-  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.16em;
 }
 
 .table tbody tr:nth-child(even) {
-  background: rgba(9, 13, 28, 0.98);
-}
-
-.table tbody tr:nth-child(odd) {
-  background: rgba(7, 11, 24, 0.98);
+  background: var(--bg-tertiary);
 }
 
 .table tbody tr:hover {
-  background: rgba(55, 65, 81, 0.7);
-  cursor: pointer;
+  background: rgba(79, 70, 229, 0.18);
+  transform: scale(1.01);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
 }
 
 /* Column widths */
@@ -351,10 +350,6 @@
 
 .table tbody tr.is-clickable {
   cursor: pointer;
-}
-
-.table tbody tr.is-clickable:hover {
-  background: rgba(55, 65, 81, 0.75);
 }
 
 /* Detail area – visually attached to table */
