@@ -103,6 +103,15 @@ async function kFetchCSV(sheetName, options = {}) {
     kCsvCache.delete(url);
   }
 
+  // Detect file:// protocol — browsers block cross-origin fetches from null origins
+  if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
+    throw new Error(
+      'This dashboard must be served over HTTP or HTTPS to load data from Google Sheets. ' +
+      'Opening the HTML file directly (file://) is blocked by browser security (CORS). ' +
+      'Please use a local web server (e.g. "npx serve ." or VS Code Live Server) and reopen the page via http://localhost.'
+    );
+  }
+
   try {
     const res = await fetch(url);
     

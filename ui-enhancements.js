@@ -127,113 +127,6 @@ class ToastManager {
 // Create global toast instance
 const toast = new ToastManager();
 
-// ===== Filter Chips System =====
-
-class FilterChipsManager {
-  constructor(containerId) {
-    this.containerId = containerId;
-    this.container = null;
-    this.filters = {};
-    this.callbacks = {};
-  }
-
-  init() {
-    // Create filter chips container if it doesn't exist
-    const targetContainer = document.getElementById(this.containerId);
-    if (!targetContainer) return;
-
-    if (!targetContainer.querySelector('.filter-chips-container')) {
-      this.container = document.createElement('div');
-      this.container.className = 'filter-chips-container';
-      targetContainer.appendChild(this.container);
-    } else {
-      this.container = targetContainer.querySelector('.filter-chips-container');
-    }
-  }
-
-  setFilter(key, label, value) {
-    this.filters[key] = { label, value };
-    this.render();
-  }
-
-  removeFilter(key) {
-    delete this.filters[key];
-    this.render();
-    if (this.callbacks.onRemove) {
-      this.callbacks.onRemove(key);
-    }
-  }
-
-  clearAll() {
-    this.filters = {};
-    this.render();
-    if (this.callbacks.onClearAll) {
-      this.callbacks.onClearAll();
-    }
-  }
-
-  onRemove(callback) {
-    this.callbacks.onRemove = callback;
-  }
-
-  onClearAll(callback) {
-    this.callbacks.onClearAll = callback;
-  }
-
-  render() {
-    if (!this.container) return;
-
-    const filterKeys = Object.keys(this.filters);
-    
-    if (filterKeys.length === 0) {
-      this.container.innerHTML = '';
-      this.container.style.display = 'none';
-      return;
-    }
-
-    this.container.style.display = 'flex';
-    
-    let html = '<span class="filter-chips-label">Active filters:</span>';
-    
-    filterKeys.forEach(key => {
-      const filter = this.filters[key];
-      html += `
-        <div class="filter-chip" data-key="${key}">
-          <span class="filter-chip-label">${this.escapeHtml(filter.label)}:</span>
-          <span class="filter-chip-value">${this.escapeHtml(filter.value)}</span>
-          <button class="filter-chip-close" aria-label="Remove ${filter.label} filter">×</button>
-        </div>
-      `;
-    });
-
-    if (filterKeys.length > 1) {
-      html += '<button class="clear-all-filters">Clear all</button>';
-    }
-
-    this.container.innerHTML = html;
-
-    // Add event listeners
-    this.container.querySelectorAll('.filter-chip-close').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const chip = e.target.closest('.filter-chip');
-        const key = chip.getAttribute('data-key');
-        this.removeFilter(key);
-      });
-    });
-
-    const clearAllBtn = this.container.querySelector('.clear-all-filters');
-    if (clearAllBtn) {
-      clearAllBtn.addEventListener('click', () => this.clearAll());
-    }
-  }
-
-  escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-}
-
 // ===== Trend Indicator Helper =====
 
 function createTrendIndicator(value, previousValue) {
@@ -610,7 +503,9 @@ class PaginationManager {
 // Export for use in other scripts
 if (typeof window !== 'undefined') {
   window.toast = toast;
-  window.FilterChipsManager = FilterChipsManager;
+  if (typeof FilterChipsManager !== 'undefined') {
+    window.FilterChipsManager = FilterChipsManager;
+  }
   window.PaginationManager = PaginationManager;
   window.createTrendIndicator = createTrendIndicator;
   window.createProgressBar = createProgressBar;

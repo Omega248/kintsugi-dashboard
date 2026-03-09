@@ -371,7 +371,7 @@ async function loadPayouts() {
     if (statusEl) statusEl.textContent = "";
   } catch (err) {
     console.error(err);
-    if (statusEl) statusEl.textContent = "";
+    if (statusEl) statusEl.textContent = `Error: ${err.message}`;
   }
 }
 
