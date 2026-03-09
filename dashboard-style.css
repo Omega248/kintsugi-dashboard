@@ -15,12 +15,13 @@
 }
 
 .stat-box {
-  padding: 18px;
+  padding: 20px 22px;
   border-radius: var(--radius-lg);
   background:
     radial-gradient(circle at top left, rgba(148, 163, 253, 0.10), transparent),
     rgba(6, 11, 25, 0.98);
   border: 1px solid var(--border-default);
+  border-left: 3px solid var(--border-default);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75);
   display: flex;
   flex-direction: column;
@@ -32,13 +33,47 @@
   overflow: hidden;
 }
 
-.stat-box::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at top left, rgba(148, 163, 253, 0.15), transparent);
-  opacity: 0;
-  transition: opacity var(--duration-fast);
+/* Accent left-border per stat type */
+.stat-box--count   { border-left-color: var(--color-info); }
+.stat-box--money   { border-left-color: var(--color-success); }
+.stat-box--date    { border-left-color: var(--accent-secondary); }
+.stat-box--week    { border-left-color: var(--gold-secondary); }
+.stat-box--month   { border-left-color: #a78bfa; }
+.stat-box--trophy  { border-left-color: var(--gold-primary); }
+.stat-box--warning { border-left-color: var(--color-warning); }
+.stat-box--danger  { border-left-color: var(--color-error); }
+
+/* Subtle tinted background per type */
+.stat-box--money {
+  background:
+    radial-gradient(circle at top left, rgba(34, 197, 94, 0.07), transparent),
+    rgba(6, 11, 25, 0.98);
+}
+
+.stat-box--trophy {
+  background:
+    radial-gradient(circle at top left, rgba(212, 175, 55, 0.12), transparent),
+    rgba(6, 11, 25, 0.98);
+  border-color: rgba(212, 175, 55, 0.30);
+  border-left-color: var(--gold-primary);
+}
+
+.stat-box--week {
+  background:
+    radial-gradient(circle at top left, rgba(244, 196, 48, 0.07), transparent),
+    rgba(6, 11, 25, 0.98);
+}
+
+.stat-box--warning {
+  background:
+    radial-gradient(circle at top left, rgba(250, 204, 21, 0.06), transparent),
+    rgba(6, 11, 25, 0.98);
+}
+
+.stat-box--danger {
+  background:
+    radial-gradient(circle at top left, rgba(239, 68, 68, 0.06), transparent),
+    rgba(6, 11, 25, 0.98);
 }
 
 .stat-box::after {
@@ -58,8 +93,9 @@
   filter: brightness(1.02);
 }
 
-.stat-box:hover::before {
-  opacity: 1;
+.stat-box--trophy:hover {
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.95), 0 0 32px rgba(212, 175, 55, 0.4);
+  border-color: var(--gold-primary);
 }
 
 .stat-box:hover::after {
@@ -99,17 +135,54 @@
   gap: var(--space-xs);
 }
 
+.stat-icon {
+  font-size: 14px;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
 .stat-box p {
   margin: 0;
   font-size: var(--font-size-2xl);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   line-height: 1.1;
   transition: color var(--duration-fast);
 }
 
-.stat-box:hover p {
+/* Color-coded values by box type */
+.stat-box--money p:first-of-type {
+  color: var(--color-success);
+}
+
+.stat-box--trophy p:first-of-type {
+  color: var(--gold-primary);
+  font-size: var(--font-size-xl);
+}
+
+.stat-box--week p:first-of-type {
+  color: var(--gold-secondary);
+}
+
+.stat-box--month p:first-of-type {
+  color: #a78bfa;
+}
+
+.stat-box--count p:first-of-type {
+  color: var(--color-info);
+}
+
+.stat-box--date p:first-of-type {
   color: var(--accent-secondary);
+  font-size: var(--font-size-xl);
+}
+
+.stat-box--warning p:first-of-type {
+  color: var(--color-warning);
+}
+
+.stat-box--danger p:first-of-type {
+  color: var(--color-error);
 }
 
 .stat-box .sub {
@@ -121,9 +194,17 @@
   gap: 4px;
 }
 
-.stat-icon {
-  font-size: 16px;
-  opacity: 0.6;
+/* Payout sub-value highlighted for week/month boxes */
+.stat-box--week .sub {
+  color: var(--color-success);
+  font-size: var(--font-size-base);
+  font-weight: 500;
+}
+
+.stat-box--month .sub {
+  color: var(--color-success);
+  font-size: var(--font-size-base);
+  font-weight: 500;
 }
 
 /* ===== CTA Cards ===== */

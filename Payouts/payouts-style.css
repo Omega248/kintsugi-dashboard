@@ -312,6 +312,65 @@
   padding-right: 16px;
 }
 
+/* ===== Table Column Widths (Jobs View) ===== */
+#jobsWrap table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+/* Timestamp: 8% */
+#jobsWrap th:nth-child(1),
+#jobsWrap td:nth-child(1) { width: 8%; text-align: center; }
+
+/* Mechanic: 12% */
+#jobsWrap th:nth-child(2),
+#jobsWrap td:nth-child(2) { width: 12%; text-align: left; padding-left: 12px; }
+
+/* Owner: 15% */
+#jobsWrap th:nth-child(3),
+#jobsWrap td:nth-child(3) { width: 15%; text-align: left; padding-left: 12px; }
+
+/* Plate: 12% */
+#jobsWrap th:nth-child(4),
+#jobsWrap td:nth-child(4) { width: 12%; text-align: center; }
+
+/* Repairs (Across): 10% */
+#jobsWrap th:nth-child(5),
+#jobsWrap td:nth-child(5) { width: 10%; text-align: center; }
+
+/* Engine Replacements: 13% */
+#jobsWrap th:nth-child(6),
+#jobsWrap td:nth-child(6) { width: 13%; text-align: center; }
+
+/* Week Ending: 10% */
+#jobsWrap th:nth-child(7),
+#jobsWrap td:nth-child(7) { width: 10%; text-align: center; }
+
+/* Month Ending: 10% */
+#jobsWrap th:nth-child(8),
+#jobsWrap td:nth-child(8) { width: 10%; text-align: center; }
+
+/* Total Value: 10% */
+#jobsWrap th:nth-child(9),
+#jobsWrap td:nth-child(9) { width: 10%; text-align: right; padding-right: 16px; }
+
+/* ===== Table Column Widths (Monthly View) ===== */
+#monthlyWrap table {
+  width: 100%;
+}
+
+#monthlyWrap th:nth-child(1),
+#monthlyWrap td:nth-child(1) { width: 25%; text-align: left; padding-left: 16px; }
+
+#monthlyWrap th:nth-child(2),
+#monthlyWrap td:nth-child(2) { width: 20%; text-align: center; }
+
+#monthlyWrap th:nth-child(3),
+#monthlyWrap td:nth-child(3) { width: 20%; text-align: center; }
+
+#monthlyWrap th:nth-child(4),
+#monthlyWrap td:nth-child(4) { width: 35%; text-align: right; padding-right: 16px; }
+
 /* ===== Copy Summary Button ===== */
 .col-actions {
   text-align: center;

@@ -139,18 +139,14 @@ async function loadOverview() {
     kSetText("activeMechanics", mechanics.size.toLocaleString());
     kSetText("latestWeek", latestWeekDate ? kFmtDate(latestWeekDate) : "—");
 
-    // Week/month KPIs
-    kSetText("repairsThisWeek", repairsThisWeek.toLocaleString());
-    kSetText(
-      "payoutThisWeek",
-      "Payout: " + kFmtMoney(payoutThisWeek)
-    );
+    // Week/month KPIs — label uses "repairs" singular/plural
+    const weekRepairsLabel = repairsThisWeek === 1 ? "repair" : "repairs";
+    const monthRepairsLabel = repairsThisMonth === 1 ? "repair" : "repairs";
+    kSetText("repairsThisWeek", repairsThisWeek.toLocaleString() + " " + weekRepairsLabel);
+    kSetText("payoutThisWeek", "Payout: " + kFmtMoney(payoutThisWeek));
 
-    kSetText("repairsThisMonth", repairsThisMonth.toLocaleString());
-    kSetText(
-      "payoutThisMonth",
-      "Payout: " + kFmtMoney(payoutThisMonth)
-    );
+    kSetText("repairsThisMonth", repairsThisMonth.toLocaleString() + " " + monthRepairsLabel);
+    kSetText("payoutThisMonth", "Payout: " + kFmtMoney(payoutThisMonth));
 
     // Top mechanic this week
     if (topMechName) {
@@ -167,15 +163,7 @@ async function loadOverview() {
     }
 
     // Subtitles
-    kSetText("tileSub-totalRepairs", "");
-    kSetText("tileSub-totalPayout", "");
-    kSetText("tileSub-activeMechanics", "");
-    kSetText("tileSub-manualBetLeft", "");
-    kSetText("tileSub-manualRedBins", "");
-    kSetText(
-      "tileSub-latestWeek",
-      lastActivity ? "Last job: " + kFmtDate(lastActivity) : ""
-    );
+    kSetText("tileSub-latestWeek", lastActivity ? "Last job: " + kFmtDate(lastActivity) : "");
 
     if (status) {
       status.textContent = "";
