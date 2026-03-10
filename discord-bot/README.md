@@ -130,20 +130,29 @@ After it finishes, copy the Worker URL from Cloudflare (e.g. `https://kintsugi-d
 
 ### 7 · Post the panel message
 
-Run this **once** from your machine to post the permanent job-log panel to the **#jobs** channel:
+The easiest way — no terminal required:
+
+1. Go to **Actions → Post Job Logs Panel → Run workflow** in GitHub.
+2. Leave **channel ID** blank to post to your `#jobs` channel (uses the `JOBS_CHANNEL_ID` secret), or type a different channel ID to post elsewhere.
+3. Click **Run workflow**.
+
+The Action prints the new message ID in its logs. **Pin the message** in Discord (right-click → Pin) so it stays at the top of the channel.
+
+That's it — the panel is live! 🎉
+
+<details>
+<summary>Alternatively, run locally</summary>
 
 ```bash
 DISCORD_BOT_TOKEN=<your bot token> \
-DISCORD_CHANNEL_ID=<your JOBS_CHANNEL_ID> \
+DISCORD_CHANNEL_ID=<channel id> \
 node discord-bot/setup-panel.js
 ```
 
 > To get a channel ID: right-click the channel in Discord → **Copy Channel ID**  
-> (you may need to enable Developer Mode in Discord Settings → Advanced).
+> (enable Developer Mode first: Discord Settings → Advanced → Developer Mode).
 
-The script will print the message ID. **Pin the message** (right-click → Pin) so it stays visible at the top of the channel.
-
-That's it — the panel is live! 🎉
+</details>
 
 ---
 
@@ -171,7 +180,8 @@ discord-bot/
 
 .github/
 └── workflows/
-    └── deploy-bot.yml    GitHub Actions — auto-deploy on push
+    ├── deploy-bot.yml    GitHub Actions — auto-deploy on push
+    └── setup-panel.yml   GitHub Actions — post the panel message on demand
 ```
 
 ---
@@ -183,7 +193,7 @@ discord-bot/
 | "Invalid signature" in Worker logs | Confirm `DISCORD_PUBLIC_KEY` in Cloudflare exactly matches the Developer Portal value. |
 | Button does nothing / shows error | Check Cloudflare Worker logs → likely the Google Sheet is private or the URL has changed. |
 | Mechanic not in list | The sheet must be publicly accessible. Check that the **Mechanic** column name matches exactly. |
-| Panel disappeared | Re-run `setup-panel.js` to post a new one and pin it. |
+| Panel disappeared | Re-run the **Post Job Logs Panel** Action (or `setup-panel.js` locally) to post a new one and pin it. |
 | Bot was already using `/joblogs` | Run `node discord-bot/register-commands.js` to clear the old slash command. |
 | Deploy Action fails | Verify `CLOUDFLARE_API_TOKEN` has Workers Scripts:Edit permission and `CLOUDFLARE_ACCOUNT_ID` is correct. |
 | Cron posts nothing / "missing required configuration" in logs | At least one channel ID secret is not set. Add `DISCORD_BOT_TOKEN`, `ANALYTICS_CHANNEL_ID`, `JOBS_CHANNEL_ID`, and `PAYOUTS_CHANNEL_ID` to GitHub Secrets and re-deploy. |
