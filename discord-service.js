@@ -103,28 +103,64 @@ function kDiscordAutoPostSentToday(config) {
 /**
  * Post an embed to the analytics webhook announcing updated weekly stats.
  * @param {{ weekISO: string, totalRepairs: number, payoutThisWeek: number,
- *           topMechanic: string|null, topMechRepairs: number }} weekData
+ *           topMechanic: string|null, topMechRepairs: number,
+ *           perMechWeek: Object, perMechWeekAcross: Object,
+ *           activeMechanicsThisWeek: number }} weekData
  */
 async function kDiscordPostAnalyticsUpdate(weekData) {
   const config = kDiscordGetConfig();
   if (!config.autoPostEnabled || !config.analyticsWebhookUrl) return false;
 
-  const { weekISO, totalRepairs, payoutThisWeek, topMechanic, topMechRepairs } = weekData;
+  const {
+    totalRepairs,
+    payoutThisWeek,
+    topMechanic,
+    topMechRepairs,
+    perMechWeek = {},
+    perMechWeekAcross = {},
+    activeMechanicsThisWeek = 0
+  } = weekData;
+
+  const rate = (typeof PAYMENT_RATES !== 'undefined' ? PAYMENT_RATES.PAY_PER_REPAIR : 700);
 
   const fields = [
-    { name: '📅 Week Ending', value: weekISO || '—', inline: true },
-    { name: '🔧 Repairs', value: String(totalRepairs), inline: true },
+    { name: 'REPAIRS THIS WEEK', value: String(totalRepairs), inline: true },
     {
-      name: '💵 Mechanic Payout',
+      name: 'PAYOUT THIS WEEK',
       value: '$' + Number(payoutThisWeek).toLocaleString(),
       inline: true
     }
   ];
 
   if (topMechanic) {
+    const rate = (typeof PAYMENT_RATES !== 'undefined' ? PAYMENT_RATES.PAY_PER_REPAIR : 700);
     fields.push({
-      name: '🏆 Top Mechanic',
-      value: `${kEscapeHtml(topMechanic)} (${topMechRepairs} repairs)`,
+      name: 'TOP MECHANIC',
+      value: `${kEscapeHtml(topMechanic)}\n${topMechRepairs} repair${topMechRepairs !== 1 ? 's' : ''} · $${(topMechRepairs * rate).toLocaleString()}`,
+      inline: true
+    });
+  } else {
+    fields.push({ name: 'TOP MECHANIC', value: '—', inline: true });
+  }
+
+  fields.push({
+    name: 'ACTIVE THIS WEEK',
+    value: String(activeMechanicsThisWeek),
+    inline: true
+  });
+
+  // Per-mechanic breakdown
+  const mechEntries = Object.entries(perMechWeek).sort((a, b) => b[1] - a[1]);
+  if (mechEntries.length) {
+    const rate = (typeof PAYMENT_RATES !== 'undefined' ? PAYMENT_RATES.PAY_PER_REPAIR : 700);
+    const lines = mechEntries.map(([name, reps]) => {
+      const pay = reps * rate;
+      const acrossTotal = perMechWeekAcross[name] || 0;
+      return `${kEscapeHtml(name)} — ${reps} repair${reps !== 1 ? 's' : ''} · $${pay.toLocaleString()} · ${acrossTotal} Across`;
+    });
+    fields.push({
+      name: 'Mechanic Breakdown',
+      value: lines.join('\n'),
       inline: false
     });
   }
@@ -132,11 +168,11 @@ async function kDiscordPostAnalyticsUpdate(weekData) {
   const payload = {
     embeds: [
       {
-        title: '📊 Kintsugi Motorworks — Weekly Update',
+        title: '📊 This Week — Live View',
         color: 0x4f46e5,
         fields,
         timestamp: new Date().toISOString(),
-        footer: { text: 'Kintsugi Dashboard · Auto Update' }
+        footer: { text: 'Kintsugi Dashboard · Live · auto-refresh' }
       }
     ]
   };

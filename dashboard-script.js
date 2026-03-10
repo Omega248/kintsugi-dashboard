@@ -64,6 +64,7 @@ async function loadOverview() {
     let repairsThisWeek = 0;
     let repairsThisMonth = 0;
     const perMechWeek = {};
+    const perMechWeekAcross = {}; // total "across" per mechanic this week (for display only)
 
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -83,7 +84,7 @@ async function loadOverview() {
       if (mech) mechanics.add(mech);
 
       const across = acrossKey ? Number(r[acrossKey] || 0) || 0 : 0;
-      totalRepairs += across;
+      totalRepairs += 1; // Each form entry is one repair regardless of "across" value
 
       // Week ending for global latest week tile
       let weekDate = null;
@@ -117,14 +118,15 @@ async function loadOverview() {
         }
 
         if (dOnly >= weekStart && dOnly <= weekEnd) {
-          repairsThisWeek += across;
+          repairsThisWeek += 1;
           if (mech) {
-            perMechWeek[mech] = (perMechWeek[mech] || 0) + across;
+            perMechWeek[mech] = (perMechWeek[mech] || 0) + 1;
+            perMechWeekAcross[mech] = (perMechWeekAcross[mech] || 0) + across;
           }
         }
 
         if (dOnly >= monthStart && dOnly <= monthEnd) {
-          repairsThisMonth += across;
+          repairsThisMonth += 1;
         }
       }
     });
@@ -193,7 +195,8 @@ async function loadOverview() {
       payoutThisWeek,
       topMechName,
       topMechRepairs,
-      perMechWeek
+      perMechWeek,
+      perMechWeekAcross
     });
 
     // Build week data for Discord change detection
@@ -202,7 +205,10 @@ async function loadOverview() {
       totalRepairs: repairsThisWeek,
       payoutThisWeek,
       topMechanic: topMechName,
-      topMechRepairs
+      topMechRepairs,
+      perMechWeek,
+      perMechWeekAcross,
+      activeMechanicsThisWeek: Object.keys(perMechWeek).length
     };
 
     // Discord: check if data changed and auto-post
@@ -313,10 +319,10 @@ function setRefreshStatus(state) {
 
 /**
  * Populate the "This Week Live" panel with the latest computed values.
- * @param {{ repairsThisWeek, payoutThisWeek, topMechName, topMechRepairs, perMechWeek }} data
+ * @param {{ repairsThisWeek, payoutThisWeek, topMechName, topMechRepairs, perMechWeek, perMechWeekAcross }} data
  */
 function updateThisWeekPanel(data) {
-  const { repairsThisWeek, payoutThisWeek, topMechName, topMechRepairs, perMechWeek } = data;
+  const { repairsThisWeek, payoutThisWeek, topMechName, topMechRepairs, perMechWeek, perMechWeekAcross = {} } = data;
 
   const repairsEl = document.getElementById("liveWeekRepairs");
   const payoutEl = document.getElementById("liveWeekPayout");
@@ -350,10 +356,11 @@ function updateThisWeekPanel(data) {
     const sorted = Object.entries(perMechWeek).sort((a, b) => b[1] - a[1]);
     const items = sorted.map(([name, reps]) => {
       const pay = reps * PAY_PER_REPAIR;
+      const acrossTotal = perMechWeekAcross[name] || 0;
       const safeN = kEscapeHtml(name);
       return `<div class="tw-mech-row">
         <span class="tw-mech-name">${safeN}</span>
-        <span class="tw-mech-stats">${reps} repair${reps !== 1 ? "s" : ""} · ${kFmtMoney(pay)}</span>
+        <span class="tw-mech-stats">${reps} repair${reps !== 1 ? "s" : ""} · ${kFmtMoney(pay)} · ${acrossTotal} Across</span>
       </div>`;
     });
     detailEl.innerHTML = items.join("");

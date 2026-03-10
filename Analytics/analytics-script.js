@@ -268,13 +268,13 @@ async function loadAnalytics() {
       if (cutoff && jobDate && jobDate < cutoff) return;
       if (selectedMech !== "all" && mech !== selectedMech) return;
 
-      totalRepairs += across;
-      if (mech) mechTotals[mech] = (mechTotals[mech] || 0) + across;
+      totalRepairs += 1; // Each form entry is one repair regardless of "across" value
+      if (mech) mechTotals[mech] = (mechTotals[mech] || 0) + 1;
 
       if (jobDate && !isNaN(jobDate)) {
         const key = periodKey(jobDate, groupBy);
-        periodRepairs[key] = (periodRepairs[key] || 0) + across;
-        periodPayout[key]  = (periodPayout[key]  || 0) + across * PAY_PER_REPAIR;
+        periodRepairs[key] = (periodRepairs[key] || 0) + 1;
+        periodPayout[key]  = (periodPayout[key]  || 0) + PAY_PER_REPAIR;
       }
     });
 

@@ -149,7 +149,13 @@ function getMechanicsForCurrentWeek() {
 
   const weekEntries = weeklyAgg.filter((w) => w.weekISO === targetWeek);
   const weekEnding = weekEntries.length > 0 ? fmtDate(weekEntries[0].weekEnd) : targetWeek;
-  const mechanicList = weekEntries.map((w) => w.mechanic).sort();
+  const mechanicList = weekEntries
+    .map((w) => {
+      const enginePay = calculateEnginePayment(w.engineReplacementsByDept);
+      const payout = w.repairs * PAY_PER_REPAIR + enginePay;
+      return { name: w.mechanic, payout };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   return { weekEnding, mechanicList };
 }
@@ -183,7 +189,7 @@ async function handlePayoutsProcessed(btn) {
 
   const mechListStr =
     mechanicList.length > 0
-      ? mechanicList.join(", ")
+      ? mechanicList.map((m) => `${m.name} (${fmtMoney(m.payout)})`).join(", ")
       : "No mechanics found";
 
   kConfirm(
