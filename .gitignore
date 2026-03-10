@@ -12,6 +12,10 @@ Payouts/test-payouts-logic.html
 .DS_Store
 Thumbs.db
 
+# Discord bot — local dependencies and Wrangler cache
+discord-bot/node_modules/
+discord-bot/.wrangler/
+
 # Logs
 *.log
 npm-debug.log*
