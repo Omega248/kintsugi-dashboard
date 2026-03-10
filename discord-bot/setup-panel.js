@@ -40,9 +40,9 @@ const panelPayload = {
       description:
         'Click **Request Job Logs** below to view a mechanic\'s repair history.\n\n' +
         '> 1. **Select a mechanic** from the dropdown\n' +
-        '> 2. **Select a time period** — Current Week, This Month, or All Time\n' +
+        '> 2. **Select a week** — the current week is always listed first, followed by all weeks with completed jobs\n' +
         '> 3. Your job log will appear **privately** (only you can see it)\n\n' +
-        '_The mechanic list is loaded live from the job sheet each time._',
+        '_The mechanic list and week history are loaded live from the job sheet each time._',
       color:  0x4f46e5,
       footer: { text: 'Kintsugi Motorworks · Job Logs Panel' },
     },

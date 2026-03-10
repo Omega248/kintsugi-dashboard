@@ -166,33 +166,32 @@ function fmtMoney(n) {
   return '£' + Math.round(n || 0).toLocaleString('en-GB');
 }
 
-// ===== Time-range filtering =====
+// ===== Week filtering =====
 
-/** Return the Monday–Sunday bounds of the week containing `d`. */
-function getWeekBounds(d) {
-  const day  = d.getDay();                        // 0 = Sunday
-  const diff = day === 0 ? -6 : 1 - day;         // shift back to Monday
-  const mon  = new Date(d);
-  mon.setHours(0, 0, 0, 0);
-  mon.setDate(d.getDate() + diff);
-  const sun  = new Date(mon);
-  sun.setDate(mon.getDate() + 6);
+/**
+ * Filter jobs that belong to the week ending on the given Sunday.
+ * Matches by the "Week Ending" column date when present, otherwise falls back
+ * to checking whether the form-submission timestamp (tsDate) falls within the
+ * Monday–Sunday window of that week.
+ */
+function filterByWeekEnding(jobs, weekEndDate) {
+  const ref = new Date(weekEndDate);
+  ref.setHours(0, 0, 0, 0);
+  // Monday that opens this week
+  const mon = new Date(ref);
+  mon.setDate(ref.getDate() - 6);
+  // Sunday end of day
+  const sun = new Date(ref);
   sun.setHours(23, 59, 59, 999);
-  return { start: mon, end: sun };
-}
 
-function filterByPeriod(jobs, period) {
-  const now = new Date();
-  if (period === 'current_week') {
-    const { start, end } = getWeekBounds(now);
-    return jobs.filter(j => j.bestDate && j.bestDate >= start && j.bestDate <= end);
-  }
-  if (period === 'this_month') {
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    const end   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-    return jobs.filter(j => j.bestDate && j.bestDate >= start && j.bestDate <= end);
-  }
-  return jobs; // 'all_time'
+  return jobs.filter(j => {
+    if (j.weekEnd) {
+      const we = new Date(j.weekEnd);
+      we.setHours(0, 0, 0, 0);
+      return we.getTime() === ref.getTime();
+    }
+    return j.bestDate && j.bestDate >= mon && j.bestDate <= sun;
+  });
 }
 
 // ===== Weekly aggregation (mirrors mechanics-script.js mechBuildWeeklyStats) =====
@@ -361,20 +360,60 @@ function buildMechanicSelectPayload(mechanicNames) {
   };
 }
 
-// ===== Period select-menu builder =====
+// ===== Week select-menu builder =====
 
 /**
- * Build the period-selection message payload.
- * The mechanic name is encoded into the select menu's custom_id so the
- * Worker can retrieve it when the user picks a period — no server state needed.
+ * Build the week-selection message payload.
+ * The current week (ending this coming Sunday) is always listed first so the
+ * user can always check the current pay period even with no jobs yet.
+ * Historical weeks come from the mechanic's actual job data, newest first.
+ * The mechanic name is encoded into the select menu's custom_id.
+ * Select menus support a maximum of 25 options.
  */
-function buildPeriodSelectPayload(mechanic) {
-  // custom_id is max 100 chars: prefix (22 chars) + mechanic name (≤78 chars)
-  const safeMech  = mechanic.slice(0, 78);
-  const customId  = `joblogs_period_select:${safeMech}`;
+function buildWeekSelectPayload(mechanic, weeks) {
+  const now    = new Date();
+  const dayNum = now.getDay(); // 0 = Sunday
+  const currentSunday = new Date(now);
+  currentSunday.setDate(now.getDate() + (dayNum === 0 ? 0 : 7 - dayNum));
+  currentSunday.setHours(0, 0, 0, 0);
+  const currentSundayKey = currentSunday.toISOString().slice(0, 10);
+
+  const options  = [];
+  const seenKeys = new Set();
+
+  // Always include the current week first
+  options.push({
+    label:       `Week ending ${fmtDate(currentSunday)}`,
+    value:       currentSundayKey,
+    description: "This week's jobs",
+    emoji:       { name: '📅' },
+  });
+  seenKeys.add(currentSundayKey);
+
+  // Add historical weeks from job data (sorted newest first)
+  for (const w of weeks) {
+    if (options.length >= 25) break;
+    const key = w.weekEndDate
+      ? w.weekEndDate.toISOString().slice(0, 10)
+      : w.weekKey;
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
+
+    const label = w.weekEndDate
+      ? `Week ending ${fmtDate(w.weekEndDate)}`
+      : `Week ${w.weekKey}`;
+    options.push({
+      label: label.length > 100 ? label.slice(0, 97) + '…' : label,
+      value: key,
+    });
+  }
+
+  // custom_id is max 100 chars: prefix (21 chars) + mechanic name (≤79 chars)
+  const safeMech = mechanic.slice(0, 79);
+  const customId = `joblogs_week_select:${safeMech}`;
 
   return {
-    content:    `👷 **${mechanic}** — Select a time period:`,
+    content:    `👷 **${mechanic}** — Select a week:`,
     components: [
       {
         type: 1,
@@ -382,27 +421,8 @@ function buildPeriodSelectPayload(mechanic) {
           {
             type:        3,
             custom_id:   customId,
-            placeholder: 'Choose a time period…',
-            options: [
-              {
-                label:       'Current Week',
-                value:       'current_week',
-                description: "This week's jobs only",
-                emoji:       { name: '📅' },
-              },
-              {
-                label:       'This Month',
-                value:       'this_month',
-                description: 'All jobs in the current calendar month',
-                emoji:       { name: '📆' },
-              },
-              {
-                label:       'All Time',
-                value:       'all_time',
-                description: 'Complete job history for this mechanic',
-                emoji:       { name: '📋' },
-              },
-            ],
+            placeholder: 'Choose a week…',
+            options,
           },
         ],
       },
@@ -413,8 +433,10 @@ function buildPeriodSelectPayload(mechanic) {
 // ===== Discord embed builder =====
 
 function periodLabel(period) {
-  if (period === 'current_week') return 'Current Week';
-  if (period === 'this_month')   return 'This Month';
+  // ISO date string (e.g. "2026-03-15") → "Week ending DD/MM/YY"
+  if (/^\d{4}-\d{2}-\d{2}$/.test(period)) {
+    return `Week ending ${fmtDate(new Date(period + 'T00:00:00Z'))}`;
+  }
   return 'All Time';
 }
 
@@ -520,7 +542,9 @@ async function handleStartButton(interaction, ctx) {
 }
 
 /**
- * Mechanic select-menu chosen — swap the message to show the period select.
+ * Mechanic select-menu chosen — fetch that mechanic's job history and swap
+ * the message to show the week select dropdown (newest weeks first, with the
+ * current week always listed first).
  * We defer the update (type 6) so Discord shows a brief loading state on the
  * component, then we PATCH the original message.
  */
@@ -529,22 +553,35 @@ async function handleMechSelect(interaction, ctx) {
   const mechanic = interaction.data.values[0];
 
   ctx.waitUntil((async () => {
-    await editOriginalMessage(appId, token, buildPeriodSelectPayload(mechanic))
-      .catch(() => {});
+    try {
+      const jobRows      = await fetchSheet(JOBS_SHEET);
+      const allJobs      = parseJobsSheet(jobRows);
+      const mechanicJobs = allJobs.filter(j => j.mechanic === mechanic);
+      const weeks        = buildWeeklyStats(mechanicJobs);
+
+      await editOriginalMessage(appId, token, buildWeekSelectPayload(mechanic, weeks));
+    } catch (err) {
+      await editOriginalMessage(appId, token, {
+        content:    `❌ Failed to load week list.\n\`${err.message}\``,
+        components: [],
+      }).catch(() => {});
+    }
   })());
 
   return jsonResponse({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
 }
 
 /**
- * Period select-menu chosen — fetch full job data and replace the dropdowns
- * with the formatted job-log embed.
+ * Week select-menu chosen — fetch full job data for that mechanic, filter to
+ * the selected week, and replace the dropdown with the formatted job-log embed.
+ * The mechanic name was encoded into the custom_id after the first colon.
+ * The selected value is an ISO date string for the week-ending Sunday
+ * (e.g. "2026-03-15").
  */
-async function handlePeriodSelect(interaction, ctx) {
+async function handleWeekSelect(interaction, ctx) {
   const { application_id: appId, token } = interaction;
-  const period   = interaction.data.values[0];
+  const weekKey  = interaction.data.values[0];
 
-  // Mechanic name was encoded into the custom_id after the first colon
   const colonIdx = interaction.data.custom_id.indexOf(':');
   const mechanic = interaction.data.custom_id.slice(colonIdx + 1);
 
@@ -559,12 +596,13 @@ async function handlePeriodSelect(interaction, ctx) {
       const stateMap     = parseStateIds(stateRows);
       const mechanicJobs = allJobs.filter(j => j.mechanic === mechanic);
       const stateId      = stateMap.get(mechanic) || 'N/A';
-      const filteredJobs = filterByPeriod(mechanicJobs, period);
+      const weekEndDate  = new Date(weekKey + 'T00:00:00Z');
+      const filteredJobs = filterByWeekEnding(mechanicJobs, weekEndDate);
       const weeks        = buildWeeklyStats(filteredJobs);
 
       await editOriginalMessage(
         appId, token,
-        buildJobLogPayload(mechanic, stateId, weeks, period)
+        buildJobLogPayload(mechanic, stateId, weeks, weekKey)
       );
     } catch (err) {
       await editOriginalMessage(appId, token, {
@@ -622,8 +660,8 @@ export default {
       if (customId === 'joblogs_mech_select') {
         return handleMechSelect(interaction, ctx);
       }
-      if (customId.startsWith('joblogs_period_select:')) {
-        return handlePeriodSelect(interaction, ctx);
+      if (customId.startsWith('joblogs_week_select:')) {
+        return handleWeekSelect(interaction, ctx);
       }
     }
 
