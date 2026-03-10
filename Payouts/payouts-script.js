@@ -440,9 +440,6 @@ function getFilters() {
 function renderWeekly() {
   const { mech, dept, week } = getFilters(); // month ignored in weekly
   
-  // Use document fragment for better performance
-  const fragment = document.createDocumentFragment();
-  
   weeklyBody.innerHTML = "";
 
   // Filter jobs first by department if needed
@@ -482,8 +479,11 @@ function renderWeekly() {
   const filtered = Array.from(weeklyMap.values());
 
   if (!filtered.length) {
-    weeklyBody.innerHTML =
-      '<tr><td colspan="5" style="padding:8px; color:#6b7280;">No weekly records for this selection.</td></tr>';
+    // Use kRenderTable for consistent empty-state rendering
+    kRenderTable(weeklyBody, [], [], {
+      emptyMessage: "No weekly records for this selection.",
+      emptyColspan: 5,
+    });
     if (weeklySummaryEl) weeklySummaryEl.textContent = "";
     return;
   }
@@ -504,6 +504,9 @@ function renderWeekly() {
 
   const summarySource = [];
   let groupCounter = 0;
+
+  // Use a DocumentFragment for a single DOM insertion (better performance)
+  const fragment = document.createDocumentFragment();
 
   weekBuckets.forEach((bucket) => {
     const { weekEnd, entries } = bucket;
@@ -546,37 +549,61 @@ function renderWeekly() {
     headerRow.appendChild(headerTd);
     fragment.appendChild(headerRow);
 
-    // Second pass: create individual mechanic rows under this group
+    // Second pass: build mechanic rows using kMakeButton (no innerHTML)
     entries.forEach((r) => {
       const enginePay = calculateEnginePayment(r.engineReplacementsByDept);
       const pay = r.repairs * PAY_PER_REPAIR + enginePay;
       const comment = commentForWeek(r.weekEnd);
-
       const mechLabel = labelWithStateId(r.mechanic);
 
       const tr = document.createElement("tr");
       tr.className = "week-group-row";
       tr.dataset.groupId = groupId;
-      tr.innerHTML = `
-        <td><button class="mech-link" data-mech="${r.mechanic}">${mechLabel}</button></td>
-        <td>${fmtDate(r.weekEnd)}</td>
-        <td class="col-count">${r.repairs}</td>
-        <td class="col-amount amount-in">
-          ${fmtMoney(pay)}
-          <div class="payout-comment">${comment}</div>
-        </td>
-        <td class="col-actions">
-          <button class="btn btn-copy-summary" 
-                  title="Copy payout summary to clipboard"
-                  data-mechanic="${r.mechanic}"
-                  data-week-end="${r.weekEnd.toISOString()}"
-                  data-repairs="${r.repairs}"
-                  data-engine-depts='${JSON.stringify(r.engineReplacementsByDept)}'
-                  data-total-pay="${pay}">
-            📋 Copy
-          </button>
-        </td>
-      `;
+
+      // Cell 1: mechanic link button
+      const tdMech = document.createElement("td");
+      tdMech.appendChild(kMakeButton(mechLabel, {
+        className: "mech-link",
+        dataset: { mech: r.mechanic },
+      }));
+      tr.appendChild(tdMech);
+
+      // Cell 2: week ending date
+      const tdDate = document.createElement("td");
+      tdDate.textContent = fmtDate(r.weekEnd);
+      tr.appendChild(tdDate);
+
+      // Cell 3: repair count
+      const tdCount = document.createElement("td");
+      tdCount.className = "col-count";
+      tdCount.textContent = r.repairs;
+      tr.appendChild(tdCount);
+
+      // Cell 4: pay amount with payout comment sub-line
+      const tdPay = document.createElement("td");
+      tdPay.className = "col-amount amount-in";
+      tdPay.textContent = fmtMoney(pay);
+      const commentDiv = document.createElement("div");
+      commentDiv.className = "payout-comment";
+      commentDiv.textContent = comment;
+      tdPay.appendChild(commentDiv);
+      tr.appendChild(tdPay);
+
+      // Cell 5: copy action button
+      const tdActions = document.createElement("td");
+      tdActions.className = "col-actions";
+      tdActions.appendChild(kMakeButton("📋 Copy", {
+        className: "btn btn-copy-summary",
+        title: "Copy payout summary to clipboard",
+        dataset: {
+          mechanic: r.mechanic,
+          weekEnd: r.weekEnd.toISOString(),
+          repairs: String(r.repairs),
+          engineDepts: JSON.stringify(r.engineReplacementsByDept),
+          totalPay: String(pay),
+        },
+      }));
+      tr.appendChild(tdActions);
 
       fragment.appendChild(tr);
     });
@@ -599,7 +626,6 @@ function updateWeeklySummary(weekBuckets) {
 // ===== Monthly view =====
 function renderMonthly() {
   const { dept, month } = getFilters();
-  monthlyBody.innerHTML = "";
 
   const headerCell = document.getElementById("monthlyTotalHeader");
 
@@ -634,11 +660,13 @@ function renderMonthly() {
   let rows = Array.from(monthlyMap.values());
 
   if (!rows.length) {
-    monthlyBody.innerHTML =
-      '<tr><td colspan="4" style="padding:8px; color:#6b7280;">No monthly records for this selection.</td></tr>';
     if (headerCell) {
       headerCell.textContent = "Total Repair Value ($2,500/repair)";
     }
+    kRenderTable(monthlyBody, [], [], {
+      emptyMessage: "No monthly records for this selection.",
+      emptyColspan: 4,
+    });
     return;
   }
 
@@ -646,36 +674,57 @@ function renderMonthly() {
     monthSortDesc ? b.monthEnd - a.monthEnd : a.monthEnd - b.monthEnd
   );
 
+  // Pre-calculate totals for the header cell update
   let grandTotalValue = 0;
-
   rows.forEach((r) => {
-    const engineReps = r.engineReplacements || 0;
     const engineValue = calculateEngineValue(r.engineReplacementsByDept || {});
-    const totalValue = r.repairs * REPAIR_RATE + engineValue;
-    grandTotalValue += totalValue;
-
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${fmtDate(r.monthEnd)}</td>
-      <td class="col-count">${r.repairs}</td>
-      <td class="col-count">${engineReps}</td>
-      <td class="col-amount amount-in">${fmtMoney(totalValue)}</td>
-    `;
-    monthlyBody.appendChild(tr);
+    grandTotalValue += r.repairs * REPAIR_RATE + engineValue;
   });
 
+  kRenderTable(
+    monthlyBody,
+    rows,
+    [
+      {
+        render: function (r) { return fmtDate(r.monthEnd); },
+      },
+      {
+        className: "col-count",
+        render: function (r) { return r.repairs; },
+      },
+      {
+        className: "col-count",
+        render: function (r) { return r.engineReplacements || 0; },
+      },
+      {
+        className: "col-amount amount-in",
+        render: function (r) {
+          const engineValue = calculateEngineValue(r.engineReplacementsByDept || {});
+          return fmtMoney(r.repairs * REPAIR_RATE + engineValue);
+        },
+      },
+    ],
+    {
+      emptyMessage: "No monthly records for this selection.",
+      emptyColspan: 4,
+    }
+  );
+
   if (headerCell) {
-    headerCell.innerHTML = `
-      <div>Total Repair Value</div>
-      <div class="th-total-amount">${fmtMoney(grandTotalValue)}</div>
-    `;
+    const titleDiv = document.createElement("div");
+    titleDiv.textContent = "Total Repair Value";
+    const totalDiv = document.createElement("div");
+    totalDiv.className = "th-total-amount";
+    totalDiv.textContent = fmtMoney(grandTotalValue);
+    headerCell.textContent = "";
+    headerCell.appendChild(titleDiv);
+    headerCell.appendChild(totalDiv);
   }
 }
 
 // ===== Jobs view =====
 function renderJobs() {
   const { mech, dept, week, month } = getFilters();
-  jobsBody.innerHTML = "";
 
   const q =
     (jobsSearchInput && jobsSearchInput.value.trim().toLowerCase()) || "";
@@ -712,8 +761,10 @@ function renderJobs() {
   });
 
   if (!rows.length) {
-    jobsBody.innerHTML =
-      '<tr><td colspan="9" style="padding:8px; color:#6b7280;">No jobs for this selection.</td></tr>';
+    kRenderTable(jobsBody, [], [], {
+      emptyMessage: "No jobs for this selection.",
+      emptyColspan: 9,
+    });
     return;
   }
 
@@ -729,31 +780,70 @@ function renderJobs() {
     return 0;
   });
 
-  rows.forEach((j) => {
-    const engineReps = j.engineReplacements || 0;
-    const engineLabel = engineReps ? "Yes" : "No";
-    // Use BCSO rate for BCSO engine replacements, standard rate for others
-    const engineRate = (j.department === "BCSO" && engineReps > 0) ? 
-                       ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
-    const totalValue =
-      j.across * REPAIR_RATE + engineReps * engineRate;
-
-    const mechLabel = j.mechanic; // keep Jobs view as raw mechanic name
-
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${j.tsDate ? fmtDate(j.tsDate) : ""}</td>
-      <td><button class="mech-link link-btn" data-mech="${j.mechanic}">${mechLabel}</button></td>
-      <td><button class="owner-link link-btn" data-owner="${j.owner}">${j.owner}</button></td>
-      <td><button class="plate-link link-btn" data-plate="${j.plate}">${j.plate}</button></td>
-      <td class="col-count">${j.across}</td>
-      <td class="col-count">${engineLabel}</td>
-      <td>${fmtDate(j.weekEnd)}</td>
-      <td>${fmtDate(j.monthEnd)}</td>
-      <td class="col-amount amount-in">${fmtMoney(totalValue)}</td>
-    `;
-    jobsBody.appendChild(tr);
-  });
+  kRenderTable(
+    jobsBody,
+    rows,
+    [
+      {
+        render: function (j) { return j.tsDate ? fmtDate(j.tsDate) : null; },
+      },
+      {
+        // Click is handled by event delegation on jobsBody (see onMechanicClickFromTable)
+        render: function (j) {
+          return kMakeButton(j.mechanic, {
+            className: "mech-link link-btn",
+            dataset: { mech: j.mechanic },
+          });
+        },
+      },
+      {
+        // Click is handled by event delegation on jobsBody
+        render: function (j) {
+          return kMakeButton(j.owner, {
+            className: "owner-link link-btn",
+            dataset: { owner: j.owner },
+          });
+        },
+      },
+      {
+        // Click is handled by event delegation on jobsBody
+        render: function (j) {
+          return kMakeButton(j.plate, {
+            className: "plate-link link-btn",
+            dataset: { plate: j.plate },
+          });
+        },
+      },
+      {
+        className: "col-count",
+        render: function (j) { return j.across; },
+      },
+      {
+        className: "col-count",
+        render: function (j) { return (j.engineReplacements || 0) ? "Yes" : "No"; },
+      },
+      {
+        render: function (j) { return fmtDate(j.weekEnd); },
+      },
+      {
+        render: function (j) { return fmtDate(j.monthEnd); },
+      },
+      {
+        className: "col-amount amount-in",
+        render: function (j) {
+          const engineReps = j.engineReplacements || 0;
+          const engineRate = (j.department === "BCSO" && engineReps > 0)
+            ? ENGINE_REPLACEMENT_RATE_BCSO
+            : ENGINE_REPLACEMENT_RATE;
+          return fmtMoney(j.across * REPAIR_RATE + engineReps * engineRate);
+        },
+      },
+    ],
+    {
+      emptyMessage: "No jobs for this selection.",
+      emptyColspan: 9,
+    }
+  );
 }
 
 // ===== Mechanic summary helpers =====

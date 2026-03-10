@@ -631,6 +631,14 @@ tbody.loading::after {
   font-variant-numeric: tabular-nums;
 }
 
+/* Table empty state (rendered by kRenderTable in table-helper.js) */
+.table-empty-cell {
+  padding: var(--space-sm);
+  color: var(--text-tertiary);
+  text-align: center !important;
+  font-style: italic;
+}
+
 /* Amount styling */
 .amount-in {
   color: var(--color-success);

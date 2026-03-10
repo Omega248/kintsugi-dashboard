@@ -888,7 +888,6 @@ function getCategoryClass(c) {
 
 function drawTable(rows) {
   tableHead.innerHTML = "";
-  tableBody.innerHTML = "";
   if (detailsPanel) detailsPanel.style.display = "none";
 
   const rename = {
@@ -921,6 +920,7 @@ function drawTable(rows) {
     cols.push("Balance");
   }
 
+  // ===== BUILD HEADER ROW (custom: drag/resize handlers) =====
   const trh = document.createElement("tr");
   cols.forEach((h) => {
     const key = h.toLowerCase();
@@ -947,66 +947,72 @@ function drawTable(rows) {
   });
   tableHead.appendChild(trh);
 
-  rows.forEach((r) => {
-    const tr = document.createElement("tr");
-    if (r._bet) tr.classList.add("row-bet");
-    tr.addEventListener("click", () => showDetails(r));
+  // ===== BUILD BODY ROWS via kRenderTable =====
+  // Build column definitions dynamically from active cols
+  const columns = cols.map(function (h) {
+    const key = h.toLowerCase();
+    return {
+      className: key === "date" ? "col-date" : undefined,
+      render: function (r, td) { return bankRenderCell(key, h, r, td); },
+    };
+  });
 
-    cols.forEach((h) => {
-      const key = h.toLowerCase();
-      const td = document.createElement("td");
-      const dir = (r.direction || "").toLowerCase();
-
-      if (key.includes("amount") && key !== "bet (est)") {
-        const n = parseFloat(r[h] || r["Amount ($)"] || r.amount || 0);
-        if (!isNaN(n) && n !== 0) {
-          td.textContent = money(n);
-          if (dir === "out") td.classList.add("amount-out");
-          if (dir === "in") td.classList.add("amount-in");
-        }
-      } else if (key === "bet (est)") {
-        td.textContent = r._bet ? intFmt(r._bet) : "";
-        td.style.textAlign = "right";
-      } else if (key === "type") {
-        const val = r[h] || "";
-        const pill = document.createElement("span");
-        pill.className = "pill-type " + getTypeClass(val);
-        pill.textContent = val || "other";
-        td.appendChild(pill);
-      } else if (key === "category") {
-        const cat = r._category || "Other";
-        const pill = document.createElement("span");
-        pill.className = "pill-cat " + getCategoryClass(cat);
-        pill.textContent = cat;
-        td.appendChild(pill);
-      } else if (key === "flag") {
-        if (r._flag) {
-          const pill = document.createElement("span");
-          pill.className = "flag-pill";
-          pill.textContent = "Flag";
-          pill.title = (r._flagReasons || []).join(" • ");
-          td.appendChild(pill);
-        }
-      } else if (key === "balance") {
-        td.textContent =
-          typeof r._balance === "number" ? money(r._balance) : "";
-        td.style.textAlign = "right";
-      } else if (key === "date") {
-        const formatted = formatDateShort(
-          r[h] || r.Date || r.date || r.DateTime
-        );
-        td.textContent = formatted;
-        td.classList.add("col-date");
-      } else {
-        td.textContent = r[h] ?? "";
-      }
-
-      tr.appendChild(td);
-    });
-
-    tableBody.appendChild(tr);
+  kRenderTable(tableBody, rows, columns, {
+    emptyMessage: "No transactions match the current filters.",
+    emptyColspan: cols.length || 1,
+    rowClass: function (r) { return r._bet ? "row-bet" : ""; },
+    onRowClick: function (r) { showDetails(r); },
   });
 }
+
+// ===== Bank cell renderer — called by kRenderTable column definitions =====
+function bankRenderCell(key, h, r, td) {
+  const dir = (r.direction || "").toLowerCase();
+
+  if (key.includes("amount") && key !== "bet (est)") {
+    const n = parseFloat(r[h] || r["Amount ($)"] || r.amount || 0);
+    if (!isNaN(n) && n !== 0) {
+      if (dir === "out") td.classList.add("amount-out");
+      if (dir === "in") td.classList.add("amount-in");
+      return money(n);
+    }
+    return null;
+  }
+
+  if (key === "bet (est)") {
+    td.style.textAlign = "right";
+    return r._bet ? intFmt(r._bet) : null;
+  }
+
+  if (key === "type") {
+    const val = r[h] || "";
+    return kMakePill(val || "other", "pill-type " + getTypeClass(val));
+  }
+
+  if (key === "category") {
+    const cat = r._category || "Other";
+    return kMakePill(cat, "pill-cat " + getCategoryClass(cat));
+  }
+
+  if (key === "flag") {
+    if (r._flag) {
+      return kMakePill("Flag", "flag-pill", (r._flagReasons || []).join(" • "));
+    }
+    return null;
+  }
+
+  if (key === "balance") {
+    td.style.textAlign = "right";
+    return typeof r._balance === "number" ? money(r._balance) : null;
+  }
+
+  if (key === "date") {
+    return formatDateShort(r[h] || r.Date || r.date || r.DateTime);
+  }
+
+  return r[h] != null ? String(r[h]) : null;
+}
+
 
 // ================== DETAILS & UTILS ==================
 

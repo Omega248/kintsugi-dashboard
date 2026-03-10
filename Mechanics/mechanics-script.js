@@ -357,30 +357,25 @@ function mechRenderGlobalSummary(stats, globalEarliest, globalLatest) {
 function mechRenderTable(stats) {
   if (!mechanicsBody) return;
 
-  mechanicsBody.innerHTML = "";
-  const frag = document.createDocumentFragment();
-
-  for (const row of stats) {
-    const tr = document.createElement("tr");
-    tr.classList.add("is-clickable");
-    tr.dataset.mechanic = row.mechanic;
-
-    const avg = row.avgPerWeek || 0;
-
-    tr.innerHTML = `
-      <td>${row.mechanic}</td>
-      <td>${row.totalRepairs.toLocaleString("en-GB")}</td>
-      <td>${row.weeksWorked || 0}</td>
-      <td>${row.monthsActive || 0}</td>
-      <td>${avg.toFixed(1)}</td>
-      <td>${mechFmtMoney(row.totalPayout)}</td>
-      <td>${row.lastJob ? mechFmtDate(row.lastJob) : "–"}</td>
-    `;
-
-    frag.appendChild(tr);
-  }
-
-  mechanicsBody.appendChild(frag);
+  kRenderTable(
+    mechanicsBody,
+    stats,
+    [
+      { render: function (r) { return r.mechanic; } },
+      { render: function (r) { return r.totalRepairs.toLocaleString("en-GB"); } },
+      { render: function (r) { return r.weeksWorked || 0; } },
+      { render: function (r) { return r.monthsActive || 0; } },
+      { render: function (r) { return (r.avgPerWeek || 0).toFixed(1); } },
+      { render: function (r) { return mechFmtMoney(r.totalPayout); } },
+      { render: function (r) { return r.lastJob ? mechFmtDate(r.lastJob) : "–"; } },
+    ],
+    {
+      emptyMessage: "No mechanics found.",
+      emptyColspan: 7,
+      rowClass: function () { return "is-clickable"; },
+      rowAttrs: function (r, tr) { tr.dataset.mechanic = r.mechanic; },
+    }
+  );
 }
 
 function mechRenderDetail(selected) {
