@@ -22,9 +22,7 @@ crons = ["0 18 * * 0"]
 #   1. Run:  wrangler kv:namespace create "KINTSUGI_BOT"
 #   2. Copy the returned `id` and paste it as the value below, replacing the placeholder.
 #   3. Re-deploy:  wrangler deploy
-[[kv_namespaces]]
-binding = "KV"
-id      = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
 
 # ===== Required Secrets =====
 # Set each secret once with:  wrangler secret put <NAME>
