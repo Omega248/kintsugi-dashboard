@@ -1009,6 +1009,16 @@ export default {
    *   5. Sends a deduplicated payday reminder ping in #payouts.
    */
   async scheduled(_event, env, _ctx) {
+    if (!env.KV) {
+      console.warn(
+        'scheduled: env.KV is not bound — analytics message editing and ' +
+        'payday deduplication are disabled. The deploy workflow should bind ' +
+        'the KINTSUGI_BOT KV namespace automatically; check that ' +
+        'CLOUDFLARE_API_TOKEN has Workers KV Storage:Edit permission and ' +
+        'that the deploy workflow ran successfully.'
+      );
+    }
+
     const missing = validateConfig(env);
     if (missing.length > 0) {
       console.error(

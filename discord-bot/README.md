@@ -56,9 +56,10 @@ Private message updates → formatted job-log embed appears
 | Bot hosting | Cloudflare Workers | 100k req/day |
 | Interactions delivery | Discord Components API | Free |
 | Data source | Google Sheets (public CSV) | Free |
+| State persistence | Cloudflare Workers KV | 1 GB / 100k reads / 1k writes per day |
 | CI/CD | GitHub Actions | Free |
 
-No server, no database, no cold starts.  The Worker is stateless — the mechanic name is encoded directly into each select menu's `custom_id`, so nothing needs to be stored between steps.
+The Worker is stateless for interactions — the mechanic name is encoded directly into each select menu's `custom_id`. Workers KV is used only by the weekly cron to persist the analytics message ID (so it edits rather than re-posts) and to deduplicate the payday reminder. **The KV namespace is created and bound automatically by the deploy workflow — no manual setup required.**
 
 ---
 
@@ -100,7 +101,7 @@ No server, no database, no cold starts.  The Worker is stateless — the mechani
 
 | Secret name | Value |
 |---|---|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API token with **Workers Scripts:Edit** permission ([create one here](https://dash.cloudflare.com/profile/api-tokens)) |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API token with **Workers Scripts:Edit** and **Workers KV Storage:Edit** permissions ([create one here](https://dash.cloudflare.com/profile/api-tokens)) |
 | `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID |
 | `DISCORD_PUBLIC_KEY` | The Public Key from step 1 |
 | `DISCORD_BOT_TOKEN` | The Bot Token from step 1 (keep it secret — treat it like a password) |
@@ -118,7 +119,11 @@ The deploy workflow automatically syncs all of these into the Cloudflare Worker'
 Push any change to `discord-bot/` on the `main` branch, **or** go to:  
 **Actions → Deploy Discord Bot → Run workflow**
 
-The Action deploys `worker.js` and automatically syncs all secrets listed above (`DISCORD_PUBLIC_KEY`, `DISCORD_BOT_TOKEN`, `ANALYTICS_CHANNEL_ID`, `JOBS_CHANNEL_ID`, `PAYOUTS_CHANNEL_ID`, `RIPTIDE_USER_ID`) into the Worker's secret store.
+The deploy workflow does the following automatically — **no manual steps required**:
+1. Looks up the `KINTSUGI_BOT` KV namespace in your Cloudflare account.
+2. Creates it if it doesn't exist yet.
+3. Binds it to the Worker as `KV` for persistent analytics/reminder state.
+4. Deploys `worker.js` and syncs all secrets (`DISCORD_PUBLIC_KEY`, `DISCORD_BOT_TOKEN`, `ANALYTICS_CHANNEL_ID`, `JOBS_CHANNEL_ID`, `PAYOUTS_CHANNEL_ID`, `RIPTIDE_USER_ID`) into the Worker's secret store.
 
 After it finishes, copy the Worker URL from Cloudflare (e.g. `https://kintsugi-discord-bot.<subdomain>.workers.dev`).
 
@@ -195,12 +200,15 @@ discord-bot/
 | Mechanic not in list | The sheet must be publicly accessible. Check that the **Mechanic** column name matches exactly. |
 | Panel disappeared | Re-run the **Post Job Logs Panel** Action (or `setup-panel.js` locally) to post a new one and pin it. |
 | Bot was already using `/joblogs` | Run `node discord-bot/register-commands.js` to clear the old slash command. |
-| Deploy Action fails | Verify `CLOUDFLARE_API_TOKEN` has Workers Scripts:Edit permission and `CLOUDFLARE_ACCOUNT_ID` is correct. |
+| Deploy Action fails at KV provisioning step | Verify `CLOUDFLARE_API_TOKEN` has **Workers Scripts:Edit** and **Workers KV Storage:Edit** permissions and `CLOUDFLARE_ACCOUNT_ID` is correct. |
+| Deploy Action fails at deploy step | Verify `CLOUDFLARE_API_TOKEN` has Workers Scripts:Edit permission and `CLOUDFLARE_ACCOUNT_ID` is correct. |
+| Cron runs but "env.KV is not bound" warning in logs | The deploy workflow did not complete successfully. Re-run **Deploy Discord Bot** and check the "Provision KV namespace" step for errors. |
 | Cron posts nothing / "missing required configuration" in logs | At least one channel ID secret is not set. Add `DISCORD_BOT_TOKEN`, `ANALYTICS_CHANNEL_ID`, `JOBS_CHANNEL_ID`, and `PAYOUTS_CHANNEL_ID` to GitHub Secrets and re-deploy. |
 | Cron posts to wrong channel | Double-check the channel IDs in GitHub Secrets — copy each ID fresh from Discord (right-click channel → Copy Channel ID). |
+| Analytics posts a new message every week instead of editing | Confirm the KV namespace was provisioned (check the deploy workflow logs) and that the Worker has a `KV` binding in the Cloudflare dashboard under Workers & Pages → your Worker → Settings → Bindings. |
 
 ---
 
 ## Data privacy
 
-The Worker fetches the Google Sheet in read-only mode each time a user interacts. No data is stored by Cloudflare — every request is stateless and discarded after the reply. Job log results are always ephemeral (private to the requesting user).
+The Worker fetches the Google Sheet in read-only mode each time a user interacts. Interaction results are always ephemeral (private to the requesting user). The only data persisted by Cloudflare is stored in the `KINTSUGI_BOT` Workers KV namespace: the Discord message ID of the weekly analytics embed (so it can be edited rather than re-posted) and the date of the last payday reminder (to prevent duplicate pings). No personal data is stored.
