@@ -1,0 +1,20 @@
+# Exclude the Discord bot worker (deployed separately via deploy-bot.yml)
+discord-bot/
+
+# Exclude CI/CD configuration
+.github/
+
+# Exclude version-control metadata
+.git/
+
+# Exclude editor and OS artifacts
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Exclude wrangler local cache
+.wrangler/
+
+# Exclude logs
+*.log
