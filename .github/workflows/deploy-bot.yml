@@ -9,6 +9,11 @@
 #   CLOUDFLARE_API_TOKEN   — Cloudflare API token with Workers:Edit permission
 #   CLOUDFLARE_ACCOUNT_ID  — Your Cloudflare account ID
 #   DISCORD_PUBLIC_KEY     — From Discord Developer Portal → "Public Key"
+#   DISCORD_BOT_TOKEN      — From Discord Developer Portal → Bot → "Reset Token"
+#   ANALYTICS_CHANNEL_ID   — Discord channel ID for the #analytics channel
+#   JOBS_CHANNEL_ID        — Discord channel ID for the #jobs channel
+#   PAYOUTS_CHANNEL_ID     — Discord channel ID for the #payouts channel
+#   RIPTIDE_USER_ID        — (Optional) Numeric Discord user ID to @mention on payday
 # =======================================
 name: Deploy Discord Bot
 
@@ -35,8 +40,18 @@ jobs:
           apiToken:         ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId:        ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: discord-bot
-          # Sync DISCORD_PUBLIC_KEY from GitHub Secrets → Cloudflare Worker secret
+          # Sync secrets from GitHub Secrets → Cloudflare Worker secret store
           secrets: |
             DISCORD_PUBLIC_KEY
+            DISCORD_BOT_TOKEN
+            ANALYTICS_CHANNEL_ID
+            JOBS_CHANNEL_ID
+            PAYOUTS_CHANNEL_ID
+            RIPTIDE_USER_ID
         env:
-          DISCORD_PUBLIC_KEY: ${{ secrets.DISCORD_PUBLIC_KEY }}
+          DISCORD_PUBLIC_KEY:   ${{ secrets.DISCORD_PUBLIC_KEY }}
+          DISCORD_BOT_TOKEN:    ${{ secrets.DISCORD_BOT_TOKEN }}
+          ANALYTICS_CHANNEL_ID: ${{ secrets.ANALYTICS_CHANNEL_ID }}
+          JOBS_CHANNEL_ID:      ${{ secrets.JOBS_CHANNEL_ID }}
+          PAYOUTS_CHANNEL_ID:   ${{ secrets.PAYOUTS_CHANNEL_ID }}
+          RIPTIDE_USER_ID:      ${{ secrets.RIPTIDE_USER_ID }}

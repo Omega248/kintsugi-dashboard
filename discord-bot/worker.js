@@ -5,8 +5,13 @@
 // the permanent job-log panel. No slash commands — the panel is a static
 // message posted once via setup-panel.js.
 //
-// Environment variables (set as Cloudflare secrets):
-//   DISCORD_PUBLIC_KEY — from the Discord Developer Portal
+// Required secrets (set via `wrangler secret put` or synced by GitHub Actions):
+//   DISCORD_PUBLIC_KEY    — Ed25519 public key from the Discord Developer Portal
+//   DISCORD_BOT_TOKEN     — Bot token used to post/edit messages in channels
+//   ANALYTICS_CHANNEL_ID  — Discord channel ID for weekly analytics summaries
+//   JOBS_CHANNEL_ID       — Discord channel ID for weekly job-activity updates
+//   PAYOUTS_CHANNEL_ID    — Discord channel ID for payday reminder pings
+//   RIPTIDE_USER_ID       — Numeric Discord user ID to @mention on payday (optional)
 // =======================================
 
 // ===== Sheet config (mirrors kintsugi-core.js) =====
@@ -727,6 +732,11 @@ function buildCurrentWeekSummary(allJobs) {
     if (repairs > topRepairs) { topMechanic = name; topRepairs = repairs; }
   }
 
+  // Sorted list of active mechanics for the #jobs channel post
+  const mechanics = [...mechMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, repairs]) => ({ name, repairs }));
+
   return {
     weekEndDate:    currentSunday,
     totalRepairs:   weekStats ? weekStats.totalRepairs        : 0,
@@ -735,23 +745,24 @@ function buildCurrentWeekSummary(allJobs) {
     mechanicCount:  mechMap.size,
     topMechanic,
     topRepairs,
+    mechanics,
   };
 }
 
 /**
- * POST a payload to a Discord webhook URL using `?wait=true` so Discord
- * returns the created message object.  Returns the message ID on success,
- * or null on failure.
+ * POST a message to a Discord channel using the bot token.
+ * Returns the message ID on success, or null on failure.
  */
-async function webhookPost(webhookUrl, payload) {
-  if (!webhookUrl || !webhookUrl.startsWith('https://discord.com/api/webhooks/')) {
-    return null;
-  }
+async function botPost(channelId, botToken, payload) {
+  if (!channelId || !botToken) return null;
   try {
-    const res = await fetch(`${webhookUrl}?wait=true`, {
+    const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
+      headers: {
+        'Authorization': `Bot ${botToken}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify(payload),
     });
     if (!res.ok) return null;
     const msg = await res.json();
@@ -762,32 +773,41 @@ async function webhookPost(webhookUrl, payload) {
 }
 
 /**
- * Edit an existing Discord webhook message in-place via PATCH.
+ * Edit an existing message in a Discord channel using the bot token.
  * Returns true on success, false on failure (e.g. message was deleted → 404).
- * Extracts the webhook ID and token from the webhook URL.
  */
-async function webhookEdit(webhookUrl, messageId, payload) {
-  if (!webhookUrl || !webhookUrl.startsWith('https://discord.com/api/webhooks/')) {
-    return false;
-  }
-  // URL format: https://discord.com/api/webhooks/{id}/{token}
-  const match = webhookUrl.match(/\/webhooks\/(\d+)\/([^/?#]+)/);
-  if (!match) return false;
-  const [, webhookId, webhookToken] = match;
-
+async function botEdit(channelId, botToken, messageId, payload) {
+  if (!channelId || !botToken || !messageId) return false;
   try {
     const res = await fetch(
-      `https://discord.com/api/v10/webhooks/${webhookId}/${webhookToken}/messages/${messageId}`,
+      `https://discord.com/api/v10/channels/${channelId}/messages/${messageId}`,
       {
         method:  'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(payload),
+        headers: {
+          'Authorization': `Bot ${botToken}`,
+          'Content-Type':  'application/json',
+        },
+        body: JSON.stringify(payload),
       }
     );
     return res.ok;
   } catch {
     return false;
   }
+}
+
+/**
+ * Validate that all required channel/bot configuration is present in env.
+ * Returns an array of missing variable names (empty array means all good).
+ */
+function validateConfig(env) {
+  const required = [
+    'DISCORD_BOT_TOKEN',
+    'ANALYTICS_CHANNEL_ID',
+    'JOBS_CHANNEL_ID',
+    'PAYOUTS_CHANNEL_ID',
+  ];
+  return required.filter(k => !env[k]);
 }
 
 /**
@@ -823,14 +843,14 @@ function buildAnalyticsPayload(summary) {
 }
 
 /**
- * Post or edit the weekly analytics summary.
+ * Post or edit the weekly analytics summary in the #analytics channel.
  * Uses KV to persist the analytics message ID so the same message is edited
  * each week rather than posting a new one.  If the stored message no longer
  * exists (deleted), a new message is posted and its ID stored.
- * Uses ANALYTICS_WEBHOOK_URL and the KV namespace from the Worker's environment.
+ * Uses DISCORD_BOT_TOKEN, ANALYTICS_CHANNEL_ID, and the KV namespace from env.
  */
 async function postWeeklyAnalytics(env, summary) {
-  if (!env.ANALYTICS_WEBHOOK_URL) return false;
+  if (!env.DISCORD_BOT_TOKEN || !env.ANALYTICS_CHANNEL_ID) return false;
 
   const payload = buildAnalyticsPayload(summary);
 
@@ -838,14 +858,14 @@ async function postWeeklyAnalytics(env, summary) {
   if (env.KV) {
     const storedId = await env.KV.get('analytics_message_id');
     if (storedId) {
-      const edited = await webhookEdit(env.ANALYTICS_WEBHOOK_URL, storedId, payload);
+      const edited = await botEdit(env.ANALYTICS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, storedId, payload);
       if (edited) return true;
       // Message was deleted — fall through to post a new one
     }
   }
 
   // Post a new message and persist its ID
-  const messageId = await webhookPost(env.ANALYTICS_WEBHOOK_URL, payload);
+  const messageId = await botPost(env.ANALYTICS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, payload);
   if (messageId && env.KV) {
     await env.KV.put('analytics_message_id', messageId);
   }
@@ -853,13 +873,50 @@ async function postWeeklyAnalytics(env, summary) {
 }
 
 /**
- * Send the payday reminder ping to the payouts webhook.
+ * Build the weekly job-activity embed payload for the #jobs channel.
+ * Lists all mechanics who submitted jobs this week, sorted by repair count.
+ */
+function buildJobsPayload(summary) {
+  const { weekEndDate, mechanics } = summary;
+
+  let description = `Jobs submitted for the week ending **${fmtDate(weekEndDate)}**:\n\n`;
+  if (mechanics.length > 0) {
+    description += mechanics
+      .map(({ name, repairs }) => `• **${name}** — ${repairs} repair${repairs !== 1 ? 's' : ''}`)
+      .join('\n');
+  } else {
+    description += '_No jobs submitted this week._';
+  }
+
+  return {
+    embeds: [{
+      title:     '📋 Weekly Job Activity',
+      description,
+      color:     0x4f46e5,
+      timestamp: new Date().toISOString(),
+      footer:    { text: 'Kintsugi Motorworks · Jobs' },
+    }],
+  };
+}
+
+/**
+ * Post the weekly job-activity summary to the #jobs channel.
+ * Uses DISCORD_BOT_TOKEN and JOBS_CHANNEL_ID from env.
+ */
+async function postJobsUpdate(env, summary) {
+  if (!env.DISCORD_BOT_TOKEN || !env.JOBS_CHANNEL_ID) return false;
+  const messageId = await botPost(env.JOBS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, buildJobsPayload(summary));
+  return messageId !== null;
+}
+
+/**
+ * Send the payday reminder ping to the #payouts channel.
  * Sends at most once per week-ending date, tracked in KV so the cron never
  * double-pings even if the Worker retries on failure.
- * Uses PAYOUTS_WEBHOOK_URL, RIPTIDE_USER_ID, and the KV namespace from env.
+ * Uses DISCORD_BOT_TOKEN, PAYOUTS_CHANNEL_ID, RIPTIDE_USER_ID, and the KV namespace from env.
  */
 async function postPaydayReminder(env, weekEndDate) {
-  if (!env.PAYOUTS_WEBHOOK_URL) return false;
+  if (!env.DISCORD_BOT_TOKEN || !env.PAYOUTS_CHANNEL_ID) return false;
 
   // Deduplicate: skip if we already sent the reminder for this week
   const weekKey = weekEndDate.toISOString().slice(0, 10);
@@ -872,7 +929,7 @@ async function postPaydayReminder(env, weekEndDate) {
     ? `<@${env.RIPTIDE_USER_ID}>`
     : '**@riptide248**';
 
-  const messageId = await webhookPost(env.PAYOUTS_WEBHOOK_URL, {
+  const messageId = await botPost(env.PAYOUTS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, {
     content: `${mention} 💰 **Payday reminder!** Payouts are due to be processed for the week ending **${fmtDate(weekEndDate)}**. Please review and mark them as processed in the dashboard when done.`,
   });
 
@@ -945,11 +1002,22 @@ export default {
   /**
    * Scheduled handler — runs on the Cron Trigger defined in wrangler.toml.
    * Every Sunday at 18:00 UTC it:
-   *   1. Reads live job data from the Google Sheet.
-   *   2. Posts the week's analytics summary to the analytics channel.
-   *   3. Sends a payday reminder ping to the payouts channel.
+   *   1. Validates that all required channel configuration is present.
+   *   2. Reads live job data from the Google Sheet.
+   *   3. Posts/edits the week's analytics summary in #analytics.
+   *   4. Posts the weekly job-activity list in #jobs.
+   *   5. Sends a deduplicated payday reminder ping in #payouts.
    */
   async scheduled(_event, env, _ctx) {
+    const missing = validateConfig(env);
+    if (missing.length > 0) {
+      console.error(
+        'scheduled: missing required configuration — set these secrets:\n' +
+        missing.map(k => `  wrangler secret put ${k}`).join('\n')
+      );
+      return;
+    }
+
     try {
       const jobRows = await fetchSheet(JOBS_SHEET);
       const allJobs = parseJobsSheet(jobRows);
@@ -957,6 +1025,7 @@ export default {
 
       await Promise.all([
         postWeeklyAnalytics(env, summary),
+        postJobsUpdate(env, summary),
         postPaydayReminder(env, summary.weekEndDate),
       ]);
     } catch (err) {

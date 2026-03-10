@@ -1,0 +1,51 @@
+# =======================================
+# Post the permanent Job Logs panel to a Discord channel
+#
+# Runs `discord-bot/setup-panel.js` using secrets stored in GitHub so you
+# never need to paste a bot token into a terminal.
+#
+# Trigger: manual only (Actions tab → "Post Job Logs Panel" → Run workflow)
+#
+# Required GitHub repository secrets:
+#   DISCORD_BOT_TOKEN — Bot token from the Discord Developer Portal
+#   JOBS_CHANNEL_ID   — Default channel to post the panel in (#jobs)
+#
+# Optional workflow input:
+#   channel_id — Override the target channel ID at run time.
+#                Leave blank to use the JOBS_CHANNEL_ID secret.
+# =======================================
+name: Post Job Logs Panel
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel_id:
+        description: >
+          Discord channel ID to post the panel in.
+          Leave blank to use the JOBS_CHANNEL_ID secret (your #jobs channel).
+        required: false
+        default: ''
+
+jobs:
+  post-panel:
+    name: Post panel to Discord
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Post Job Logs panel
+        working-directory: discord-bot
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          # Use the manually-supplied channel_id if provided, otherwise fall
+          # back to the JOBS_CHANNEL_ID secret.
+          DISCORD_CHANNEL_ID: ${{ inputs.channel_id != '' && inputs.channel_id || secrets.JOBS_CHANNEL_ID }}
+        run: node setup-panel.js
