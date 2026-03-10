@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 // =======================================
-// Kintsugi Discord Bot — Command Cleanup
+// Kintsugi Discord Bot — Command Registration
 //
-// The bot no longer uses any slash commands — everything is driven by the
-// permanent panel message.  Run this once to remove any previously-registered
-// /joblogs command from your Discord application.
+// Registers application commands with Discord.
+// Run this once after initial deployment or whenever commands change.
 //
 // Requirements:
 //   - Node.js 18+ (built-in fetch)
@@ -29,36 +28,54 @@ if (!APP_ID || !BOT_TOKEN) {
   process.exit(1);
 }
 
-async function clearCommands() {
+// ===== Command definitions =====
+
+const commands = [
+  {
+    name:                       'payouts',
+    description:                'Post a payouts-processed announcement for the most recent week.',
+    dm_permission:              false,
+    // Requires Manage Guild permission by default — configurable per-server in
+    // Discord Server Settings → Integrations → Kintsugi Bot → /payouts.
+    default_member_permissions: '32',
+  },
+];
+
+// ===== Register commands =====
+
+async function registerCommands() {
   const url = GUILD_ID
     ? `https://discord.com/api/v10/applications/${APP_ID}/guilds/${GUILD_ID}/commands`
     : `https://discord.com/api/v10/applications/${APP_ID}/commands`;
 
   console.log(GUILD_ID
-    ? `Clearing commands for guild ${GUILD_ID}…`
-    : 'Clearing global commands…'
+    ? `Registering commands for guild ${GUILD_ID}…`
+    : 'Registering global commands…'
   );
 
-  // PUT with an empty array removes all registered commands
+  // PUT replaces the full command list atomically
   const res = await fetch(url, {
     method:  'PUT',
     headers: {
       'Authorization': `Bot ${BOT_TOKEN}`,
       'Content-Type':  'application/json',
     },
-    body: JSON.stringify([]),
+    body: JSON.stringify(commands),
   });
 
   const data = await res.json();
   if (!res.ok) {
-    console.error('Failed to clear commands:', JSON.stringify(data, null, 2));
+    console.error('Failed to register commands:', JSON.stringify(data, null, 2));
     process.exit(1);
   }
 
-  console.log('✅ All slash commands cleared.');
+  console.log(`✅ Registered ${commands.length} command(s):`);
+  for (const cmd of data) {
+    console.log(`   /${cmd.name} — ${cmd.description}`);
+  }
 }
 
-clearCommands().catch(err => {
+registerCommands().catch(err => {
   console.error('Unexpected error:', err);
   process.exit(1);
 });

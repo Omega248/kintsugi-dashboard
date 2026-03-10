@@ -166,33 +166,32 @@ function fmtMoney(n) {
   return '£' + Math.round(n || 0).toLocaleString('en-GB');
 }
 
-// ===== Time-range filtering =====
+// ===== Week filtering =====
 
-/** Return the Monday–Sunday bounds of the week containing `d`. */
-function getWeekBounds(d) {
-  const day  = d.getDay();                        // 0 = Sunday
-  const diff = day === 0 ? -6 : 1 - day;         // shift back to Monday
-  const mon  = new Date(d);
-  mon.setHours(0, 0, 0, 0);
-  mon.setDate(d.getDate() + diff);
-  const sun  = new Date(mon);
-  sun.setDate(mon.getDate() + 6);
+/**
+ * Filter jobs that belong to the week ending on the given Sunday.
+ * Matches by the "Week Ending" column date when present, otherwise falls back
+ * to checking whether the form-submission timestamp (tsDate) falls within the
+ * Monday–Sunday window of that week.
+ */
+function filterByWeekEnding(jobs, weekEndDate) {
+  const ref = new Date(weekEndDate);
+  ref.setHours(0, 0, 0, 0);
+  // Monday that opens this week
+  const mon = new Date(ref);
+  mon.setDate(ref.getDate() - 6);
+  // Sunday end of day
+  const sun = new Date(ref);
   sun.setHours(23, 59, 59, 999);
-  return { start: mon, end: sun };
-}
 
-function filterByPeriod(jobs, period) {
-  const now = new Date();
-  if (period === 'current_week') {
-    const { start, end } = getWeekBounds(now);
-    return jobs.filter(j => j.bestDate && j.bestDate >= start && j.bestDate <= end);
-  }
-  if (period === 'this_month') {
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    const end   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-    return jobs.filter(j => j.bestDate && j.bestDate >= start && j.bestDate <= end);
-  }
-  return jobs; // 'all_time'
+  return jobs.filter(j => {
+    if (j.weekEnd) {
+      const we = new Date(j.weekEnd);
+      we.setHours(0, 0, 0, 0);
+      return we.getTime() === ref.getTime();
+    }
+    return j.bestDate && j.bestDate >= mon && j.bestDate <= sun;
+  });
 }
 
 // ===== Weekly aggregation (mirrors mechanics-script.js mechBuildWeeklyStats) =====
@@ -327,6 +326,90 @@ async function editOriginalMessage(appId, token, payload) {
   }
 }
 
+// ===== /payouts slash-command helpers =====
+
+/**
+ * Find the most recent week from all job data and return the mechanics who
+ * worked that week (sorted A→Z), plus the week-ending date.
+ */
+function getLatestWeekMechanics(allJobs) {
+  const allWeeks = buildWeeklyStats(allJobs);
+  if (!allWeeks.length) return { weekEndDate: null, mechanics: [] };
+
+  const latestWeek = allWeeks[0]; // buildWeeklyStats sorts newest first
+  const weekEndDate = latestWeek.weekEndDate || new Date(latestWeek.weekKey + 'T00:00:00Z');
+  const weekJobs    = filterByWeekEnding(allJobs, weekEndDate);
+
+  const mechanics = [...new Set(weekJobs.map(j => j.mechanic))].sort(
+    (a, b) => a.localeCompare(b)
+  );
+  return { weekEndDate, mechanics };
+}
+
+/**
+ * Build the payouts-processed embed payload.
+ * Mirrors kDiscordPostPayoutsProcessed from the old browser discord-service.js.
+ */
+function buildPayoutsProcessedPayload(weekEndDate, mechanics) {
+  let description =
+    `✅ Payouts for the week ending **${fmtDate(weekEndDate)}** have been processed.\n\n` +
+    'All mechanics listed below have been paid. If you believe there is an error, please contact management.';
+
+  if (mechanics.length > 0) {
+    description += `\n\n**Mechanics paid this week:**\n${mechanics.map(m => `• ${m}`).join('\n')}`;
+  }
+
+  return {
+    embeds: [{
+      title:     '✅ Payouts Processed',
+      description,
+      color:     0x22c55e,
+      timestamp: new Date().toISOString(),
+      footer:    { text: 'Kintsugi Motorworks · Payouts' },
+    }],
+  };
+}
+
+/**
+ * Handle the /payouts slash command.
+ * Defers publicly (everyone in the channel sees the response), reads the sheet,
+ * and edits the deferred response with the payouts-processed embed.
+ */
+async function handlePayoutsCommand(interaction, ctx) {
+  const { application_id: appId, token } = interaction;
+
+  ctx.waitUntil((async () => {
+    try {
+      const jobRows = await fetchSheet(JOBS_SHEET);
+      const allJobs = parseJobsSheet(jobRows);
+      const { weekEndDate, mechanics } = getLatestWeekMechanics(allJobs);
+
+      if (!weekEndDate || mechanics.length === 0) {
+        await editOriginalMessage(appId, token, {
+          content:    '❌ No payout data found for the most recent week.',
+          components: [],
+        });
+        return;
+      }
+
+      await editOriginalMessage(
+        appId, token,
+        buildPayoutsProcessedPayload(weekEndDate, mechanics)
+      );
+    } catch (err) {
+      await editOriginalMessage(appId, token, {
+        content:    `❌ Failed to load payout data.\n\`${err.message}\``,
+        components: [],
+      }).catch(() => {});
+    }
+  })());
+
+  // Deferred public response — visible to everyone in the channel
+  return jsonResponse({
+    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+  });
+}
+
 // ===== Mechanic select-menu builder =====
 
 /**
@@ -361,20 +444,60 @@ function buildMechanicSelectPayload(mechanicNames) {
   };
 }
 
-// ===== Period select-menu builder =====
+// ===== Week select-menu builder =====
 
 /**
- * Build the period-selection message payload.
- * The mechanic name is encoded into the select menu's custom_id so the
- * Worker can retrieve it when the user picks a period — no server state needed.
+ * Build the week-selection message payload.
+ * The current week (ending this coming Sunday) is always listed first so the
+ * user can always check the current pay period even with no jobs yet.
+ * Historical weeks come from the mechanic's actual job data, newest first.
+ * The mechanic name is encoded into the select menu's custom_id.
+ * Select menus support a maximum of 25 options.
  */
-function buildPeriodSelectPayload(mechanic) {
-  // custom_id is max 100 chars: prefix (22 chars) + mechanic name (≤78 chars)
-  const safeMech  = mechanic.slice(0, 78);
-  const customId  = `joblogs_period_select:${safeMech}`;
+function buildWeekSelectPayload(mechanic, weeks) {
+  const now    = new Date();
+  const dayNum = now.getDay(); // 0 = Sunday
+  const currentSunday = new Date(now);
+  currentSunday.setDate(now.getDate() + (dayNum === 0 ? 0 : 7 - dayNum));
+  currentSunday.setHours(0, 0, 0, 0);
+  const currentSundayKey = currentSunday.toISOString().slice(0, 10);
+
+  const options  = [];
+  const seenKeys = new Set();
+
+  // Always include the current week first
+  options.push({
+    label:       `Week ending ${fmtDate(currentSunday)}`,
+    value:       currentSundayKey,
+    description: "This week's jobs",
+    emoji:       { name: '📅' },
+  });
+  seenKeys.add(currentSundayKey);
+
+  // Add historical weeks from job data (sorted newest first)
+  for (const w of weeks) {
+    if (options.length >= 25) break;
+    const key = w.weekEndDate
+      ? w.weekEndDate.toISOString().slice(0, 10)
+      : w.weekKey;
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
+
+    const label = w.weekEndDate
+      ? `Week ending ${fmtDate(w.weekEndDate)}`
+      : `Week ${w.weekKey}`;
+    options.push({
+      label: label.length > 100 ? label.slice(0, 97) + '…' : label,
+      value: key,
+    });
+  }
+
+  // custom_id is max 100 chars: prefix (21 chars) + mechanic name (≤79 chars)
+  const safeMech = mechanic.slice(0, 79);
+  const customId = `joblogs_week_select:${safeMech}`;
 
   return {
-    content:    `👷 **${mechanic}** — Select a time period:`,
+    content:    `👷 **${mechanic}** — Select a week:`,
     components: [
       {
         type: 1,
@@ -382,27 +505,8 @@ function buildPeriodSelectPayload(mechanic) {
           {
             type:        3,
             custom_id:   customId,
-            placeholder: 'Choose a time period…',
-            options: [
-              {
-                label:       'Current Week',
-                value:       'current_week',
-                description: "This week's jobs only",
-                emoji:       { name: '📅' },
-              },
-              {
-                label:       'This Month',
-                value:       'this_month',
-                description: 'All jobs in the current calendar month',
-                emoji:       { name: '📆' },
-              },
-              {
-                label:       'All Time',
-                value:       'all_time',
-                description: 'Complete job history for this mechanic',
-                emoji:       { name: '📋' },
-              },
-            ],
+            placeholder: 'Choose a week…',
+            options,
           },
         ],
       },
@@ -413,8 +517,10 @@ function buildPeriodSelectPayload(mechanic) {
 // ===== Discord embed builder =====
 
 function periodLabel(period) {
-  if (period === 'current_week') return 'Current Week';
-  if (period === 'this_month')   return 'This Month';
+  // ISO date string (e.g. "2026-03-15") → "Week ending DD/MM/YY"
+  if (/^\d{4}-\d{2}-\d{2}$/.test(period)) {
+    return `Week ending ${fmtDate(new Date(period + 'T00:00:00Z'))}`;
+  }
   return 'All Time';
 }
 
@@ -520,7 +626,9 @@ async function handleStartButton(interaction, ctx) {
 }
 
 /**
- * Mechanic select-menu chosen — swap the message to show the period select.
+ * Mechanic select-menu chosen — fetch that mechanic's job history and swap
+ * the message to show the week select dropdown (newest weeks first, with the
+ * current week always listed first).
  * We defer the update (type 6) so Discord shows a brief loading state on the
  * component, then we PATCH the original message.
  */
@@ -529,22 +637,35 @@ async function handleMechSelect(interaction, ctx) {
   const mechanic = interaction.data.values[0];
 
   ctx.waitUntil((async () => {
-    await editOriginalMessage(appId, token, buildPeriodSelectPayload(mechanic))
-      .catch(() => {});
+    try {
+      const jobRows      = await fetchSheet(JOBS_SHEET);
+      const allJobs      = parseJobsSheet(jobRows);
+      const mechanicJobs = allJobs.filter(j => j.mechanic === mechanic);
+      const weeks        = buildWeeklyStats(mechanicJobs);
+
+      await editOriginalMessage(appId, token, buildWeekSelectPayload(mechanic, weeks));
+    } catch (err) {
+      await editOriginalMessage(appId, token, {
+        content:    `❌ Failed to load week list.\n\`${err.message}\``,
+        components: [],
+      }).catch(() => {});
+    }
   })());
 
   return jsonResponse({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
 }
 
 /**
- * Period select-menu chosen — fetch full job data and replace the dropdowns
- * with the formatted job-log embed.
+ * Week select-menu chosen — fetch full job data for that mechanic, filter to
+ * the selected week, and replace the dropdown with the formatted job-log embed.
+ * The mechanic name was encoded into the custom_id after the first colon.
+ * The selected value is an ISO date string for the week-ending Sunday
+ * (e.g. "2026-03-15").
  */
-async function handlePeriodSelect(interaction, ctx) {
+async function handleWeekSelect(interaction, ctx) {
   const { application_id: appId, token } = interaction;
-  const period   = interaction.data.values[0];
+  const weekKey  = interaction.data.values[0];
 
-  // Mechanic name was encoded into the custom_id after the first colon
   const colonIdx = interaction.data.custom_id.indexOf(':');
   const mechanic = interaction.data.custom_id.slice(colonIdx + 1);
 
@@ -559,12 +680,13 @@ async function handlePeriodSelect(interaction, ctx) {
       const stateMap     = parseStateIds(stateRows);
       const mechanicJobs = allJobs.filter(j => j.mechanic === mechanic);
       const stateId      = stateMap.get(mechanic) || 'N/A';
-      const filteredJobs = filterByPeriod(mechanicJobs, period);
+      const weekEndDate  = new Date(weekKey + 'T00:00:00Z');
+      const filteredJobs = filterByWeekEnding(mechanicJobs, weekEndDate);
       const weeks        = buildWeeklyStats(filteredJobs);
 
       await editOriginalMessage(
         appId, token,
-        buildJobLogPayload(mechanic, stateId, weeks, period)
+        buildJobLogPayload(mechanic, stateId, weeks, weekKey)
       );
     } catch (err) {
       await editOriginalMessage(appId, token, {
@@ -575,6 +697,189 @@ async function handlePeriodSelect(interaction, ctx) {
   })());
 
   return jsonResponse({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
+}
+
+// ===== Scheduled helpers (Cron Triggers) =====
+
+/**
+ * Build a summary of the current week's jobs across all mechanics.
+ * Reuses filterByWeekEnding + buildWeeklyStats, then adds a per-mechanic
+ * breakdown for top-mechanic detection.
+ */
+function buildCurrentWeekSummary(allJobs) {
+  const now    = new Date();
+  const dayNum = now.getDay(); // 0 = Sunday
+  const currentSunday = new Date(now);
+  currentSunday.setDate(now.getDate() + (dayNum === 0 ? 0 : 7 - dayNum));
+  currentSunday.setHours(0, 0, 0, 0);
+
+  const weekJobs  = filterByWeekEnding(allJobs, currentSunday);
+  const weekStats = buildWeeklyStats(weekJobs)[0] ?? null;
+
+  // Per-mechanic repair count for top-mechanic leaderboard
+  const mechMap = new Map();
+  for (const j of weekJobs) {
+    mechMap.set(j.mechanic, (mechMap.get(j.mechanic) || 0) + (j.across || 0));
+  }
+
+  let topMechanic = null, topRepairs = 0;
+  for (const [name, repairs] of mechMap) {
+    if (repairs > topRepairs) { topMechanic = name; topRepairs = repairs; }
+  }
+
+  return {
+    weekEndDate:    currentSunday,
+    totalRepairs:   weekStats ? weekStats.totalRepairs        : 0,
+    totalEngines:   weekStats ? weekStats.engineReplacements  : 0,
+    totalPayout:    weekStats ? weekStats.totalPayout         : 0,
+    mechanicCount:  mechMap.size,
+    topMechanic,
+    topRepairs,
+  };
+}
+
+/**
+ * POST a payload to a Discord webhook URL using `?wait=true` so Discord
+ * returns the created message object.  Returns the message ID on success,
+ * or null on failure.
+ */
+async function webhookPost(webhookUrl, payload) {
+  if (!webhookUrl || !webhookUrl.startsWith('https://discord.com/api/webhooks/')) {
+    return null;
+  }
+  try {
+    const res = await fetch(`${webhookUrl}?wait=true`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+    if (!res.ok) return null;
+    const msg = await res.json();
+    return msg.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Edit an existing Discord webhook message in-place via PATCH.
+ * Returns true on success, false on failure (e.g. message was deleted → 404).
+ * Extracts the webhook ID and token from the webhook URL.
+ */
+async function webhookEdit(webhookUrl, messageId, payload) {
+  if (!webhookUrl || !webhookUrl.startsWith('https://discord.com/api/webhooks/')) {
+    return false;
+  }
+  // URL format: https://discord.com/api/webhooks/{id}/{token}
+  const match = webhookUrl.match(/\/webhooks\/(\d+)\/([^/?#]+)/);
+  if (!match) return false;
+  const [, webhookId, webhookToken] = match;
+
+  try {
+    const res = await fetch(
+      `https://discord.com/api/v10/webhooks/${webhookId}/${webhookToken}/messages/${messageId}`,
+      {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      }
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Build the weekly analytics embed payload so it can be reused for both
+ * posting and editing.
+ */
+function buildAnalyticsPayload(summary) {
+  const { weekEndDate, totalRepairs, totalEngines, totalPayout,
+          mechanicCount, topMechanic, topRepairs } = summary;
+
+  const fields = [
+    { name: '📅 Week Ending',      value: fmtDate(weekEndDate),  inline: true },
+    { name: '🔧 Total Repairs',    value: String(totalRepairs),  inline: true },
+    { name: '💰 Total Payout',     value: fmtMoney(totalPayout), inline: true },
+    { name: '👷 Active Mechanics', value: String(mechanicCount), inline: true },
+  ];
+  if (totalEngines > 0) {
+    fields.push({ name: '🔩 Engine Replacements', value: String(totalEngines), inline: true });
+  }
+  if (topMechanic) {
+    fields.push({ name: '🏆 Top Mechanic', value: `${topMechanic} (${topRepairs} repairs)`, inline: false });
+  }
+
+  return {
+    embeds: [{
+      title:     '📊 Kintsugi Motorworks — Weekly Summary',
+      color:     0x4f46e5,
+      fields,
+      timestamp: new Date().toISOString(),
+      footer:    { text: 'Kintsugi Motorworks · Weekly Analytics' },
+    }],
+  };
+}
+
+/**
+ * Post or edit the weekly analytics summary.
+ * Uses KV to persist the analytics message ID so the same message is edited
+ * each week rather than posting a new one.  If the stored message no longer
+ * exists (deleted), a new message is posted and its ID stored.
+ * Uses ANALYTICS_WEBHOOK_URL and the KV namespace from the Worker's environment.
+ */
+async function postWeeklyAnalytics(env, summary) {
+  if (!env.ANALYTICS_WEBHOOK_URL) return false;
+
+  const payload = buildAnalyticsPayload(summary);
+
+  // Try to edit the existing analytics message
+  if (env.KV) {
+    const storedId = await env.KV.get('analytics_message_id');
+    if (storedId) {
+      const edited = await webhookEdit(env.ANALYTICS_WEBHOOK_URL, storedId, payload);
+      if (edited) return true;
+      // Message was deleted — fall through to post a new one
+    }
+  }
+
+  // Post a new message and persist its ID
+  const messageId = await webhookPost(env.ANALYTICS_WEBHOOK_URL, payload);
+  if (messageId && env.KV) {
+    await env.KV.put('analytics_message_id', messageId);
+  }
+  return messageId !== null;
+}
+
+/**
+ * Send the payday reminder ping to the payouts webhook.
+ * Sends at most once per week-ending date, tracked in KV so the cron never
+ * double-pings even if the Worker retries on failure.
+ * Uses PAYOUTS_WEBHOOK_URL, RIPTIDE_USER_ID, and the KV namespace from env.
+ */
+async function postPaydayReminder(env, weekEndDate) {
+  if (!env.PAYOUTS_WEBHOOK_URL) return false;
+
+  // Deduplicate: skip if we already sent the reminder for this week
+  const weekKey = weekEndDate.toISOString().slice(0, 10);
+  if (env.KV) {
+    const lastKey = await env.KV.get('last_reminder_week');
+    if (lastKey === weekKey) return true; // already sent for this week-ending date
+  }
+
+  const mention = env.RIPTIDE_USER_ID
+    ? `<@${env.RIPTIDE_USER_ID}>`
+    : '**@riptide248**';
+
+  const messageId = await webhookPost(env.PAYOUTS_WEBHOOK_URL, {
+    content: `${mention} 💰 **Payday reminder!** Payouts are due to be processed for the week ending **${fmtDate(weekEndDate)}**. Please review and mark them as processed in the dashboard when done.`,
+  });
+
+  if (messageId !== null && env.KV) {
+    await env.KV.put('last_reminder_week', weekKey);
+  }
+  return messageId !== null;
 }
 
 // ===== Worker entry-point =====
@@ -612,6 +917,13 @@ export default {
       return jsonResponse({ type: InteractionResponseType.PONG });
     }
 
+    // Slash commands
+    if (interaction.type === InteractionType.APPLICATION_COMMAND) {
+      if (interaction.data?.name === 'payouts') {
+        return handlePayoutsCommand(interaction, ctx);
+      }
+    }
+
     // Component interactions (button + select menus)
     if (interaction.type === InteractionType.MESSAGE_COMPONENT) {
       const customId = interaction.data.custom_id || '';
@@ -622,11 +934,33 @@ export default {
       if (customId === 'joblogs_mech_select') {
         return handleMechSelect(interaction, ctx);
       }
-      if (customId.startsWith('joblogs_period_select:')) {
-        return handlePeriodSelect(interaction, ctx);
+      if (customId.startsWith('joblogs_week_select:')) {
+        return handleWeekSelect(interaction, ctx);
       }
     }
 
     return new Response('Unknown interaction type', { status: 400 });
+  },
+
+  /**
+   * Scheduled handler — runs on the Cron Trigger defined in wrangler.toml.
+   * Every Sunday at 18:00 UTC it:
+   *   1. Reads live job data from the Google Sheet.
+   *   2. Posts the week's analytics summary to the analytics channel.
+   *   3. Sends a payday reminder ping to the payouts channel.
+   */
+  async scheduled(_event, env, _ctx) {
+    try {
+      const jobRows = await fetchSheet(JOBS_SHEET);
+      const allJobs = parseJobsSheet(jobRows);
+      const summary = buildCurrentWeekSummary(allJobs);
+
+      await Promise.all([
+        postWeeklyAnalytics(env, summary),
+        postPaydayReminder(env, summary.weekEndDate),
+      ]);
+    } catch (err) {
+      console.error('scheduled: error posting to Discord:', err.message);
+    }
   },
 };
