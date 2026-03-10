@@ -108,8 +108,6 @@ const EXPORT_CONFIG = {
 // Webhook URLs and user IDs are stored in localStorage only (never committed).
 // Use the Settings panel (⚙️) to configure your Discord webhook URLs.
 const DISCORD_CONFIG = {
-  // Day of week to send payday reminder (0=Sunday, 1=Monday, …, 6=Saturday)
-  DEFAULT_PAYDAY_DAY: 1,
   // Auto-refresh interval in milliseconds (default: 5 minutes)
   AUTO_REFRESH_INTERVAL_MS: 5 * 60 * 1000
 };

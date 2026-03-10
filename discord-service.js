@@ -14,7 +14,6 @@ const DISCORD_CONFIG_DEFAULTS = {
   payoutsWebhookUrl: '',     // Webhook for payouts-processed + payday reminder
   riptide248UserId: '',      // Discord user ID to ping on payday (e.g. "123456789012345678")
   autoPostEnabled: false,    // Whether to auto-post on data change
-  paydayDay: 1,              // Day to send payday reminder: 0=Sun 1=Mon 2=Tue …
   lastDataFingerprint: '',   // Last seen data fingerprint (for change detection)
   lastReminderDate: '',      // ISO date (YYYY-MM-DD) of last payday reminder sent
   lastAutoPostDate: ''       // ISO date of last auto analytics post
@@ -84,8 +83,9 @@ function kDiscordComputeFingerprint(totalRepairs, latestWeekISO) {
 
 // ===== Payday helpers =====
 
-function kDiscordIsPayday(config) {
-  return new Date().getDay() === Number(config.paydayDay);
+// Payouts are always due on Sunday — the last day of every pay week.
+function kDiscordIsPayday(_config) {
+  return new Date().getDay() === 0; // 0 = Sunday
 }
 
 function kDiscordReminderSentToday(config) {
