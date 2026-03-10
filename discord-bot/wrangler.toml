@@ -1,0 +1,12 @@
+# =======================================
+# Kintsugi Discord Bot — Cloudflare Workers config
+# https://developers.cloudflare.com/workers/wrangler/configuration/
+# =======================================
+
+name               = "kintsugi-discord-bot"
+main               = "worker.js"
+compatibility_date = "2024-09-23"
+
+# DISCORD_PUBLIC_KEY is injected as a secret (never stored here).
+# Set it once with:   wrangler secret put DISCORD_PUBLIC_KEY
+# Or it is deployed automatically from GitHub Secrets via the Actions workflow.
