@@ -131,6 +131,87 @@ async function copyWeeklySummary(btn, mechanic, weekEndDate, repairs, engineRepl
   }
 }
 
+// ===== Payouts-Processed Discord notification =====
+
+/**
+ * Get the list of mechanic names for the most recent (latest) week.
+ * If a specific week is selected in the filter, uses that week instead.
+ */
+function getMechanicsForCurrentWeek() {
+  const { week } = getFilters();
+
+  const sortedWeeks = Array.from(weekKeys).sort(
+    (a, b) => new Date(b) - new Date(a)
+  );
+  const targetWeek = week !== "all" ? week : (sortedWeeks[0] || null);
+
+  if (!targetWeek) return { weekEnding: null, mechanicList: [] };
+
+  const weekEntries = weeklyAgg.filter((w) => w.weekISO === targetWeek);
+  const weekEnding = weekEntries.length > 0 ? fmtDate(weekEntries[0].weekEnd) : targetWeek;
+  const mechanicList = weekEntries.map((w) => w.mechanic).sort();
+
+  return { weekEnding, mechanicList };
+}
+
+/**
+ * Handle the "Payouts Processed" button click.
+ * Prompts for confirmation, then posts to the payouts Discord channel.
+ */
+async function handlePayoutsProcessed(btn) {
+  if (typeof kDiscordGetConfig !== "function") {
+    kShowToast("Discord service not loaded", "error", 3000);
+    return;
+  }
+
+  const cfg = kDiscordGetConfig();
+  if (!cfg.payoutsWebhookUrl) {
+    kShowToast(
+      "No payouts webhook URL configured. Open Settings (⚙️) to add one.",
+      "warning",
+      5000
+    );
+    return;
+  }
+
+  const { weekEnding, mechanicList } = getMechanicsForCurrentWeek();
+
+  if (!weekEnding) {
+    kShowToast("No payout data available to process.", "warning", 3000);
+    return;
+  }
+
+  const mechListStr =
+    mechanicList.length > 0
+      ? mechanicList.join(", ")
+      : "No mechanics found";
+
+  kConfirm(
+    "Post payouts-processed to Discord?",
+    `This will post a public message to your payouts channel announcing that payouts for the week ending ${weekEnding} have been processed.\n\nMechanics: ${mechListStr}\n\nNo one will be @mentioned.`,
+    async () => {
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Posting…";
+
+      const ok = await kDiscordPostPayoutsProcessed(weekEnding, mechanicList);
+
+      btn.disabled = false;
+      btn.textContent = originalText;
+
+      if (ok) {
+        kShowToast("✅ Payouts-processed posted to Discord!", "success", 4000);
+      } else {
+        kShowToast(
+          "Failed to post to Discord. Check your webhook URL in Settings.",
+          "error",
+          5000
+        );
+      }
+    }
+  );
+}
+
 // Calculate engine replacement billing value by department
 function calculateEngineValue(engineReplacementsByDept) {
   let totalValue = 0;
@@ -369,6 +450,20 @@ async function loadPayouts() {
     renderAll();
 
     if (statusEl) statusEl.textContent = "";
+
+    // Discord: payday reminder — ping @riptide248 if today is the configured payday
+    if (typeof kDiscordCheckAndSendPaydayReminder === "function") {
+      const sortedWeeks = Array.from(weekKeys).sort(
+        (a, b) => new Date(b) - new Date(a)
+      );
+      const latestWeekISO = sortedWeeks[0] || "";
+      if (latestWeekISO) {
+        // Format as a human-readable date for the reminder message
+        const latestWeekDate = new Date(latestWeekISO + "T00:00:00");
+        const latestWeekFmt = fmtDate(latestWeekDate);
+        kDiscordCheckAndSendPaydayReminder(latestWeekFmt).catch(console.warn);
+      }
+    }
   } catch (err) {
     console.error(err);
     if (statusEl) statusEl.textContent = "";
@@ -1664,6 +1759,14 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         kShowToast("Failed to copy. Please try again.", "error", 3000);
       }
+    });
+  }
+
+  // Payouts Processed button
+  const payoutsProcessedBtn = document.getElementById("payoutsProcessedBtn");
+  if (payoutsProcessedBtn) {
+    payoutsProcessedBtn.addEventListener("click", () => {
+      handlePayoutsProcessed(payoutsProcessedBtn);
     });
   }
 
