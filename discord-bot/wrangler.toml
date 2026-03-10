@@ -7,16 +7,24 @@ name               = "kintsugi-discord-bot"
 main               = "worker.js"
 compatibility_date = "2024-09-23"
 
-# DISCORD_PUBLIC_KEY is injected as a secret (never stored here).
-# Set it once with:   wrangler secret put DISCORD_PUBLIC_KEY
-# Or it is deployed automatically from GitHub Secrets via the Actions workflow.
-
 # ===== Scheduled Cron Trigger =====
 # Fires every Sunday at 18:00 UTC to:
-#   • Post the weekly analytics summary to the analytics channel
-#   • Send a payday reminder ping to the payouts channel
+#   • Edit the pinned analytics summary (or post it fresh if it doesn't exist yet)
+#   • Send a payday reminder ping (once per week, deduplicated via KV)
 [triggers]
 crons = ["0 18 * * 0"]
+
+# ===== KV Namespace =====
+# Used to persist the analytics message ID and the last reminder week so the
+# cron edits existing messages rather than posting new ones each run.
+#
+# ⚠️  SETUP REQUIRED before first deployment:
+#   1. Run:  wrangler kv:namespace create "KINTSUGI_BOT"
+#   2. Copy the returned `id` and paste it as the value below, replacing the placeholder.
+#   3. Re-deploy:  wrangler deploy
+[[kv_namespaces]]
+binding = "KV"
+id      = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
 
 # ===== Required Secrets =====
 # Set each secret once with:  wrangler secret put <NAME>

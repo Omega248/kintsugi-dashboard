@@ -739,19 +739,51 @@ function buildCurrentWeekSummary(allJobs) {
 }
 
 /**
- * POST a payload to a Discord webhook URL.
- * Returns true on 2xx, false otherwise.
+ * POST a payload to a Discord webhook URL using `?wait=true` so Discord
+ * returns the created message object.  Returns the message ID on success,
+ * or null on failure.
  */
-async function discordWebhookPost(webhookUrl, payload) {
+async function webhookPost(webhookUrl, payload) {
   if (!webhookUrl || !webhookUrl.startsWith('https://discord.com/api/webhooks/')) {
-    return false;
+    return null;
   }
   try {
-    const res = await fetch(webhookUrl, {
+    const res = await fetch(`${webhookUrl}?wait=true`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(payload),
     });
+    if (!res.ok) return null;
+    const msg = await res.json();
+    return msg.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Edit an existing Discord webhook message in-place via PATCH.
+ * Returns true on success, false on failure (e.g. message was deleted → 404).
+ * Extracts the webhook ID and token from the webhook URL.
+ */
+async function webhookEdit(webhookUrl, messageId, payload) {
+  if (!webhookUrl || !webhookUrl.startsWith('https://discord.com/api/webhooks/')) {
+    return false;
+  }
+  // URL format: https://discord.com/api/webhooks/{id}/{token}
+  const match = webhookUrl.match(/\/webhooks\/(\d+)\/([^/?#]+)/);
+  if (!match) return false;
+  const [, webhookId, webhookToken] = match;
+
+  try {
+    const res = await fetch(
+      `https://discord.com/api/v10/webhooks/${webhookId}/${webhookToken}/messages/${messageId}`,
+      {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      }
+    );
     return res.ok;
   } catch {
     return false;
@@ -759,10 +791,10 @@ async function discordWebhookPost(webhookUrl, payload) {
 }
 
 /**
- * Post the weekly analytics summary embed to the analytics webhook.
- * Uses ANALYTICS_WEBHOOK_URL from the Worker's environment secrets.
+ * Build the weekly analytics embed payload so it can be reused for both
+ * posting and editing.
  */
-async function postWeeklyAnalytics(env, summary) {
+function buildAnalyticsPayload(summary) {
   const { weekEndDate, totalRepairs, totalEngines, totalPayout,
           mechanicCount, topMechanic, topRepairs } = summary;
 
@@ -779,7 +811,7 @@ async function postWeeklyAnalytics(env, summary) {
     fields.push({ name: '🏆 Top Mechanic', value: `${topMechanic} (${topRepairs} repairs)`, inline: false });
   }
 
-  return discordWebhookPost(env.ANALYTICS_WEBHOOK_URL, {
+  return {
     embeds: [{
       title:     '📊 Kintsugi Motorworks — Weekly Summary',
       color:     0x4f46e5,
@@ -787,21 +819,67 @@ async function postWeeklyAnalytics(env, summary) {
       timestamp: new Date().toISOString(),
       footer:    { text: 'Kintsugi Motorworks · Weekly Analytics' },
     }],
-  });
+  };
+}
+
+/**
+ * Post or edit the weekly analytics summary.
+ * Uses KV to persist the analytics message ID so the same message is edited
+ * each week rather than posting a new one.  If the stored message no longer
+ * exists (deleted), a new message is posted and its ID stored.
+ * Uses ANALYTICS_WEBHOOK_URL and the KV namespace from the Worker's environment.
+ */
+async function postWeeklyAnalytics(env, summary) {
+  if (!env.ANALYTICS_WEBHOOK_URL) return false;
+
+  const payload = buildAnalyticsPayload(summary);
+
+  // Try to edit the existing analytics message
+  if (env.KV) {
+    const storedId = await env.KV.get('analytics_message_id');
+    if (storedId) {
+      const edited = await webhookEdit(env.ANALYTICS_WEBHOOK_URL, storedId, payload);
+      if (edited) return true;
+      // Message was deleted — fall through to post a new one
+    }
+  }
+
+  // Post a new message and persist its ID
+  const messageId = await webhookPost(env.ANALYTICS_WEBHOOK_URL, payload);
+  if (messageId && env.KV) {
+    await env.KV.put('analytics_message_id', messageId);
+  }
+  return messageId !== null;
 }
 
 /**
  * Send the payday reminder ping to the payouts webhook.
- * Uses PAYOUTS_WEBHOOK_URL and RIPTIDE_USER_ID from the Worker's environment secrets.
+ * Sends at most once per week-ending date, tracked in KV so the cron never
+ * double-pings even if the Worker retries on failure.
+ * Uses PAYOUTS_WEBHOOK_URL, RIPTIDE_USER_ID, and the KV namespace from env.
  */
 async function postPaydayReminder(env, weekEndDate) {
+  if (!env.PAYOUTS_WEBHOOK_URL) return false;
+
+  // Deduplicate: skip if we already sent the reminder for this week
+  const weekKey = weekEndDate.toISOString().slice(0, 10);
+  if (env.KV) {
+    const lastKey = await env.KV.get('last_reminder_week');
+    if (lastKey === weekKey) return true; // already sent for this week-ending date
+  }
+
   const mention = env.RIPTIDE_USER_ID
     ? `<@${env.RIPTIDE_USER_ID}>`
     : '**@riptide248**';
 
-  return discordWebhookPost(env.PAYOUTS_WEBHOOK_URL, {
+  const messageId = await webhookPost(env.PAYOUTS_WEBHOOK_URL, {
     content: `${mention} 💰 **Payday reminder!** Payouts are due to be processed for the week ending **${fmtDate(weekEndDate)}**. Please review and mark them as processed in the dashboard when done.`,
   });
+
+  if (messageId !== null && env.KV) {
+    await env.KV.put('last_reminder_week', weekKey);
+  }
+  return messageId !== null;
 }
 
 // ===== Worker entry-point =====

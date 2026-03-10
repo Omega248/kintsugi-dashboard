@@ -3,14 +3,9 @@ const JOBS_SHEET = "Form responses 1";
 const CONFIG_SHEET = "Config";
 const PAY_PER_REPAIR = 700;
 
-// Auto-refresh interval (from constants.js, fallback to 5 min)
-const AUTO_REFRESH_MS =
-  (typeof DISCORD_CONFIG !== 'undefined'
-    ? DISCORD_CONFIG.AUTO_REFRESH_INTERVAL_MS
-    : null) || 5 * 60 * 1000;
+const AUTO_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
 
 let refreshTimer = null;
-let lastLoadedWeekData = null; // Cached week data for Discord change detection
 
 // ===== Overview from jobs sheet (GLOBAL ONLY) =====
 
@@ -195,25 +190,6 @@ async function loadOverview() {
       topMechRepairs,
       perMechWeek
     });
-
-    // Build week data for Discord change detection
-    lastLoadedWeekData = {
-      weekISO,
-      totalRepairs: repairsThisWeek,
-      payoutThisWeek,
-      topMechanic: topMechName,
-      topMechRepairs
-    };
-
-    // Discord: check if data changed and auto-post
-    if (typeof kDiscordCheckAndPostUpdate === 'function') {
-      kDiscordCheckAndPostUpdate(lastLoadedWeekData).catch(console.warn);
-    }
-
-    // Discord: payday reminder if today is the configured payday
-    if (typeof kDiscordCheckAndSendPaydayReminder === 'function' && weekISO) {
-      kDiscordCheckAndSendPaydayReminder(weekISO).catch(console.warn);
-    }
 
     setRefreshStatus("Live");
 

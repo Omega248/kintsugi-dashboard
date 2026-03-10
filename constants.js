@@ -104,10 +104,4 @@ const EXPORT_CONFIG = {
   CSV_LINE_BREAK: "\n"
 };
 
-// ===== Discord Integration =====
-// Webhook URLs and user IDs are stored in localStorage only (never committed).
-// Use the Settings panel (⚙️) to configure your Discord webhook URLs.
-const DISCORD_CONFIG = {
-  // Auto-refresh interval in milliseconds (default: 5 minutes)
-  AUTO_REFRESH_INTERVAL_MS: 5 * 60 * 1000
-};
+
