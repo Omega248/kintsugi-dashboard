@@ -673,7 +673,7 @@ function renderMonthly() {
     });
     grandTotalValue += yearTotal;
 
-    const groupId = `mg-${++groupCounter}`;
+    const groupId = `yg-${++groupCounter}`;
 
     // Collapsible year group header
     const headerRow = document.createElement("tr");
