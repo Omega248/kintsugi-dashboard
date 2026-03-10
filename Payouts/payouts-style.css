@@ -355,6 +355,98 @@
   padding-right: 16px;
 }
 
+/* ===== Table Column Widths (Monthly View) ===== */
+#monthlyWrap table {
+  width: 100%;
+}
+
+#monthlyWrap th:nth-child(1),
+#monthlyWrap td:nth-child(1) {
+  width: 28%;
+  text-align: left;
+  padding-left: 16px;
+}
+
+#monthlyWrap th:nth-child(2),
+#monthlyWrap td:nth-child(2) {
+  width: 20%;
+  text-align: center;
+}
+
+#monthlyWrap th:nth-child(3),
+#monthlyWrap td:nth-child(3) {
+  width: 20%;
+  text-align: center;
+}
+
+#monthlyWrap th:nth-child(4),
+#monthlyWrap td:nth-child(4) {
+  width: 32%;
+  text-align: right;
+  padding-right: 16px;
+}
+
+/* ===== Table Column Widths (Jobs View) ===== */
+#jobsWrap table {
+  width: 100%;
+}
+
+#jobsWrap th:nth-child(1),
+#jobsWrap td:nth-child(1) {
+  width: 10%;
+  text-align: left;
+  padding-left: 16px;
+}
+
+#jobsWrap th:nth-child(2),
+#jobsWrap td:nth-child(2) {
+  width: 13%;
+  text-align: left;
+}
+
+#jobsWrap th:nth-child(3),
+#jobsWrap td:nth-child(3) {
+  width: 11%;
+  text-align: left;
+}
+
+#jobsWrap th:nth-child(4),
+#jobsWrap td:nth-child(4) {
+  width: 9%;
+  text-align: center;
+}
+
+#jobsWrap th:nth-child(5),
+#jobsWrap td:nth-child(5) {
+  width: 8%;
+  text-align: center;
+}
+
+#jobsWrap th:nth-child(6),
+#jobsWrap td:nth-child(6) {
+  width: 9%;
+  text-align: center;
+}
+
+#jobsWrap th:nth-child(7),
+#jobsWrap td:nth-child(7) {
+  width: 12%;
+  text-align: center;
+}
+
+#jobsWrap th:nth-child(8),
+#jobsWrap td:nth-child(8) {
+  width: 12%;
+  text-align: center;
+}
+
+#jobsWrap th:nth-child(9),
+#jobsWrap td:nth-child(9) {
+  width: 16%;
+  text-align: right;
+  padding-right: 16px;
+}
+
 /* ===== Copy Summary Button ===== */
 .col-actions {
   text-align: center;

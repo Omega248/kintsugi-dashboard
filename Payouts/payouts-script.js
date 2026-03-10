@@ -646,23 +646,82 @@ function renderMonthly() {
     monthSortDesc ? b.monthEnd - a.monthEnd : a.monthEnd - b.monthEnd
   );
 
-  let grandTotalValue = 0;
-
+  // Group months by year for collapsible sections
+  const byYear = new Map();
   rows.forEach((r) => {
-    const engineReps = r.engineReplacements || 0;
-    const engineValue = calculateEngineValue(r.engineReplacementsByDept || {});
-    const totalValue = r.repairs * REPAIR_RATE + engineValue;
-    grandTotalValue += totalValue;
-
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${fmtDate(r.monthEnd)}</td>
-      <td class="col-count">${r.repairs}</td>
-      <td class="col-count">${engineReps}</td>
-      <td class="col-amount amount-in">${fmtMoney(totalValue)}</td>
-    `;
-    monthlyBody.appendChild(tr);
+    const year = r.monthEnd.getFullYear();
+    if (!byYear.has(year)) byYear.set(year, []);
+    byYear.get(year).push(r);
   });
+
+  const yearBuckets = Array.from(byYear.entries()).sort(([a], [b]) =>
+    monthSortDesc ? b - a : a - b
+  );
+
+  let grandTotalValue = 0;
+  let groupCounter = 0;
+  const fragment = document.createDocumentFragment();
+
+  yearBuckets.forEach(([year, yearRows]) => {
+    let yearTotal = 0;
+    let yearRepairs = 0;
+    yearRows.forEach((r) => {
+      const engineValue = calculateEngineValue(r.engineReplacementsByDept || {});
+      const totalValue = r.repairs * REPAIR_RATE + engineValue;
+      yearTotal += totalValue;
+      yearRepairs += r.repairs;
+    });
+    grandTotalValue += yearTotal;
+
+    const groupId = `mg-${++groupCounter}`;
+
+    // Collapsible year group header
+    const headerRow = document.createElement("tr");
+    headerRow.className = "week-group-header";
+    headerRow.dataset.groupId = groupId;
+
+    const headerTd = document.createElement("td");
+    headerTd.colSpan = 4;
+
+    const toggleBtn = document.createElement("button");
+    toggleBtn.className = "week-group-toggle";
+    toggleBtn.textContent = "▼";
+    toggleBtn.setAttribute("aria-expanded", "true");
+    headerTd.appendChild(toggleBtn);
+
+    const labelSpan = document.createElement("span");
+    labelSpan.className = "week-group-label";
+    labelSpan.textContent = String(year);
+    headerTd.appendChild(labelSpan);
+
+    const metaSpan = document.createElement("span");
+    metaSpan.className = "week-group-meta";
+    metaSpan.textContent = `${yearRows.length} month${yearRows.length !== 1 ? "s" : ""} · ${yearRepairs} repairs · ${fmtMoney(yearTotal)}`;
+    headerTd.appendChild(metaSpan);
+
+    headerRow.appendChild(headerTd);
+    fragment.appendChild(headerRow);
+
+    // Individual month rows under this year group
+    yearRows.forEach((r) => {
+      const engineReps = r.engineReplacements || 0;
+      const engineValue = calculateEngineValue(r.engineReplacementsByDept || {});
+      const totalValue = r.repairs * REPAIR_RATE + engineValue;
+
+      const tr = document.createElement("tr");
+      tr.className = "week-group-row";
+      tr.dataset.groupId = groupId;
+      tr.innerHTML = `
+        <td>${fmtDate(r.monthEnd)}</td>
+        <td class="col-count">${r.repairs}</td>
+        <td class="col-count">${engineReps}</td>
+        <td class="col-amount amount-in">${fmtMoney(totalValue)}</td>
+      `;
+      fragment.appendChild(tr);
+    });
+  });
+
+  monthlyBody.appendChild(fragment);
 
   if (headerCell) {
     headerCell.innerHTML = `
@@ -729,31 +788,88 @@ function renderJobs() {
     return 0;
   });
 
+  // Group sorted rows by month for collapsible sections
+  const byMonth = new Map();
   rows.forEach((j) => {
-    const engineReps = j.engineReplacements || 0;
-    const engineLabel = engineReps ? "Yes" : "No";
-    // Use BCSO rate for BCSO engine replacements, standard rate for others
-    const engineRate = (j.department === "BCSO" && engineReps > 0) ? 
-                       ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
-    const totalValue =
-      j.across * REPAIR_RATE + engineReps * engineRate;
-
-    const mechLabel = j.mechanic; // keep Jobs view as raw mechanic name
-
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${j.tsDate ? fmtDate(j.tsDate) : ""}</td>
-      <td><button class="mech-link link-btn" data-mech="${j.mechanic}">${mechLabel}</button></td>
-      <td><button class="owner-link link-btn" data-owner="${j.owner}">${j.owner}</button></td>
-      <td><button class="plate-link link-btn" data-plate="${j.plate}">${j.plate}</button></td>
-      <td class="col-count">${j.across}</td>
-      <td class="col-count">${engineLabel}</td>
-      <td>${fmtDate(j.weekEnd)}</td>
-      <td>${fmtDate(j.monthEnd)}</td>
-      <td class="col-amount amount-in">${fmtMoney(totalValue)}</td>
-    `;
-    jobsBody.appendChild(tr);
+    const mKey = j.mKey || "unknown";
+    if (!byMonth.has(mKey)) byMonth.set(mKey, { monthEnd: j.monthEnd, jobs: [] });
+    byMonth.get(mKey).jobs.push(j);
   });
+
+  // Preserve insertion order (already sorted by monthEnd above)
+  const monthBuckets = Array.from(byMonth.values());
+  let groupCounter = 0;
+  const fragment = document.createDocumentFragment();
+
+  monthBuckets.forEach(({ monthEnd, jobs: monthJobs }) => {
+    let monthTotal = 0;
+    monthJobs.forEach((j) => {
+      const engineReps = j.engineReplacements || 0;
+      const engineRate = (j.department === "BCSO" && engineReps > 0) ?
+        ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
+      monthTotal += j.across * REPAIR_RATE + engineReps * engineRate;
+    });
+
+    const groupId = `jg-${++groupCounter}`;
+
+    // Collapsible month group header
+    const headerRow = document.createElement("tr");
+    headerRow.className = "week-group-header";
+    headerRow.dataset.groupId = groupId;
+
+    const headerTd = document.createElement("td");
+    headerTd.colSpan = 9;
+
+    const toggleBtn = document.createElement("button");
+    toggleBtn.className = "week-group-toggle";
+    toggleBtn.textContent = "▼";
+    toggleBtn.setAttribute("aria-expanded", "true");
+    headerTd.appendChild(toggleBtn);
+
+    const labelSpan = document.createElement("span");
+    labelSpan.className = "week-group-label";
+    labelSpan.textContent = `Month ending ${fmtDate(monthEnd)}`;
+    headerTd.appendChild(labelSpan);
+
+    const metaSpan = document.createElement("span");
+    metaSpan.className = "week-group-meta";
+    metaSpan.textContent = `${monthJobs.length} job${monthJobs.length !== 1 ? "s" : ""} · ${fmtMoney(monthTotal)}`;
+    headerTd.appendChild(metaSpan);
+
+    headerRow.appendChild(headerTd);
+    fragment.appendChild(headerRow);
+
+    // Individual job rows under this month group
+    monthJobs.forEach((j) => {
+      const engineReps = j.engineReplacements || 0;
+      const engineLabel = engineReps ? "Yes" : "No";
+      // Use BCSO rate for BCSO engine replacements, standard rate for others
+      const engineRate = (j.department === "BCSO" && engineReps > 0) ?
+        ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
+      const totalValue =
+        j.across * REPAIR_RATE + engineReps * engineRate;
+
+      const mechLabel = j.mechanic; // keep Jobs view as raw mechanic name
+
+      const tr = document.createElement("tr");
+      tr.className = "week-group-row";
+      tr.dataset.groupId = groupId;
+      tr.innerHTML = `
+        <td>${j.tsDate ? fmtDate(j.tsDate) : ""}</td>
+        <td><button class="mech-link link-btn" data-mech="${j.mechanic}">${mechLabel}</button></td>
+        <td><button class="owner-link link-btn" data-owner="${j.owner}">${j.owner}</button></td>
+        <td><button class="plate-link link-btn" data-plate="${j.plate}">${j.plate}</button></td>
+        <td class="col-count">${j.across}</td>
+        <td class="col-count">${engineLabel}</td>
+        <td>${fmtDate(j.weekEnd)}</td>
+        <td>${fmtDate(j.monthEnd)}</td>
+        <td class="col-amount amount-in">${fmtMoney(totalValue)}</td>
+      `;
+      fragment.appendChild(tr);
+    });
+  });
+
+  jobsBody.appendChild(fragment);
 }
 
 // ===== Mechanic summary helpers =====
@@ -1397,8 +1513,38 @@ document.addEventListener("DOMContentLoaded", () => {
         .forEach((row) => row.classList.toggle("hidden", isCollapsed));
     });
   }
+  if (monthlyBody) {
+    // Event delegation for collapsible year group headers in monthly view
+    monthlyBody.addEventListener("click", (e) => {
+      const headerRow = e.target.closest(".week-group-header");
+      if (!headerRow) return;
+      const groupId = headerRow.dataset.groupId;
+      const isCollapsed = headerRow.classList.toggle("collapsed");
+      const toggleBtn = headerRow.querySelector(".week-group-toggle");
+      if (toggleBtn) {
+        toggleBtn.textContent = isCollapsed ? "▶" : "▼";
+        toggleBtn.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
+      }
+      monthlyBody.querySelectorAll(`.week-group-row[data-group-id="${groupId}"]`)
+        .forEach((row) => row.classList.toggle("hidden", isCollapsed));
+    });
+  }
   if (jobsBody) {
     jobsBody.addEventListener("click", onMechanicClickFromTable);
+    // Event delegation for collapsible month group headers in jobs view
+    jobsBody.addEventListener("click", (e) => {
+      const headerRow = e.target.closest(".week-group-header");
+      if (!headerRow) return;
+      const groupId = headerRow.dataset.groupId;
+      const isCollapsed = headerRow.classList.toggle("collapsed");
+      const toggleBtn = headerRow.querySelector(".week-group-toggle");
+      if (toggleBtn) {
+        toggleBtn.textContent = isCollapsed ? "▶" : "▼";
+        toggleBtn.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
+      }
+      jobsBody.querySelectorAll(`.week-group-row[data-group-id="${groupId}"]`)
+        .forEach((row) => row.classList.toggle("hidden", isCollapsed));
+    });
   }
 
   jobsSearchInput = document.getElementById("jobsSearch");
