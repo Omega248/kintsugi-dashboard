@@ -12,7 +12,7 @@ compatibility_date = "2024-09-23"
 #   • Edit the pinned analytics summary (or post it fresh if it doesn't exist yet)
 #   • Send a payday reminder ping (once per week, deduplicated via KV)
 [triggers]
-crons = ["0 18 * * 0"]
+crons = ["0 18 * * SUN"]
 
 # ===== KV Namespace =====
 # Used to persist the analytics message ID and the last reminder week so the
