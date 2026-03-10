@@ -14,6 +14,7 @@
 #   JOBS_CHANNEL_ID        — Discord channel ID for the #jobs channel
 #   PAYOUTS_CHANNEL_ID     — Discord channel ID for the #payouts channel
 #   RIPTIDE_USER_ID        — (Optional) Numeric Discord user ID to @mention on payday
+#   TRIGGER_TOKEN          — Secret token for the Payouts page "Notify Discord" button
 #
 # KV provisioning is fully automatic: this workflow ensures a KV namespace
 # named "KINTSUGI_BOT" exists in your Cloudflare account (creating it if it
@@ -135,6 +136,7 @@ PYEOF
             JOBS_CHANNEL_ID
             PAYOUTS_CHANNEL_ID
             RIPTIDE_USER_ID
+            TRIGGER_TOKEN
         env:
           DISCORD_PUBLIC_KEY:   ${{ secrets.DISCORD_PUBLIC_KEY }}
           DISCORD_BOT_TOKEN:    ${{ secrets.DISCORD_BOT_TOKEN }}
@@ -142,3 +144,4 @@ PYEOF
           JOBS_CHANNEL_ID:      ${{ secrets.JOBS_CHANNEL_ID }}
           PAYOUTS_CHANNEL_ID:   ${{ secrets.PAYOUTS_CHANNEL_ID }}
           RIPTIDE_USER_ID:      ${{ secrets.RIPTIDE_USER_ID }}
+          TRIGGER_TOKEN:        ${{ secrets.TRIGGER_TOKEN }}

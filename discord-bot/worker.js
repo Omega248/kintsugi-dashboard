@@ -939,10 +939,111 @@ async function postPaydayReminder(env, weekEndDate) {
   return messageId !== null;
 }
 
+// ===== Dashboard API: POST /api/notify-payouts =====
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin':  '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Max-Age':       '86400',
+};
+
+function apiJson(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+  });
+}
+
+/**
+ * Handle POST /api/notify-payouts — triggered from the web dashboard button.
+ *
+ * Reads live job data from the Google Sheet, finds the most recent week's
+ * mechanics, and posts a "Payouts Processed" embed to PAYOUTS_CHANNEL_ID.
+ *
+ * Protected by TRIGGER_TOKEN bearer authentication so only the dashboard
+ * (with the token saved in the user's browser) can call this endpoint.
+ *
+ * First-run safe: posts a fresh message every time — no KV state required.
+ */
+async function handleNotifyPayouts(request, env) {
+  // Require TRIGGER_TOKEN to be configured
+  if (!env.TRIGGER_TOKEN) {
+    return apiJson({
+      ok:    false,
+      error: 'TRIGGER_TOKEN is not configured on the bot. Add it as a GitHub secret and redeploy.',
+    }, 501);
+  }
+
+  // Validate bearer token
+  const authHeader = request.headers.get('Authorization') || '';
+  const provided   = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  if (!provided || provided !== env.TRIGGER_TOKEN) {
+    return apiJson({ ok: false, error: 'Invalid or missing token.' }, 401);
+  }
+
+  // Require channel + bot token
+  if (!env.DISCORD_BOT_TOKEN || !env.PAYOUTS_CHANNEL_ID) {
+    return apiJson({
+      ok:    false,
+      error: 'Bot is not fully configured (DISCORD_BOT_TOKEN or PAYOUTS_CHANNEL_ID missing).',
+    }, 503);
+  }
+
+  try {
+    // Fetch live sheet data — safe even on first run (empty sheet returns [])
+    const jobRows = await fetchSheet(JOBS_SHEET);
+    const allJobs = parseJobsSheet(jobRows);
+    const { weekEndDate, mechanics } = getLatestWeekMechanics(allJobs);
+
+    if (!weekEndDate || mechanics.length === 0) {
+      return apiJson({
+        ok:    false,
+        error: 'No payout data found for the most recent week.',
+      }, 404);
+    }
+
+    const payload   = buildPayoutsProcessedPayload(weekEndDate, mechanics);
+    const messageId = await botPost(env.PAYOUTS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, payload);
+
+    if (!messageId) {
+      return apiJson({
+        ok:    false,
+        error: 'Failed to post message to Discord. Check bot permissions and PAYOUTS_CHANNEL_ID.',
+      }, 502);
+    }
+
+    return apiJson({
+      ok:            true,
+      weekEnding:    fmtDate(weekEndDate),
+      mechanicCount: mechanics.length,
+      messageId,
+    });
+  } catch (err) {
+    console.error('handleNotifyPayouts error:', err.message);
+    return apiJson({ ok: false, error: err.message }, 500);
+  }
+}
+
 // ===== Worker entry-point =====
 
 export default {
   async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+
+    // CORS preflight for the dashboard API endpoint
+    if (request.method === 'OPTIONS' && url.pathname === '/api/notify-payouts') {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
+
+    // Dashboard API: POST /api/notify-payouts
+    // This route is checked before Discord signature verification so that
+    // requests from the web dashboard (which carry a TRIGGER_TOKEN, not a
+    // Discord signature) are handled correctly.
+    if (request.method === 'POST' && url.pathname === '/api/notify-payouts') {
+      return handleNotifyPayouts(request, env);
+    }
+
     // Health check
     if (request.method === 'GET') {
       return new Response('Kintsugi Discord Bot is running.', { status: 200 });

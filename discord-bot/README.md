@@ -109,6 +109,7 @@ The Worker is stateless for interactions — the mechanic name is encoded direct
 | `JOBS_CHANNEL_ID` | The Discord channel ID for your **#jobs** channel |
 | `PAYOUTS_CHANNEL_ID` | The Discord channel ID for your **#payouts** channel |
 | `RIPTIDE_USER_ID` | *(Optional)* Numeric Discord user ID to @mention on payday |
+| `TRIGGER_TOKEN` | A strong random secret (e.g. `openssl rand -hex 32`) that lets the web dashboard's **"Notify Discord: Payouts Processed"** button post to Discord. Keep it secret and set the same value in your browser when prompted. |
 
 > **How to get a channel ID:** Enable Developer Mode in Discord (Settings → Advanced → Developer Mode), then right-click any channel and choose **Copy Channel ID**.
 
@@ -173,6 +174,26 @@ No other members see the interaction — the channel panel stays clean.
 
 ---
 
+## "Notify Discord: Payouts Processed" button (web dashboard)
+
+The **Payouts** page in the dashboard has a **📢 Notify Discord: Payouts Processed** button. When clicked, it reads the most recent week's data from the Google Sheet and posts a "Payouts Processed" embed to your **#payouts** Discord channel — listing every mechanic who was paid that week.
+
+### First-time setup
+
+1. Copy your Worker URL from the Cloudflare dashboard (e.g. `https://kintsugi-discord-bot.YOUR-SUBDOMAIN.workers.dev`).
+2. Generate a `TRIGGER_TOKEN` — any strong random string, e.g.:
+   ```bash
+   openssl rand -hex 32
+   ```
+3. Add it as a GitHub secret named **`TRIGGER_TOKEN`** (same place as the other secrets in step 4 above).
+4. Re-deploy by pushing to `main` or triggering the **Deploy Discord Bot** workflow — the token is synced to the Worker automatically.
+5. Open the **Payouts** page in the dashboard and click **📢 Notify Discord: Payouts Processed**.
+6. A config panel appears asking for the Worker URL and the token — enter them and click **Save & Send Notification**. The values are saved in your browser so you only need to do this once.
+
+The button always fetches fresh data from the sheet — it is **first-run safe** and requires no existing KV state.
+
+---
+
 ## File overview
 
 ```
@@ -206,6 +227,11 @@ discord-bot/
 | Cron posts nothing / "missing required configuration" in logs | At least one channel ID secret is not set. Add `DISCORD_BOT_TOKEN`, `ANALYTICS_CHANNEL_ID`, `JOBS_CHANNEL_ID`, and `PAYOUTS_CHANNEL_ID` to GitHub Secrets and re-deploy. |
 | Cron posts to wrong channel | Double-check the channel IDs in GitHub Secrets — copy each ID fresh from Discord (right-click channel → Copy Channel ID). |
 | Analytics posts a new message every week instead of editing | Confirm the KV namespace was provisioned (check the deploy workflow logs) and that the Worker has a `KV` binding in the Cloudflare dashboard under Workers & Pages → your Worker → Settings → Bindings. |
+| "Notify Discord" button shows config panel every time | Enter the Worker URL and `TRIGGER_TOKEN` in the config panel and click **Save & Send** — the values are stored in your browser's localStorage. If they keep disappearing, your browser may be clearing site data. |
+| "Notify Discord" returns 401 | The token entered in the dashboard doesn't match `TRIGGER_TOKEN` in the Worker. Re-check the GitHub secret and redeploy, then update the token in the dashboard config panel (click **Clear saved config** first). |
+| "Notify Discord" returns 501 | `TRIGGER_TOKEN` was not added to GitHub Secrets. Add it and trigger a redeploy. |
+| "Notify Discord" returns 503 | `DISCORD_BOT_TOKEN` or `PAYOUTS_CHANNEL_ID` is missing. Add both to GitHub Secrets and redeploy. |
+| "No payout data found" when notifying | The Google Sheet has no jobs recorded for any completed week yet. This means no mechanic has submitted a job form at all — check that form responses are appearing in the sheet and that the **Mechanic** and **How many Across** columns contain data. |
 
 ---
 

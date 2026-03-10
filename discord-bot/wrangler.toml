@@ -37,3 +37,7 @@ crons = ["0 18 * * SUN"]
 #   PAYOUTS_CHANNEL_ID    — Discord channel ID for the #payouts channel
 #   RIPTIDE_USER_ID       — Numeric Discord user ID to @mention on payday (e.g. "123456789012345678")
 #                           Optional — if omitted, the reminder still posts without a mention
+#   TRIGGER_TOKEN         — A secret token that allows the Kintsugi web dashboard to trigger
+#                           the "Payouts Processed" Discord notification via the dashboard button.
+#                           Generate any strong random string (e.g. openssl rand -hex 32).
+#                           Required to use the "Notify Discord" button on the Payouts page.

@@ -89,6 +89,10 @@
           📋 Copy Payout Summary
         </button>
 
+        <button id="notifyDiscordBtn" class="btn btn-primary">
+          📢 Notify Discord: Payouts Processed
+        </button>
+
         <button id="sortWeekBtn" class="btn">
           Sort by Week Ending (Newest)
         </button>
@@ -142,6 +146,37 @@
         </div>
         <div class="advanced-note">
           Advanced filters currently apply to the <strong>Jobs</strong> view.
+        </div>
+      </div>
+
+      <!-- Bot config panel (shown when Notify Discord button is clicked without a saved config) -->
+      <div id="botConfigPanel" class="advanced-filters hidden">
+        <div class="advanced-note" style="margin-bottom:0.75rem;">
+          <strong>Discord Bot Configuration</strong> — enter your Cloudflare Worker URL and the
+          <code>TRIGGER_TOKEN</code> secret you set in GitHub. These are saved in your browser only.
+        </div>
+        <div class="advanced-field">
+          <label for="botApiUrl">Bot Worker URL</label>
+          <input
+            id="botApiUrl"
+            type="url"
+            class="advanced-input"
+            placeholder="https://kintsugi-discord-bot.YOUR-SUBDOMAIN.workers.dev"
+          />
+        </div>
+        <div class="advanced-field">
+          <label for="botApiToken">Trigger Token (TRIGGER_TOKEN secret)</label>
+          <input
+            id="botApiToken"
+            type="password"
+            class="advanced-input"
+            placeholder="Your secret trigger token"
+          />
+        </div>
+        <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+          <button id="saveBotConfigBtn" class="btn btn-primary">Save &amp; Send Notification</button>
+          <button id="cancelBotConfigBtn" class="btn">Cancel</button>
+          <button id="clearBotConfigBtn" class="btn" style="margin-left:auto;">Clear saved config</button>
         </div>
       </div>
 
