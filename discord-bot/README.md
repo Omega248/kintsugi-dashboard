@@ -103,13 +103,22 @@ No server, no database, no cold starts.  The Worker is stateless — the mechani
 | `CLOUDFLARE_API_TOKEN` | Cloudflare API token with **Workers Scripts:Edit** permission ([create one here](https://dash.cloudflare.com/profile/api-tokens)) |
 | `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID |
 | `DISCORD_PUBLIC_KEY` | The Public Key from step 1 |
+| `DISCORD_BOT_TOKEN` | The Bot Token from step 1 (keep it secret — treat it like a password) |
+| `ANALYTICS_CHANNEL_ID` | The Discord channel ID for your **#analytics** channel |
+| `JOBS_CHANNEL_ID` | The Discord channel ID for your **#jobs** channel |
+| `PAYOUTS_CHANNEL_ID` | The Discord channel ID for your **#payouts** channel |
+| `RIPTIDE_USER_ID` | *(Optional)* Numeric Discord user ID to @mention on payday |
+
+> **How to get a channel ID:** Enable Developer Mode in Discord (Settings → Advanced → Developer Mode), then right-click any channel and choose **Copy Channel ID**.
+
+The deploy workflow automatically syncs all of these into the Cloudflare Worker's secret store on every deploy — you don't need to run `wrangler secret put` by hand.
 
 ### 5 · Deploy the Worker
 
 Push any change to `discord-bot/` on the `main` branch, **or** go to:  
 **Actions → Deploy Discord Bot → Run workflow**
 
-The Action deploys `worker.js` and automatically syncs `DISCORD_PUBLIC_KEY` into the Worker's secret store.
+The Action deploys `worker.js` and automatically syncs all secrets listed above (`DISCORD_PUBLIC_KEY`, `DISCORD_BOT_TOKEN`, `ANALYTICS_CHANNEL_ID`, `JOBS_CHANNEL_ID`, `PAYOUTS_CHANNEL_ID`, `RIPTIDE_USER_ID`) into the Worker's secret store.
 
 After it finishes, copy the Worker URL from Cloudflare (e.g. `https://kintsugi-discord-bot.<subdomain>.workers.dev`).
 
@@ -121,11 +130,11 @@ After it finishes, copy the Worker URL from Cloudflare (e.g. `https://kintsugi-d
 
 ### 7 · Post the panel message
 
-Run this **once** from your machine:
+Run this **once** from your machine to post the permanent job-log panel to the **#jobs** channel:
 
 ```bash
 DISCORD_BOT_TOKEN=<your bot token> \
-DISCORD_CHANNEL_ID=<target channel id> \
+DISCORD_CHANNEL_ID=<your JOBS_CHANNEL_ID> \
 node discord-bot/setup-panel.js
 ```
 
@@ -177,6 +186,8 @@ discord-bot/
 | Panel disappeared | Re-run `setup-panel.js` to post a new one and pin it. |
 | Bot was already using `/joblogs` | Run `node discord-bot/register-commands.js` to clear the old slash command. |
 | Deploy Action fails | Verify `CLOUDFLARE_API_TOKEN` has Workers Scripts:Edit permission and `CLOUDFLARE_ACCOUNT_ID` is correct. |
+| Cron posts nothing / "missing required configuration" in logs | At least one channel ID secret is not set. Add `DISCORD_BOT_TOKEN`, `ANALYTICS_CHANNEL_ID`, `JOBS_CHANNEL_ID`, and `PAYOUTS_CHANNEL_ID` to GitHub Secrets and re-deploy. |
+| Cron posts to wrong channel | Double-check the channel IDs in GitHub Secrets — copy each ID fresh from Discord (right-click channel → Copy Channel ID). |
 
 ---
 

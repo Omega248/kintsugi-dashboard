@@ -28,8 +28,15 @@ id      = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
 
 # ===== Required Secrets =====
 # Set each secret once with:  wrangler secret put <NAME>
+# These are also synced automatically from GitHub Actions secrets on every deploy
+# (see .github/workflows/deploy-bot.yml).
 #
 #   DISCORD_PUBLIC_KEY    — Ed25519 public key from the Discord Developer Portal
-#   ANALYTICS_WEBHOOK_URL — Discord webhook URL for the weekly analytics summary post
-#   PAYOUTS_WEBHOOK_URL   — Discord webhook URL for the payday reminder ping
+#   DISCORD_BOT_TOKEN     — Bot token used to post messages to Discord channels
+#                           (from the Discord Developer Portal → Bot → Reset Token)
+#   ANALYTICS_CHANNEL_ID  — Discord channel ID for the #analytics channel
+#                           (right-click channel in Discord → Copy Channel ID)
+#   JOBS_CHANNEL_ID       — Discord channel ID for the #jobs channel
+#   PAYOUTS_CHANNEL_ID    — Discord channel ID for the #payouts channel
 #   RIPTIDE_USER_ID       — Numeric Discord user ID to @mention on payday (e.g. "123456789012345678")
+#                           Optional — if omitted, the reminder still posts without a mention
