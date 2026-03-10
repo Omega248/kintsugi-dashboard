@@ -326,6 +326,90 @@ async function editOriginalMessage(appId, token, payload) {
   }
 }
 
+// ===== /payouts slash-command helpers =====
+
+/**
+ * Find the most recent week from all job data and return the mechanics who
+ * worked that week (sorted A→Z), plus the week-ending date.
+ */
+function getLatestWeekMechanics(allJobs) {
+  const allWeeks = buildWeeklyStats(allJobs);
+  if (!allWeeks.length) return { weekEndDate: null, mechanics: [] };
+
+  const latestWeek = allWeeks[0]; // buildWeeklyStats sorts newest first
+  const weekEndDate = latestWeek.weekEndDate || new Date(latestWeek.weekKey + 'T00:00:00Z');
+  const weekJobs    = filterByWeekEnding(allJobs, weekEndDate);
+
+  const mechanics = [...new Set(weekJobs.map(j => j.mechanic))].sort(
+    (a, b) => a.localeCompare(b)
+  );
+  return { weekEndDate, mechanics };
+}
+
+/**
+ * Build the payouts-processed embed payload.
+ * Mirrors kDiscordPostPayoutsProcessed from the old browser discord-service.js.
+ */
+function buildPayoutsProcessedPayload(weekEndDate, mechanics) {
+  let description =
+    `✅ Payouts for the week ending **${fmtDate(weekEndDate)}** have been processed.\n\n` +
+    'All mechanics listed below have been paid. If you believe there is an error, please contact management.';
+
+  if (mechanics.length > 0) {
+    description += `\n\n**Mechanics paid this week:**\n${mechanics.map(m => `• ${m}`).join('\n')}`;
+  }
+
+  return {
+    embeds: [{
+      title:     '✅ Payouts Processed',
+      description,
+      color:     0x22c55e,
+      timestamp: new Date().toISOString(),
+      footer:    { text: 'Kintsugi Motorworks · Payouts' },
+    }],
+  };
+}
+
+/**
+ * Handle the /payouts slash command.
+ * Defers publicly (everyone in the channel sees the response), reads the sheet,
+ * and edits the deferred response with the payouts-processed embed.
+ */
+async function handlePayoutsCommand(interaction, ctx) {
+  const { application_id: appId, token } = interaction;
+
+  ctx.waitUntil((async () => {
+    try {
+      const jobRows = await fetchSheet(JOBS_SHEET);
+      const allJobs = parseJobsSheet(jobRows);
+      const { weekEndDate, mechanics } = getLatestWeekMechanics(allJobs);
+
+      if (!weekEndDate || mechanics.length === 0) {
+        await editOriginalMessage(appId, token, {
+          content:    '❌ No payout data found for the most recent week.',
+          components: [],
+        });
+        return;
+      }
+
+      await editOriginalMessage(
+        appId, token,
+        buildPayoutsProcessedPayload(weekEndDate, mechanics)
+      );
+    } catch (err) {
+      await editOriginalMessage(appId, token, {
+        content:    `❌ Failed to load payout data.\n\`${err.message}\``,
+        components: [],
+      }).catch(() => {});
+    }
+  })());
+
+  // Deferred public response — visible to everyone in the channel
+  return jsonResponse({
+    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+  });
+}
+
 // ===== Mechanic select-menu builder =====
 
 /**
@@ -753,6 +837,13 @@ export default {
     // Discord PING — required for Interactions Endpoint URL verification
     if (interaction.type === InteractionType.PING) {
       return jsonResponse({ type: InteractionResponseType.PONG });
+    }
+
+    // Slash commands
+    if (interaction.type === InteractionType.APPLICATION_COMMAND) {
+      if (interaction.data?.name === 'payouts') {
+        return handlePayoutsCommand(interaction, ctx);
+      }
     }
 
     // Component interactions (button + select menus)
