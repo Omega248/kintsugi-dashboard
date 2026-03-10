@@ -1794,6 +1794,69 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Discord: post weekly payout
+  const postPayoutDiscordBtn = document.getElementById("postPayoutDiscordBtn");
+  if (postPayoutDiscordBtn && typeof kPostWeeklyPayoutToDiscord === "function") {
+    postPayoutDiscordBtn.addEventListener("click", async () => {
+      if (!weeklyAgg || !weeklyAgg.length) {
+        kShowToast("No payout data loaded yet. Please wait and try again.", "error", 3000);
+        return;
+      }
+
+      // Use the selected week if one is chosen, otherwise use the latest week
+      const { week: weekFilter } = getFilters();
+      let targetISO = weekFilter !== "all"
+        ? weekFilter
+        : Array.from(weekKeys).sort((a, b) => new Date(b) - new Date(a))[0];
+
+      if (!targetISO) {
+        kShowToast("No week data available.", "error", 3000);
+        return;
+      }
+
+      // Gather all mechanic entries for that week
+      const weekEntries = weeklyAgg.filter(w => w.weekISO === targetISO);
+      if (!weekEntries.length) {
+        kShowToast("No records found for the selected week.", "error", 3000);
+        return;
+      }
+
+      const weekEndDate = weekEntries[0].weekEnd;
+      let totalRepairs = 0;
+      let totalPayout = 0;
+
+      const entries = weekEntries
+        .map(w => {
+          const enginePay = calculateEnginePayment(w.engineReplacementsByDept);
+          const payout = w.repairs * PAY_PER_REPAIR + enginePay;
+          totalRepairs += w.repairs;
+          totalPayout += payout;
+          return {
+            mechanic: w.mechanic,
+            repairs: w.repairs,
+            engineReplacements: w.engineReplacements,
+            payout,
+          };
+        })
+        .sort((a, b) => b.payout - a.payout);
+
+      postPayoutDiscordBtn.disabled = true;
+      const originalText = postPayoutDiscordBtn.textContent;
+      postPayoutDiscordBtn.textContent = "Posting…";
+
+      const ok = await kPostWeeklyPayoutToDiscord({
+        weekEnd: fmtDate(weekEndDate),
+        totalPayout,
+        totalRepairs,
+        entries,
+      });
+
+      if (ok) kShowToast("Weekly payout posted to Discord! ✅", "success", 3000);
+      postPayoutDiscordBtn.textContent = originalText;
+      postPayoutDiscordBtn.disabled = false;
+    });
+  }
+
   // Initial load
   loadPayouts();
 });

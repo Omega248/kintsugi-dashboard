@@ -7,6 +7,9 @@ let repairsChartInst = null;
 let payoutChartInst  = null;
 let mechanicChartInst = null;
 
+// ===== Last computed analytics (for Discord posting) =====
+let _lastAnalyticsData = null;
+
 // ===== Chart.js CDN =====
 const CHARTJS_CDN = "https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js";
 
@@ -342,6 +345,24 @@ async function loadAnalytics() {
     // Leaderboard
     renderLeaderboard(mechTotals);
 
+    // Store computed data for Discord posting
+    const timeRangeEl = document.getElementById("timeRange");
+    const timeRangeLabel = timeRangeEl
+      ? timeRangeEl.options[timeRangeEl.selectedIndex]?.text || timeRange
+      : timeRange;
+    _lastAnalyticsData = {
+      totalRepairs,
+      totalPayout,
+      activeMechanics: mechanics.size,
+      avgPerPeriod,
+      timeRange: timeRangeLabel,
+      groupBy,
+      topMechanics: Object.entries(mechTotals)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([name, repairs]) => ({ name, repairs })),
+    };
+
     if (status) status.textContent = "";
   } catch (err) {
     console.error("Error loading analytics", err);
@@ -395,4 +416,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("change", loadAnalytics);
   });
+
+  // Discord: post analytics summary
+  const discordBtn = document.getElementById("postAnalyticsDiscordBtn");
+  if (discordBtn && typeof kPostAnalyticsSummaryToDiscord === "function") {
+    discordBtn.addEventListener("click", async () => {
+      if (!_lastAnalyticsData) {
+        kShowToast("Data not yet loaded. Please wait and try again.", "error", 3000);
+        return;
+      }
+      discordBtn.disabled = true;
+      const originalText = discordBtn.textContent;
+      discordBtn.textContent = "Posting…";
+      const ok = await kPostAnalyticsSummaryToDiscord(_lastAnalyticsData);
+      if (ok) kShowToast("Analytics posted to Discord! ✅", "success", 3000);
+      discordBtn.textContent = originalText;
+      discordBtn.disabled = false;
+    });
+  }
 });

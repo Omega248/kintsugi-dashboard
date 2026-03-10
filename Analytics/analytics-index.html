@@ -10,7 +10,10 @@
   <script src="../utils.js"></script>
   <script src="../payout-helpers.js"></script>
   <script src="../ui-enhancements.js"></script>
+  <script src="../preferences.js"></script>
+  <script src="../settings-ui.js"></script>
   <script src="../kintsugi-core.js"></script>
+  <script src="../discord-webhook.js"></script>
 </head>
 <body>
   <div class="app">
@@ -92,6 +95,10 @@
             <option value="month">Month</option>
           </select>
         </span>
+
+        <button id="postAnalyticsDiscordBtn" class="btn btn-discord" title="Post current analytics summary to Discord">
+          <span class="discord-icon">discord</span> Post to Discord
+        </button>
       </section>
 
       <!-- Charts row -->

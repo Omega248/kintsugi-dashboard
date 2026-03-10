@@ -11,7 +11,10 @@
   <script src="../payout-helpers.js"></script>
   <script src="../filter-chips.js"></script>
   <script src="../ui-enhancements.js"></script>
+  <script src="../preferences.js"></script>
+  <script src="../settings-ui.js"></script>
   <script src="../kintsugi-core.js"></script>
+  <script src="../discord-webhook.js"></script>
 </head>
 <body>
   <div class="app">
@@ -87,6 +90,10 @@
 
         <button id="copyPayoutSummaryBtn" class="btn btn-primary">
           📋 Copy Payout Summary
+        </button>
+
+        <button id="postPayoutDiscordBtn" class="btn btn-discord" title="Post latest week payout to Discord">
+          <span class="discord-icon">discord</span> Post Payout to Discord
         </button>
 
         <button id="sortWeekBtn" class="btn">
