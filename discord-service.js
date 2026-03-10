@@ -10,14 +10,15 @@
 const DISCORD_STORAGE_KEY = 'kintsugi_discord_config';
 
 const DISCORD_CONFIG_DEFAULTS = {
-  analyticsWebhookUrl: '',   // Webhook for auto-posting data updates
-  payoutsWebhookUrl: '',     // Webhook for payouts-processed + payday reminder
-  riptide248UserId: '',      // Discord user ID to ping on payday (e.g. "123456789012345678")
-  autoPostEnabled: false,    // Whether to auto-post on data change
-  paydayDay: 1,              // Day to send payday reminder: 0=Sun 1=Mon 2=Tue …
-  lastDataFingerprint: '',   // Last seen data fingerprint (for change detection)
-  lastReminderDate: '',      // ISO date (YYYY-MM-DD) of last payday reminder sent
-  lastAutoPostDate: ''       // ISO date of last auto analytics post
+  analyticsWebhookUrl: '',      // Webhook for auto-posting data updates
+  payoutsWebhookUrl: '',        // Webhook for payouts-processed + payday reminder
+  riptide248UserId: '',         // Discord user ID to ping on payday (e.g. "123456789012345678")
+  autoPostEnabled: false,       // Whether to auto-post on data change
+  paydayDay: 1,                 // Day to send payday reminder: 0=Sun 1=Mon 2=Tue …
+  lastDataFingerprint: '',      // Last seen data fingerprint (for change detection)
+  lastReminderDate: '',         // ISO date (YYYY-MM-DD) of last payday reminder sent
+  lastAutoPostDate: '',         // ISO date of last auto analytics post
+  lastAnalyticsMessageId: ''    // Discord message ID of the last analytics embed (for editing)
 };
 
 // ===== Config helpers =====
@@ -101,15 +102,20 @@ function kDiscordAutoPostSentToday(config) {
 // ===== Analytics update post =====
 
 /**
- * Post an embed to the analytics webhook announcing updated weekly stats.
+ * Post or edit an embed on the analytics webhook announcing updated weekly stats.
+ * On first call (or if the previous message was deleted) a new message is posted
+ * using `?wait=true` so that the message ID can be stored. Subsequent calls edit
+ * that same message with PATCH so the channel is not flooded with new posts.
+ *
  * @param {{ weekISO: string, totalRepairs: number, payoutThisWeek: number,
- *           topMechanic: string|null, topMechRepairs: number }} weekData
+ *           topMechanic: string|null, topMechRepairs: number,
+ *           mechanicsBreakdown: Object.<string,number>|null }} weekData
  */
 async function kDiscordPostAnalyticsUpdate(weekData) {
   const config = kDiscordGetConfig();
   if (!config.autoPostEnabled || !config.analyticsWebhookUrl) return false;
 
-  const { weekISO, totalRepairs, payoutThisWeek, topMechanic, topMechRepairs } = weekData;
+  const { weekISO, totalRepairs, payoutThisWeek, mechanicsBreakdown } = weekData;
 
   const fields = [
     { name: '📅 Week Ending', value: weekISO || '—', inline: true },
@@ -121,12 +127,13 @@ async function kDiscordPostAnalyticsUpdate(weekData) {
     }
   ];
 
-  if (topMechanic) {
-    fields.push({
-      name: '🏆 Top Mechanic',
-      value: `${kEscapeHtml(topMechanic)} (${topMechRepairs} repairs)`,
-      inline: false
-    });
+  // List every mechanic sorted by repairs descending
+  if (mechanicsBreakdown && Object.keys(mechanicsBreakdown).length > 0) {
+    const sorted = Object.entries(mechanicsBreakdown).sort((a, b) => b[1] - a[1]);
+    const mechLines = sorted
+      .map(([name, reps]) => `• ${kEscapeHtml(name)}: ${reps} repair${reps !== 1 ? 's' : ''}`)
+      .join('\n');
+    fields.push({ name: '👥 Mechanic Breakdown', value: mechLines, inline: false });
   }
 
   const payload = {
@@ -141,11 +148,51 @@ async function kDiscordPostAnalyticsUpdate(weekData) {
     ]
   };
 
-  const ok = await kDiscordPost(config.analyticsWebhookUrl, payload);
-  if (ok) {
-    kDiscordSaveConfig({ lastAutoPostDate: new Date().toISOString().slice(0, 10) });
+  const webhookUrl = config.analyticsWebhookUrl;
+  const today = new Date().toISOString().slice(0, 10);
+
+  // ── Try to edit the existing message first ──────────────────────────────
+  if (config.lastAnalyticsMessageId) {
+    try {
+      const editRes = await fetch(
+        `${webhookUrl}/messages/${config.lastAnalyticsMessageId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }
+      );
+      if (editRes.ok) {
+        kDiscordSaveConfig({ lastAutoPostDate: today });
+        return true;
+      }
+      // Message not found or inaccessible — fall through to post a new one
+    } catch (err) {
+      console.warn(
+        'kDiscordPostAnalyticsUpdate: failed to edit existing Discord message ' +
+        '(it may have been deleted) — posting a new message instead',
+        err
+      );
+    }
   }
-  return ok;
+
+  // ── Post a new message (capture ID via ?wait=true) ──────────────────────
+  try {
+    const postRes = await fetch(`${webhookUrl}?wait=true`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (postRes.ok) {
+      const msg = await postRes.json();
+      kDiscordSaveConfig({ lastAutoPostDate: today, lastAnalyticsMessageId: msg.id || '' });
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.error('kDiscordPostAnalyticsUpdate: post failed', err);
+    return false;
+  }
 }
 
 // ===== Payouts-processed announcement =====

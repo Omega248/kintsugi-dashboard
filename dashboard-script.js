@@ -202,7 +202,8 @@ async function loadOverview() {
       totalRepairs: repairsThisWeek,
       payoutThisWeek,
       topMechanic: topMechName,
-      topMechRepairs
+      topMechRepairs,
+      mechanicsBreakdown: perMechWeek
     };
 
     // Discord: check if data changed and auto-post
