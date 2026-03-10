@@ -6,15 +6,18 @@ discord-bot/
 
 # Exclude version-control metadata
 .git/
+.gitignore
+
+# Exclude Wrangler configuration and cache
+wrangler.jsonc
+.assetsignore
+.wrangler/
 
 # Exclude editor and OS artifacts
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
-
-# Exclude wrangler local cache
-.wrangler/
 
 # Exclude logs
 *.log
