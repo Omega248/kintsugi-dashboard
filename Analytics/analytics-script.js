@@ -2,6 +2,14 @@
 const JOBS_SHEET = "Form responses 1";
 const PAY_PER_REPAIR = 700;
 
+// Auto-refresh interval (from constants.js, fallback to 5 min)
+const AUTO_REFRESH_MS =
+  (typeof DISCORD_CONFIG !== 'undefined'
+    ? DISCORD_CONFIG.AUTO_REFRESH_INTERVAL_MS
+    : null) || 5 * 60 * 1000;
+
+let analyticsRefreshTimer = null;
+
 // ===== Chart instances =====
 let repairsChartInst = null;
 let payoutChartInst  = null;
@@ -216,6 +224,121 @@ function renderLeaderboard(mechTotals) {
   }).join("");
 }
 
+// ===== This Week Live Panel =====
+
+function setRefreshStatus(state) {
+  const dot = document.getElementById("refreshDot");
+  const label = document.getElementById("refreshLabel");
+  if (!dot || !label) return;
+
+  dot.className = "refresh-dot";
+  if (state === "Live") {
+    dot.classList.add("refresh-dot--live");
+    label.textContent = "Live · auto-refresh every 5 min";
+  } else if (state === "Refreshing") {
+    dot.classList.add("refresh-dot--refreshing");
+    label.textContent = "Refreshing…";
+  } else if (state === "Error") {
+    dot.classList.add("refresh-dot--error");
+    label.textContent = "Error loading data";
+  } else {
+    label.textContent = "Loading…";
+  }
+}
+
+/**
+ * Populate the "This Week Live" panel with the latest computed values.
+ * @param {{ repairsThisWeek, payoutThisWeek, topMechName, topMechRepairs, perMechWeek }} data
+ */
+function updateThisWeekPanel(data) {
+  const { repairsThisWeek, payoutThisWeek, topMechName, topMechRepairs, perMechWeek } = data;
+
+  const repairsEl = document.getElementById("liveWeekRepairs");
+  const payoutEl = document.getElementById("liveWeekPayout");
+  const topMechEl = document.getElementById("liveTopMech");
+  const topMechSubEl = document.getElementById("liveTopMechSub");
+  const mechanicsEl = document.getElementById("liveWeekMechanics");
+  const detailEl = document.getElementById("liveWeekMechanicsDetail");
+
+  if (repairsEl) repairsEl.textContent = repairsThisWeek.toLocaleString();
+  if (payoutEl) payoutEl.textContent = kFmtMoney(payoutThisWeek);
+
+  if (topMechEl) topMechEl.textContent = topMechName || "—";
+  if (topMechSubEl) {
+    topMechSubEl.textContent = topMechName
+      ? topMechRepairs + " repairs · " + kFmtMoney(topMechRepairs * PAY_PER_REPAIR)
+      : "";
+  }
+
+  const mechCount = Object.keys(perMechWeek).length;
+  if (mechanicsEl) mechanicsEl.textContent = mechCount.toLocaleString();
+
+  if (detailEl) {
+    if (!mechCount) {
+      detailEl.textContent = "No repairs logged this week.";
+      detailEl.className = "this-week-mechanics this-week-mechanics--empty";
+      return;
+    }
+    detailEl.className = "this-week-mechanics";
+
+    const sorted = Object.entries(perMechWeek).sort((a, b) => b[1] - a[1]);
+    const items = sorted.map(([name, reps]) => {
+      const pay = reps * PAY_PER_REPAIR;
+      const safeN = kEscapeHtml(name);
+      return `<div class="tw-mech-row">
+        <span class="tw-mech-name">${safeN}</span>
+        <span class="tw-mech-stats">${reps} repair${reps !== 1 ? "s" : ""} · ${kFmtMoney(pay)}</span>
+      </div>`;
+    });
+    detailEl.innerHTML = items.join("");
+  }
+}
+
+/**
+ * Compute current-week repair stats from all rows (no filter applied).
+ * Uses a Monday-start week matching the dashboard calculation:
+ * (getDay() + 6) % 7 maps Sun=0…Sat=6 → Mon=0…Sun=6, so subtracting this
+ * from today gives the most recent Monday as week start.
+ */
+function computeThisWeekStats(rows, mechKey, acrossKey, weekKey, tsKey) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const day = (today.getDay() + 6) % 7; // Mon=0 … Sun=6
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - day);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+
+  let repairsThisWeek = 0;
+  const perMechWeek = {};
+
+  rows.forEach(r => {
+    const mech = (r[mechKey] || "").trim();
+    const across = acrossKey ? Number(r[acrossKey] || 0) || 0 : 0;
+
+    let jobDate = null;
+    if (tsKey && r[tsKey]) jobDate = parseDateLike(r[tsKey]);
+    if (!jobDate && weekKey && r[weekKey]) jobDate = parseDateLike(r[weekKey]);
+
+    if (jobDate && !isNaN(jobDate)) {
+      const dOnly = new Date(jobDate.getFullYear(), jobDate.getMonth(), jobDate.getDate());
+      if (dOnly >= weekStart && dOnly <= weekEnd) {
+        repairsThisWeek += across;
+        if (mech) perMechWeek[mech] = (perMechWeek[mech] || 0) + across;
+      }
+    }
+  });
+
+  const payoutThisWeek = repairsThisWeek * PAY_PER_REPAIR;
+  let topMechName = null;
+  let topMechRepairs = 0;
+  Object.entries(perMechWeek).forEach(([name, reps]) => {
+    if (reps > topMechRepairs) { topMechRepairs = reps; topMechName = name; }
+  });
+
+  return { repairsThisWeek, payoutThisWeek, topMechName, topMechRepairs, perMechWeek };
+}
+
 // ===== Main loader =====
 
 async function loadAnalytics() {
@@ -342,10 +465,29 @@ async function loadAnalytics() {
     // Leaderboard
     renderLeaderboard(mechTotals);
 
+    // ---- This Week Live Panel (always uses unfiltered / current-week data) ----
+    const thisWeek = computeThisWeekStats(rows, mechKey, acrossKey, weekKey, tsKey);
+    updateThisWeekPanel(thisWeek);
+    setRefreshStatus("Live");
+
+    // Discord: post or edit the live view message if data changed
+    if (typeof kDiscordCheckAndPostUpdate === 'function') {
+      const weekISO = new Date().toISOString().slice(0, 10);
+      kDiscordCheckAndPostUpdate({
+        weekISO,
+        totalRepairs: thisWeek.repairsThisWeek,
+        payoutThisWeek: thisWeek.payoutThisWeek,
+        topMechanic: thisWeek.topMechName,
+        topMechRepairs: thisWeek.topMechRepairs,
+        perMechWeek: thisWeek.perMechWeek
+      }).catch(console.warn);
+    }
+
     if (status) status.textContent = "";
   } catch (err) {
     console.error("Error loading analytics", err);
     if (status) status.textContent = "";
+    setRefreshStatus("Error");
 
     const msg = err.message.includes("404") || err.message.includes("not found")
       ? "Unable to load jobs data. Please check sheet configuration."
@@ -367,12 +509,29 @@ async function loadAnalytics() {
   }
 }
 
+// ===== Auto-Refresh =====
+
+async function refreshAnalytics() {
+  setRefreshStatus("Refreshing");
+  if (typeof kCsvCache !== 'undefined') kCsvCache.clear();
+  try {
+    await loadAnalytics();
+  } catch (_e) {
+    // loadAnalytics already handles errors internally
+  }
+}
+
+function startAnalyticsAutoRefresh() {
+  if (analyticsRefreshTimer) clearInterval(analyticsRefreshTimer);
+  analyticsRefreshTimer = setInterval(refreshAnalytics, AUTO_REFRESH_MS);
+}
+
 // ===== Keyboard shortcuts =====
 
 function initKeyboardShortcuts() {
   kRegisterShortcuts({
     "ctrl+r": () => {
-      loadAnalytics().then(() => kShowToast("Data refreshed", "success", 2000));
+      refreshAnalytics().then(() => kShowToast("Data refreshed", "success", 2000));
     },
     "ctrl+1": () => { window.location.href = "../index.html"; },
     "ctrl+2": () => { window.location.href = "../Payouts/payouts-index.html"; },
@@ -387,8 +546,12 @@ function initKeyboardShortcuts() {
 document.addEventListener("DOMContentLoaded", async () => {
   kSyncNavLinksWithCurrentSearch();
   initKeyboardShortcuts();
+  setRefreshStatus("Loading");
 
   await loadAnalytics();
+
+  // Start auto-refresh
+  startAnalyticsAutoRefresh();
 
   // Re-load on filter change
   ["timeRange", "mechanicFilter", "groupBy"].forEach(id => {
