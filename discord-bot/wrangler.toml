@@ -10,3 +10,18 @@ compatibility_date = "2024-09-23"
 # DISCORD_PUBLIC_KEY is injected as a secret (never stored here).
 # Set it once with:   wrangler secret put DISCORD_PUBLIC_KEY
 # Or it is deployed automatically from GitHub Secrets via the Actions workflow.
+
+# ===== Scheduled Cron Trigger =====
+# Fires every Sunday at 18:00 UTC to:
+#   • Post the weekly analytics summary to the analytics channel
+#   • Send a payday reminder ping to the payouts channel
+[triggers]
+crons = ["0 18 * * 0"]
+
+# ===== Required Secrets =====
+# Set each secret once with:  wrangler secret put <NAME>
+#
+#   DISCORD_PUBLIC_KEY    — Ed25519 public key from the Discord Developer Portal
+#   ANALYTICS_WEBHOOK_URL — Discord webhook URL for the weekly analytics summary post
+#   PAYOUTS_WEBHOOK_URL   — Discord webhook URL for the payday reminder ping
+#   RIPTIDE_USER_ID       — Numeric Discord user ID to @mention on payday (e.g. "123456789012345678")

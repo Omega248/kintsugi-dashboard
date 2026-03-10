@@ -615,6 +615,111 @@ async function handleWeekSelect(interaction, ctx) {
   return jsonResponse({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
 }
 
+// ===== Scheduled helpers (Cron Triggers) =====
+
+/**
+ * Build a summary of the current week's jobs across all mechanics.
+ * Reuses filterByWeekEnding + buildWeeklyStats, then adds a per-mechanic
+ * breakdown for top-mechanic detection.
+ */
+function buildCurrentWeekSummary(allJobs) {
+  const now    = new Date();
+  const dayNum = now.getDay(); // 0 = Sunday
+  const currentSunday = new Date(now);
+  currentSunday.setDate(now.getDate() + (dayNum === 0 ? 0 : 7 - dayNum));
+  currentSunday.setHours(0, 0, 0, 0);
+
+  const weekJobs  = filterByWeekEnding(allJobs, currentSunday);
+  const weekStats = buildWeeklyStats(weekJobs)[0] ?? null;
+
+  // Per-mechanic repair count for top-mechanic leaderboard
+  const mechMap = new Map();
+  for (const j of weekJobs) {
+    mechMap.set(j.mechanic, (mechMap.get(j.mechanic) || 0) + (j.across || 0));
+  }
+
+  let topMechanic = null, topRepairs = 0;
+  for (const [name, repairs] of mechMap) {
+    if (repairs > topRepairs) { topMechanic = name; topRepairs = repairs; }
+  }
+
+  return {
+    weekEndDate:    currentSunday,
+    totalRepairs:   weekStats ? weekStats.totalRepairs        : 0,
+    totalEngines:   weekStats ? weekStats.engineReplacements  : 0,
+    totalPayout:    weekStats ? weekStats.totalPayout         : 0,
+    mechanicCount:  mechMap.size,
+    topMechanic,
+    topRepairs,
+  };
+}
+
+/**
+ * POST a payload to a Discord webhook URL.
+ * Returns true on 2xx, false otherwise.
+ */
+async function discordWebhookPost(webhookUrl, payload) {
+  if (!webhookUrl || !webhookUrl.startsWith('https://discord.com/api/webhooks/')) {
+    return false;
+  }
+  try {
+    const res = await fetch(webhookUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Post the weekly analytics summary embed to the analytics webhook.
+ * Uses ANALYTICS_WEBHOOK_URL from the Worker's environment secrets.
+ */
+async function postWeeklyAnalytics(env, summary) {
+  const { weekEndDate, totalRepairs, totalEngines, totalPayout,
+          mechanicCount, topMechanic, topRepairs } = summary;
+
+  const fields = [
+    { name: '📅 Week Ending',      value: fmtDate(weekEndDate),  inline: true },
+    { name: '🔧 Total Repairs',    value: String(totalRepairs),  inline: true },
+    { name: '💰 Total Payout',     value: fmtMoney(totalPayout), inline: true },
+    { name: '👷 Active Mechanics', value: String(mechanicCount), inline: true },
+  ];
+  if (totalEngines > 0) {
+    fields.push({ name: '🔩 Engine Replacements', value: String(totalEngines), inline: true });
+  }
+  if (topMechanic) {
+    fields.push({ name: '🏆 Top Mechanic', value: `${topMechanic} (${topRepairs} repairs)`, inline: false });
+  }
+
+  return discordWebhookPost(env.ANALYTICS_WEBHOOK_URL, {
+    embeds: [{
+      title:     '📊 Kintsugi Motorworks — Weekly Summary',
+      color:     0x4f46e5,
+      fields,
+      timestamp: new Date().toISOString(),
+      footer:    { text: 'Kintsugi Motorworks · Weekly Analytics' },
+    }],
+  });
+}
+
+/**
+ * Send the payday reminder ping to the payouts webhook.
+ * Uses PAYOUTS_WEBHOOK_URL and RIPTIDE_USER_ID from the Worker's environment secrets.
+ */
+async function postPaydayReminder(env, weekEndDate) {
+  const mention = env.RIPTIDE_USER_ID
+    ? `<@${env.RIPTIDE_USER_ID}>`
+    : '**@riptide248**';
+
+  return discordWebhookPost(env.PAYOUTS_WEBHOOK_URL, {
+    content: `${mention} 💰 **Payday reminder!** Payouts are due to be processed for the week ending **${fmtDate(weekEndDate)}**. Please review and mark them as processed in the dashboard when done.`,
+  });
+}
+
 // ===== Worker entry-point =====
 
 export default {
@@ -666,5 +771,27 @@ export default {
     }
 
     return new Response('Unknown interaction type', { status: 400 });
+  },
+
+  /**
+   * Scheduled handler — runs on the Cron Trigger defined in wrangler.toml.
+   * Every Sunday at 18:00 UTC it:
+   *   1. Reads live job data from the Google Sheet.
+   *   2. Posts the week's analytics summary to the analytics channel.
+   *   3. Sends a payday reminder ping to the payouts channel.
+   */
+  async scheduled(_event, env, _ctx) {
+    try {
+      const jobRows = await fetchSheet(JOBS_SHEET);
+      const allJobs = parseJobsSheet(jobRows);
+      const summary = buildCurrentWeekSummary(allJobs);
+
+      await Promise.all([
+        postWeeklyAnalytics(env, summary),
+        postPaydayReminder(env, summary.weekEndDate),
+      ]);
+    } catch (err) {
+      console.error('scheduled: error posting to Discord:', err.message);
+    }
   },
 };

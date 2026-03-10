@@ -130,16 +130,7 @@ function kInitSettingsUI() {
       </div>
 
       <div class="settings-item" style="margin-top:8px;">
-        <label class="settings-item-label" for="kDiscordPaydayDay">Payday reminder day</label>
-        <select id="kDiscordPaydayDay" class="select-pill">
-          <option value="0">Sunday</option>
-          <option value="1" selected>Monday</option>
-          <option value="2">Tuesday</option>
-          <option value="3">Wednesday</option>
-          <option value="4">Thursday</option>
-          <option value="5">Friday</option>
-          <option value="6">Saturday</option>
-        </select>
+        <div class="settings-item-description">ℹ️ The payday reminder fires automatically every Sunday (the week-ending day) when payouts are due.</div>
       </div>
 
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
@@ -288,13 +279,11 @@ function kAttachSettingsListeners() {
     const analyticsInput = document.getElementById('kDiscordAnalyticsUrl');
     const payoutsInput = document.getElementById('kDiscordPayoutsUrl');
     const riptideInput = document.getElementById('kDiscordRiptideId');
-    const paydaySelect = document.getElementById('kDiscordPaydayDay');
     const autoToggle = document.getElementById('kDiscordAutoPostToggle');
 
     if (analyticsInput) analyticsInput.value = cfg.analyticsWebhookUrl || '';
     if (payoutsInput) payoutsInput.value = cfg.payoutsWebhookUrl || '';
     if (riptideInput) riptideInput.value = cfg.riptide248UserId || '';
-    if (paydaySelect) paydaySelect.value = String(cfg.paydayDay ?? 1);
     if (autoToggle) autoToggle.classList.toggle('active', !!cfg.autoPostEnabled);
   }
   kLoadDiscordFields();
@@ -318,8 +307,6 @@ function kAttachSettingsListeners() {
     const analyticsUrl = (document.getElementById('kDiscordAnalyticsUrl')?.value || '').trim();
     const payoutsUrl = (document.getElementById('kDiscordPayoutsUrl')?.value || '').trim();
     const riptideId = (document.getElementById('kDiscordRiptideId')?.value || '').trim();
-    const paydayDay = parseInt(document.getElementById('kDiscordPaydayDay')?.value ?? '1', 10);
-
     const validUrl = url => !url || url.startsWith('https://discord.com/api/webhooks/');
     if (!validUrl(analyticsUrl) || !validUrl(payoutsUrl)) {
       kShowToast('Webhook URLs must start with https://discord.com/api/webhooks/', 'error', 4000);
@@ -330,7 +317,6 @@ function kAttachSettingsListeners() {
       analyticsWebhookUrl: analyticsUrl,
       payoutsWebhookUrl: payoutsUrl,
       riptide248UserId: riptideId,
-      paydayDay: isNaN(paydayDay) ? 1 : paydayDay
     });
     kShowToast('Discord settings saved', 'success', 2000);
   });
