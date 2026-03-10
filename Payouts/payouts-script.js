@@ -1472,6 +1472,135 @@ function updateView() {
   else jobsWrap.classList.remove("hidden");
 }
 
+// ===== Discord Notify: Payouts Processed =====
+
+const BOT_URL_KEY   = 'kintsugi_bot_api_url';
+const BOT_TOKEN_KEY = 'kintsugi_bot_api_token';
+
+function getBotConfig() {
+  return {
+    url:   localStorage.getItem(BOT_URL_KEY)   || '',
+    token: localStorage.getItem(BOT_TOKEN_KEY) || '',
+  };
+}
+
+function saveBotConfig(url, token) {
+  localStorage.setItem(BOT_URL_KEY,   url.trim());
+  localStorage.setItem(BOT_TOKEN_KEY, token.trim());
+}
+
+function clearBotConfig() {
+  localStorage.removeItem(BOT_URL_KEY);
+  localStorage.removeItem(BOT_TOKEN_KEY);
+}
+
+/**
+ * POST to the worker's /api/notify-payouts endpoint and display a toast.
+ * Returns true on success so callers can hide the config panel.
+ */
+async function sendNotifyPayoutsRequest(url, token) {
+  const notifyBtn = document.getElementById('notifyDiscordBtn');
+  if (notifyBtn) {
+    notifyBtn.disabled = true;
+    notifyBtn.textContent = '📢 Sending…';
+  }
+
+  try {
+    const endpoint = url.replace(/\/$/, '') + '/api/notify-payouts';
+    const res  = await fetch(endpoint, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    let data = {};
+    try { data = await res.json(); } catch (parseErr) {
+      console.warn('Notify payouts: could not parse response JSON:', parseErr);
+      // If the body isn't JSON we still use the HTTP status to determine outcome
+    }
+
+    if (res.ok && data.ok) {
+      kShowToast(
+        `✅ Payouts notified in Discord! Week ending ${data.weekEnding} — ${data.mechanicCount} mechanic(s) paid.`,
+        'success', 6000
+      );
+      return true;
+    } else {
+      kShowToast(`❌ ${data.error || 'Failed to notify Discord.'}`, 'error', 5000);
+      return false;
+    }
+  } catch (err) {
+    kShowToast(`❌ Network error: ${err.message}`, 'error', 5000);
+    return false;
+  } finally {
+    if (notifyBtn) {
+      notifyBtn.disabled = false;
+      notifyBtn.textContent = '📢 Notify Discord: Payouts Processed';
+    }
+  }
+}
+
+/** Wire up the Notify Discord button and its bot-config panel. */
+function initNotifyDiscordButton() {
+  const notifyBtn       = document.getElementById('notifyDiscordBtn');
+  const configPanel     = document.getElementById('botConfigPanel');
+  const urlInput        = document.getElementById('botApiUrl');
+  const tokenInput      = document.getElementById('botApiToken');
+  const saveConfigBtn   = document.getElementById('saveBotConfigBtn');
+  const cancelConfigBtn = document.getElementById('cancelBotConfigBtn');
+  const clearConfigBtn  = document.getElementById('clearBotConfigBtn');
+
+  if (!notifyBtn || !configPanel) return;
+
+  notifyBtn.addEventListener('click', async () => {
+    const { url, token } = getBotConfig();
+
+    if (!url || !token) {
+      // Pre-fill any previously saved (partial) values and show config panel
+      if (urlInput)   urlInput.value   = url;
+      if (tokenInput) tokenInput.value = token;
+      configPanel.classList.remove('hidden');
+      if (urlInput) urlInput.focus();
+      return;
+    }
+
+    await sendNotifyPayoutsRequest(url, token);
+  });
+
+  if (saveConfigBtn) {
+    saveConfigBtn.addEventListener('click', async () => {
+      const url   = (urlInput   ? urlInput.value   : '').trim();
+      const token = (tokenInput ? tokenInput.value : '').trim();
+
+      if (!url || !token) {
+        kShowToast('Please enter both the Worker URL and the Trigger Token.', 'warning', 3000);
+        return;
+      }
+
+      saveBotConfig(url, token);
+      configPanel.classList.add('hidden');
+      await sendNotifyPayoutsRequest(url, token);
+    });
+  }
+
+  if (cancelConfigBtn) {
+    cancelConfigBtn.addEventListener('click', () => {
+      configPanel.classList.add('hidden');
+    });
+  }
+
+  if (clearConfigBtn) {
+    clearConfigBtn.addEventListener('click', () => {
+      clearBotConfig();
+      if (urlInput)   urlInput.value   = '';
+      if (tokenInput) tokenInput.value = '';
+      kShowToast('Bot config cleared from browser storage.', 'success', 2500);
+    });
+  }
+}
+
 // ===== Init =====
 document.addEventListener("DOMContentLoaded", () => {
   initialParams = new URLSearchParams(window.location.search);
@@ -1794,6 +1923,9 @@ document.addEventListener("DOMContentLoaded", () => {
       window.location.href = url;
     });
   }
+
+  // Discord notify button
+  initNotifyDiscordButton();
 
   // Initial load
   loadPayouts();
