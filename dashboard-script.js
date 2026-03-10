@@ -3,6 +3,15 @@ const JOBS_SHEET = "Form responses 1";
 const CONFIG_SHEET = "Config";
 const PAY_PER_REPAIR = 700;
 
+// Auto-refresh interval (from constants.js, fallback to 5 min)
+const AUTO_REFRESH_MS =
+  (typeof DISCORD_CONFIG !== 'undefined'
+    ? DISCORD_CONFIG.AUTO_REFRESH_INTERVAL_MS
+    : null) || 5 * 60 * 1000;
+
+let refreshTimer = null;
+let lastLoadedWeekData = null; // Cached week data for Discord change detection
+
 // ===== Overview from jobs sheet (GLOBAL ONLY) =====
 
 async function loadOverview() {
@@ -177,6 +186,37 @@ async function loadOverview() {
       lastActivity ? "Last job: " + kFmtDate(lastActivity) : ""
     );
 
+    // ---- This Week Live Panel ----
+    const weekISO = latestWeekDate ? latestWeekDate.toISOString().slice(0, 10) : "";
+    updateThisWeekPanel({
+      repairsThisWeek,
+      payoutThisWeek,
+      topMechName,
+      topMechRepairs,
+      perMechWeek
+    });
+
+    // Build week data for Discord change detection
+    lastLoadedWeekData = {
+      weekISO,
+      totalRepairs: repairsThisWeek,
+      payoutThisWeek,
+      topMechanic: topMechName,
+      topMechRepairs
+    };
+
+    // Discord: check if data changed and auto-post
+    if (typeof kDiscordCheckAndPostUpdate === 'function') {
+      kDiscordCheckAndPostUpdate(lastLoadedWeekData).catch(console.warn);
+    }
+
+    // Discord: payday reminder if today is the configured payday
+    if (typeof kDiscordCheckAndSendPaydayReminder === 'function' && weekISO) {
+      kDiscordCheckAndSendPaydayReminder(weekISO).catch(console.warn);
+    }
+
+    setRefreshStatus("Live");
+
     if (status) {
       status.textContent = "";
     }
@@ -185,6 +225,7 @@ async function loadOverview() {
     if (status) {
       status.textContent = "";
     }
+    setRefreshStatus("Error");
     
     // Show user-friendly error message
     const errorMsg = err.message.includes('404') || err.message.includes('not found')
@@ -248,13 +289,102 @@ function money(n) {
   return kFmtMoney(n);
 }
 
+// ==== This Week Live Panel ====
+
+function setRefreshStatus(state) {
+  const dot = document.getElementById("refreshDot");
+  const label = document.getElementById("refreshLabel");
+  if (!dot || !label) return;
+
+  dot.className = "refresh-dot";
+  if (state === "Live") {
+    dot.classList.add("refresh-dot--live");
+    label.textContent = "Live · auto-refresh every 5 min";
+  } else if (state === "Refreshing") {
+    dot.classList.add("refresh-dot--refreshing");
+    label.textContent = "Refreshing…";
+  } else if (state === "Error") {
+    dot.classList.add("refresh-dot--error");
+    label.textContent = "Error loading data";
+  } else {
+    label.textContent = "Loading…";
+  }
+}
+
+/**
+ * Populate the "This Week Live" panel with the latest computed values.
+ * @param {{ repairsThisWeek, payoutThisWeek, topMechName, topMechRepairs, perMechWeek }} data
+ */
+function updateThisWeekPanel(data) {
+  const { repairsThisWeek, payoutThisWeek, topMechName, topMechRepairs, perMechWeek } = data;
+
+  const repairsEl = document.getElementById("liveWeekRepairs");
+  const payoutEl = document.getElementById("liveWeekPayout");
+  const topMechEl = document.getElementById("liveTopMech");
+  const topMechSubEl = document.getElementById("liveTopMechSub");
+  const mechanicsEl = document.getElementById("liveWeekMechanics");
+  const detailEl = document.getElementById("liveWeekMechanicsDetail");
+
+  if (repairsEl) repairsEl.textContent = repairsThisWeek.toLocaleString();
+  if (payoutEl) payoutEl.textContent = kFmtMoney(payoutThisWeek);
+
+  if (topMechEl) topMechEl.textContent = topMechName || "—";
+  if (topMechSubEl) {
+    topMechSubEl.textContent = topMechName
+      ? topMechRepairs + " repairs · " + kFmtMoney(topMechRepairs * PAY_PER_REPAIR)
+      : "";
+  }
+
+  const mechCount = Object.keys(perMechWeek).length;
+  if (mechanicsEl) mechanicsEl.textContent = mechCount.toLocaleString();
+
+  // Mechanic breakdown list
+  if (detailEl) {
+    if (!mechCount) {
+      detailEl.textContent = "No repairs logged this week.";
+      detailEl.className = "this-week-mechanics this-week-mechanics--empty";
+      return;
+    }
+    detailEl.className = "this-week-mechanics";
+
+    const sorted = Object.entries(perMechWeek).sort((a, b) => b[1] - a[1]);
+    const items = sorted.map(([name, reps]) => {
+      const pay = reps * PAY_PER_REPAIR;
+      const safeN = kEscapeHtml(name);
+      return `<div class="tw-mech-row">
+        <span class="tw-mech-name">${safeN}</span>
+        <span class="tw-mech-stats">${reps} repair${reps !== 1 ? "s" : ""} · ${kFmtMoney(pay)}</span>
+      </div>`;
+    });
+    detailEl.innerHTML = items.join("");
+  }
+}
+
+// ==== Auto-Refresh ====
+
+async function refreshDashboard() {
+  setRefreshStatus("Refreshing");
+  // Clear cache so we always get fresh data
+  if (typeof kCsvCache !== 'undefined') kCsvCache.clear();
+  try {
+    await Promise.all([loadOverview(), loadConfig()]);
+  } catch (_e) {
+    // loadOverview already handles errors internally
+  }
+}
+
+function startAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(refreshDashboard, AUTO_REFRESH_MS);
+}
+
 // ==== Keyboard Shortcuts ====
 
 function initKeyboardShortcuts() {
   kRegisterShortcuts({
     'ctrl+r': (e) => {
       // Reload data
-      loadOverview().then(() => kShowToast('Data refreshed', 'success', 2000));
+      refreshDashboard().then(() => kShowToast('Data refreshed', 'success', 2000));
     },
     'ctrl+1': () => {
       // Navigate to Dashboard
@@ -280,7 +410,8 @@ function initKeyboardShortcuts() {
 document.addEventListener("DOMContentLoaded", async () => {
   kSyncNavLinksWithCurrentSearch();
   initKeyboardShortcuts();
-  
+  setRefreshStatus("Loading");
+
   // Load overview and config in parallel for better performance
   try {
     await Promise.all([
@@ -290,4 +421,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   } catch (err) {
     console.error('Error during dashboard initialization:', err);
   }
+
+  // Start auto-refresh
+  startAutoRefresh();
 });

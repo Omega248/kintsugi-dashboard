@@ -13,6 +13,7 @@
   <script src="settings-ui.js"></script>
   <script src="ui-enhancements.js"></script>
   <script src="kintsugi-core.js"></script>
+  <script src="discord-service.js"></script>
 </head>
 <body>
   <div class="app">
@@ -86,6 +87,37 @@
         <p id="manualRedBins">–</p>
         <p class="sub" id="tileSub-manualRedBins"></p>
       </div>
+    </section>
+
+    <!-- This Week Live Panel -->
+    <section class="this-week-panel" id="thisWeekPanel">
+      <div class="this-week-header">
+        <span class="this-week-title">📊 This Week — Live View</span>
+        <span class="this-week-refresh-status" id="refreshStatus">
+          <span class="refresh-dot" id="refreshDot"></span>
+          <span id="refreshLabel">Loading…</span>
+        </span>
+      </div>
+      <div class="this-week-grid" id="thisWeekGrid">
+        <div class="this-week-card">
+          <div class="this-week-card-label">Repairs This Week</div>
+          <div class="this-week-card-value" id="liveWeekRepairs">—</div>
+        </div>
+        <div class="this-week-card">
+          <div class="this-week-card-label">Payout This Week</div>
+          <div class="this-week-card-value" id="liveWeekPayout">—</div>
+        </div>
+        <div class="this-week-card">
+          <div class="this-week-card-label">Top Mechanic</div>
+          <div class="this-week-card-value" id="liveTopMech">—</div>
+          <div class="this-week-card-sub" id="liveTopMechSub"></div>
+        </div>
+        <div class="this-week-card">
+          <div class="this-week-card-label">Active This Week</div>
+          <div class="this-week-card-value" id="liveWeekMechanics">—</div>
+        </div>
+      </div>
+      <div class="this-week-mechanics" id="liveWeekMechanicsDetail"></div>
     </section>
 
     <!-- Quick links -->
