@@ -12,6 +12,7 @@ const DISCORD_STORAGE_KEY = 'kintsugi_discord_config';
 const DISCORD_CONFIG_DEFAULTS = {
   analyticsWebhookUrl: '',   // Webhook for auto-posting data updates
   payoutsWebhookUrl: '',     // Webhook for payouts-processed + payday reminder
+  mechLogsWebhookUrl: '',    // Webhook for mechanic self-service repair log posts (falls back to analyticsWebhookUrl)
   riptide248UserId: '',      // Discord user ID to ping on payday (e.g. "123456789012345678")
   autoPostEnabled: false,    // Whether to auto-post on data change
   paydayDay: 1,              // Day to send payday reminder: 0=Sun 1=Mon 2=Tue …
@@ -133,7 +134,6 @@ async function kDiscordPostAnalyticsUpdate(weekData) {
   ];
 
   if (topMechanic) {
-    const rate = (typeof PAYMENT_RATES !== 'undefined' ? PAYMENT_RATES.PAY_PER_REPAIR : 700);
     fields.push({
       name: 'TOP MECHANIC',
       value: `${kEscapeHtml(topMechanic)}\n${topMechRepairs} repair${topMechRepairs !== 1 ? 's' : ''} · $${(topMechRepairs * rate).toLocaleString()}`,
@@ -152,11 +152,10 @@ async function kDiscordPostAnalyticsUpdate(weekData) {
   // Per-mechanic breakdown
   const mechEntries = Object.entries(perMechWeek).sort((a, b) => b[1] - a[1]);
   if (mechEntries.length) {
-    const rate = (typeof PAYMENT_RATES !== 'undefined' ? PAYMENT_RATES.PAY_PER_REPAIR : 700);
     const lines = mechEntries.map(([name, reps]) => {
       const pay = reps * rate;
       const acrossTotal = perMechWeekAcross[name] || 0;
-      return `${kEscapeHtml(name)} — ${reps} repair${reps !== 1 ? 's' : ''} · $${pay.toLocaleString()} · ${acrossTotal} Across`;
+      return `${kEscapeHtml(name)} — ${reps} repair${reps !== 1 ? 's' : ''} · $${pay.toLocaleString()} · ${acrossTotal} across`;
     });
     fields.push({
       name: 'Mechanic Breakdown',
@@ -187,21 +186,30 @@ async function kDiscordPostAnalyticsUpdate(weekData) {
 // ===== Payouts-processed announcement =====
 
 /**
- * Post a public payouts-processed message WITHOUT @ing anyone.
+ * Post a public payouts-processed message.
  * @param {string} weekEnding  Human-readable week-ending string
- * @param {string[]} mechanicList  Names of mechanics paid
+ * @param {Array<{name:string,payout:number}|string>} mechanicList  Mechanics paid this week
  */
 async function kDiscordPostPayoutsProcessed(weekEnding, mechanicList) {
   const config = kDiscordGetConfig();
   if (!config.payoutsWebhookUrl) return false;
 
+  const mention = config.riptide248UserId
+    ? `<@${config.riptide248UserId}>`
+    : '@riptide248';
+
   let description =
     `✅ Payouts for the week ending **${weekEnding}** have been processed.\n\n` +
-    `All mechanics listed below have been paid. If you believe there is an error, please contact management.`;
+    `All mechanics listed below have been paid. If you believe there is an error, please contact ${mention}.`;
 
   if (mechanicList && mechanicList.length > 0) {
-    const safeNames = mechanicList.map(m => `• ${kEscapeHtml(m)}`).join('\n');
-    description += `\n\n**Mechanics paid this week:**\n${safeNames}`;
+    const safeLines = mechanicList.map(m => {
+      if (m && typeof m === 'object') {
+        return `• ${kEscapeHtml(m.name)} — $${Number(m.payout).toLocaleString()}`;
+      }
+      return `• ${kEscapeHtml(String(m))}`;
+    }).join('\n');
+    description += `\n\n**Mechanics paid this week:**\n${safeLines}`;
   }
 
   const payload = {
@@ -289,4 +297,53 @@ async function kDiscordCheckAndSendPaydayReminder(weekEnding) {
   if (ok && typeof kShowToast === 'function') {
     kShowToast('Discord: Payday reminder sent to @riptide248', 'info', 4000);
   }
+}
+
+// ===== Mechanic self-service repair log =====
+
+/**
+ * Post a mechanic's own repair log to the mechanic logs webhook
+ * (falls back to the analytics webhook if mechLogsWebhookUrl is not set).
+ *
+ * @param {{ mechanicName: string, weekLabel: string, totalRepairs: number,
+ *           totalAcross: number, totalEngines: number, totalPayout: number,
+ *           jobLines: string[] }} data
+ */
+async function kDiscordPostMechanicLog({ mechanicName, weekLabel, totalRepairs, totalAcross, totalEngines, totalPayout, jobLines }) {
+  const config = kDiscordGetConfig();
+  const webhookUrl = config.mechLogsWebhookUrl || config.analyticsWebhookUrl;
+  if (!webhookUrl) return false;
+
+  const fields = [
+    { name: 'REPAIRS', value: String(totalRepairs), inline: true },
+    { name: 'ACROSS TOTAL', value: String(totalAcross), inline: true },
+    { name: 'TOTAL PAYOUT', value: '$' + Number(totalPayout).toLocaleString(), inline: true },
+  ];
+
+  if (totalEngines > 0) {
+    fields.push({ name: 'ENGINE REPS', value: String(totalEngines), inline: true });
+  }
+
+  if (jobLines && jobLines.length > 0) {
+    fields.push({
+      name: 'Job Breakdown',
+      value: jobLines.join('\n'),
+      inline: false
+    });
+  }
+
+  const payload = {
+    embeds: [
+      {
+        title: `📋 Repair Log — ${kEscapeHtml(mechanicName)}`,
+        description: kEscapeHtml(weekLabel),
+        color: 0x6366f1,
+        fields,
+        timestamp: new Date().toISOString(),
+        footer: { text: 'Kintsugi Dashboard · Mechanic Log' }
+      }
+    ]
+  };
+
+  return await kDiscordPost(webhookUrl, payload);
 }

@@ -501,6 +501,67 @@
 
 /* Responsive tweaks */
 
+/* ===== My Repair Log self-service panel ===== */
+
+.my-log-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  margin-top: 24px;
+}
+
+.my-log-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.my-log-result {
+  margin-top: 20px;
+}
+
+.my-log-result.hidden {
+  display: none;
+}
+
+.my-log-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.my-log-mech-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.my-log-week-label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.my-log-table {
+  width: 100%;
+  font-size: 13px;
+}
+
+.my-log-summary {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
 @media (max-width: 1200px) {
   .mechanics-layout {
     grid-template-columns: 1fr;
@@ -524,6 +585,16 @@
 
   .mechanic-detail-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .my-log-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .my-log-controls .select-wrap,
+  .my-log-controls #myLogPostBtn {
+    width: 100%;
   }
 }
 

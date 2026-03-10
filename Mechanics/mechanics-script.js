@@ -854,6 +854,7 @@ async function mechLoad() {
     mechJobs = jobs;
     mechPopulateMechanicDropdown();
     mechApplyFiltersAndRender();
+    mechInitMyLog();
 
     if (statusEl) statusEl.textContent = "";
   } catch (err) {
@@ -862,6 +863,252 @@ async function mechLoad() {
       statusEl.textContent =
         "Failed to load mechanic stats. Check sheet sharing and column names.";
     }
+  }
+}
+
+// ===== My Repair Log (self-service) =====
+
+/**
+ * Initialise the "My Repair Log" panel once job data has been loaded.
+ * Populates the mechanic dropdown and wires up change events.
+ */
+function mechInitMyLog() {
+  const mechSel = document.getElementById('myLogMechanic');
+  const weekSel = document.getElementById('myLogWeek');
+  const postBtn = document.getElementById('myLogPostBtn');
+  if (!mechSel) return;
+
+  // Populate mechanic dropdown from loaded data (sorted A→Z)
+  const mechanicNames = [...new Set(mechJobs.map(j => j.mechanic))].sort();
+  mechSel.innerHTML = '<option value="">— Select mechanic —</option>';
+  mechanicNames.forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    mechSel.appendChild(opt);
+  });
+
+  mechSel.addEventListener('change', () => {
+    mechUpdateMyLogWeeks(mechSel.value);
+    mechRenderMyLog();
+  });
+
+  if (weekSel) {
+    weekSel.addEventListener('change', mechRenderMyLog);
+  }
+
+  if (postBtn) {
+    postBtn.addEventListener('click', mechPostMyLogToDiscord);
+  }
+}
+
+/**
+ * Populate the week dropdown for the given mechanic, then auto-render.
+ */
+function mechUpdateMyLogWeeks(mechanicName) {
+  const weekSel = document.getElementById('myLogWeek');
+  if (!weekSel) return;
+
+  weekSel.innerHTML = '<option value="">— Select week —</option>';
+  weekSel.disabled = !mechanicName;
+  if (!mechanicName) return;
+
+  // Collect unique weeks for this mechanic
+  const weekMap = new Map(); // weekKey → { weekKey, label, weekEndDate }
+  mechJobs
+    .filter(j => j.mechanic === mechanicName)
+    .forEach(j => {
+      let weekKey, label, weekEndDate;
+      if (j.weekEnd && mechIsValidDate(j.weekEnd)) {
+        weekKey = j.weekEnd.toISOString().slice(0, 10);
+        weekEndDate = j.weekEnd;
+        label = 'Week ending ' + mechFmtDate(j.weekEnd);
+      } else if (j.bestDate) {
+        weekKey = mechWeekKeyFromDate(j.bestDate);
+        weekEndDate = null;
+        label = weekKey || 'Unknown week';
+      }
+      if (weekKey && !weekMap.has(weekKey)) {
+        weekMap.set(weekKey, { weekKey, label, weekEndDate });
+      }
+    });
+
+  // Sort newest first
+  const weeks = Array.from(weekMap.values()).sort((a, b) => b.weekKey.localeCompare(a.weekKey));
+  weeks.forEach(({ weekKey, label }) => {
+    const opt = document.createElement('option');
+    opt.value = weekKey;
+    opt.textContent = label;
+    weekSel.appendChild(opt);
+  });
+
+  // Auto-select the most recent week
+  if (weeks.length > 0) {
+    weekSel.value = weeks[0].weekKey;
+    mechRenderMyLog();
+  }
+}
+
+/**
+ * Return all jobs for a given mechanic + week key.
+ */
+function mechGetMyLogJobs(mechanicName, weekKey) {
+  if (!mechanicName || !weekKey) return [];
+  return mechJobs.filter(j => {
+    if (j.mechanic !== mechanicName) return false;
+    if (j.weekEnd && mechIsValidDate(j.weekEnd)) {
+      return j.weekEnd.toISOString().slice(0, 10) === weekKey;
+    }
+    return mechWeekKeyFromDate(j.bestDate) === weekKey;
+  });
+}
+
+/**
+ * Render the repair log table for the currently selected mechanic + week.
+ */
+function mechRenderMyLog() {
+  const mechSel = document.getElementById('myLogMechanic');
+  const weekSel = document.getElementById('myLogWeek');
+  const resultEl = document.getElementById('myLogResult');
+  const postBtn = document.getElementById('myLogPostBtn');
+  if (!mechSel || !weekSel || !resultEl) return;
+
+  const mechanicName = mechSel.value;
+  const weekKey = weekSel.value;
+
+  if (!mechanicName || !weekKey) {
+    resultEl.classList.add('hidden');
+    if (postBtn) postBtn.disabled = true;
+    return;
+  }
+
+  const jobs = mechGetMyLogJobs(mechanicName, weekKey);
+  const weekLabel = weekSel.options[weekSel.selectedIndex]?.text || weekKey;
+
+  // Aggregates — each row = 1 repair
+  const totalRepairs = jobs.length;
+  const totalAcross = jobs.reduce((s, j) => s + (j.across || 0), 0);
+  const totalEngines = jobs.reduce((s, j) => s + (j.engineReplacements || 0), 0);
+  const basePay = totalRepairs * MECH_PAY_PER_REPAIR;
+  const enginePay = mechCalculateEngineValue(totalEngines);
+  const totalPayout = basePay + enginePay;
+
+  const tbodyRows = jobs.length
+    ? jobs.map((j, i) => {
+        const date = j.tsDate && mechIsValidDate(j.tsDate)
+          ? mechFmtDate(j.tsDate)
+          : j.bestDate ? mechFmtDate(j.bestDate) : '—';
+        const engCell = j.engineReplacements > 0
+          ? j.engineReplacements + (j.department ? ` (${kEscapeHtml(j.department)})` : '')
+          : '—';
+        const jobPay = MECH_PAY_PER_REPAIR + mechCalculateEngineValue(j.engineReplacements || 0);
+        return `<tr>
+          <td>${i + 1}</td>
+          <td>${date}</td>
+          <td>${j.across || 0}</td>
+          <td>${engCell}</td>
+          <td>${mechFmtMoney(jobPay)}</td>
+        </tr>`;
+      }).join('')
+    : '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">No jobs found for this week.</td></tr>';
+
+  const engineSummary = totalEngines > 0
+    ? ` · ${totalEngines} engine rep${totalEngines !== 1 ? 's' : ''}`
+    : '';
+
+  resultEl.innerHTML = `
+    <div class="my-log-header">
+      <span class="my-log-mech-name">${kEscapeHtml(mechanicName)}</span>
+      <span class="my-log-week-label">${kEscapeHtml(weekLabel)}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table my-log-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Date</th>
+            <th>Across</th>
+            <th>Engine Reps</th>
+            <th>Est. Pay</th>
+          </tr>
+        </thead>
+        <tbody>${tbodyRows}</tbody>
+      </table>
+    </div>
+    <div class="my-log-summary">
+      ${totalRepairs} repair${totalRepairs !== 1 ? 's' : ''} &nbsp;·&nbsp;
+      ${totalAcross} Across${engineSummary} &nbsp;·&nbsp;
+      ${mechFmtMoney(totalPayout)} payout
+    </div>
+  `;
+
+  resultEl.classList.remove('hidden');
+  if (postBtn) postBtn.disabled = false;
+}
+
+/**
+ * Post the currently displayed log to Discord via the mechanic logs webhook.
+ */
+async function mechPostMyLogToDiscord() {
+  if (typeof kDiscordPostMechanicLog !== 'function') {
+    kShowToast('Discord service not loaded', 'error', 3000);
+    return;
+  }
+
+  const mechSel = document.getElementById('myLogMechanic');
+  const weekSel = document.getElementById('myLogWeek');
+  const postBtn = document.getElementById('myLogPostBtn');
+  if (!mechSel || !weekSel) return;
+
+  const mechanicName = mechSel.value;
+  const weekKey = weekSel.value;
+  if (!mechanicName || !weekKey) return;
+
+  const weekLabel = weekSel.options[weekSel.selectedIndex]?.text || weekKey;
+  const jobs = mechGetMyLogJobs(mechanicName, weekKey);
+
+  const totalRepairs = jobs.length;
+  const totalAcross = jobs.reduce((s, j) => s + (j.across || 0), 0);
+  const totalEngines = jobs.reduce((s, j) => s + (j.engineReplacements || 0), 0);
+  const basePay = totalRepairs * MECH_PAY_PER_REPAIR;
+  const enginePay = mechCalculateEngineValue(totalEngines);
+  const totalPayout = basePay + enginePay;
+
+  const jobLines = jobs.map((j, i) => {
+    const date = j.tsDate && mechIsValidDate(j.tsDate)
+      ? mechFmtDate(j.tsDate)
+      : j.bestDate ? mechFmtDate(j.bestDate) : '—';
+    let line = `${i + 1}. ${date} — ${j.across} across`;
+    if (j.engineReplacements > 0) {
+      line += ` · ${j.engineReplacements} Engine Rep${j.engineReplacements !== 1 ? 's' : ''}`;
+      if (j.department) line += ` (${j.department})`;
+    }
+    return line;
+  });
+
+  const originalText = postBtn ? postBtn.textContent : '';
+  if (postBtn) { postBtn.disabled = true; postBtn.textContent = 'Posting…'; }
+
+  const ok = await kDiscordPostMechanicLog({
+    mechanicName,
+    weekLabel,
+    totalRepairs,
+    totalAcross,
+    totalEngines,
+    totalPayout,
+    jobLines
+  });
+
+  if (postBtn) { postBtn.disabled = false; postBtn.textContent = originalText; }
+
+  if (ok) {
+    kShowToast('✅ Log posted to Discord!', 'success', 3000);
+  } else {
+    kShowToast(
+      'Failed to post. Configure the Mechanic Logs webhook URL in Settings (⚙️).',
+      'error',
+      5000
+    );
   }
 }
 

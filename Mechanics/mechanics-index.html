@@ -9,8 +9,11 @@
   <script src="../constants.js"></script>
   <script src="../utils.js"></script>
   <script src="../payout-helpers.js"></script>
+  <script src="../preferences.js"></script>
+  <script src="../settings-ui.js"></script>
   <script src="../ui-enhancements.js"></script>
   <script src="../kintsugi-core.js"></script>
+  <script src="../discord-service.js"></script>
 </head>
 <body>
   <div class="app">
@@ -177,6 +180,34 @@
             </div>
           </div>
         </div>
+      </section>
+
+      <!-- My Repair Log self-service panel -->
+      <section class="my-log-panel" aria-label="My repair log">
+        <div class="panel-header">
+          <div class="panel-title">📋 My Repair Log</div>
+          <div class="panel-subtitle">Select your name and week to view and post your log to Discord.</div>
+        </div>
+
+        <div class="my-log-controls">
+          <span class="label-soft">Mechanic:</span>
+          <span class="select-wrap">
+            <select id="myLogMechanic" class="select-pill">
+              <option value="">— Select mechanic —</option>
+            </select>
+          </span>
+
+          <span class="label-soft">Week:</span>
+          <span class="select-wrap">
+            <select id="myLogWeek" class="select-pill" disabled>
+              <option value="">— Select week —</option>
+            </select>
+          </span>
+
+          <button id="myLogPostBtn" class="btn btn-primary" disabled title="Post this log to Discord">📤 Post to Discord</button>
+        </div>
+
+        <div id="myLogResult" class="my-log-result hidden"></div>
       </section>
 
       <div id="status" class="status"></div>

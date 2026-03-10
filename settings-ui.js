@@ -115,6 +115,13 @@ function kInitSettingsUI() {
       </div>
 
       <div class="settings-item" style="flex-direction:column;align-items:flex-start;gap:4px;margin-top:8px;">
+        <label class="settings-item-label" for="kDiscordMechLogsUrl">Mechanic Logs Webhook URL</label>
+        <div class="settings-item-description">Used when mechanics post their own repair log from the Mechanics page. Falls back to the Analytics webhook if not set.</div>
+        <input id="kDiscordMechLogsUrl" type="url" class="advanced-input" style="width:100%;margin-top:4px;"
+               placeholder="https://discord.com/api/webhooks/…" autocomplete="off" />
+      </div>
+
+      <div class="settings-item" style="flex-direction:column;align-items:flex-start;gap:4px;margin-top:8px;">
         <label class="settings-item-label" for="kDiscordRiptideId">@riptide248 Discord User ID</label>
         <div class="settings-item-description">Numeric Discord user ID used to ping riptide248 on payday (e.g. 123456789012345678).</div>
         <input id="kDiscordRiptideId" type="text" class="advanced-input" style="width:100%;margin-top:4px;"
@@ -287,12 +294,14 @@ function kAttachSettingsListeners() {
     const cfg = kDiscordGetConfig();
     const analyticsInput = document.getElementById('kDiscordAnalyticsUrl');
     const payoutsInput = document.getElementById('kDiscordPayoutsUrl');
+    const mechLogsInput = document.getElementById('kDiscordMechLogsUrl');
     const riptideInput = document.getElementById('kDiscordRiptideId');
     const paydaySelect = document.getElementById('kDiscordPaydayDay');
     const autoToggle = document.getElementById('kDiscordAutoPostToggle');
 
     if (analyticsInput) analyticsInput.value = cfg.analyticsWebhookUrl || '';
     if (payoutsInput) payoutsInput.value = cfg.payoutsWebhookUrl || '';
+    if (mechLogsInput) mechLogsInput.value = cfg.mechLogsWebhookUrl || '';
     if (riptideInput) riptideInput.value = cfg.riptide248UserId || '';
     if (paydaySelect) paydaySelect.value = String(cfg.paydayDay ?? 1);
     if (autoToggle) autoToggle.classList.toggle('active', !!cfg.autoPostEnabled);
@@ -317,11 +326,12 @@ function kAttachSettingsListeners() {
     if (typeof kDiscordSaveConfig !== 'function') return;
     const analyticsUrl = (document.getElementById('kDiscordAnalyticsUrl')?.value || '').trim();
     const payoutsUrl = (document.getElementById('kDiscordPayoutsUrl')?.value || '').trim();
+    const mechLogsUrl = (document.getElementById('kDiscordMechLogsUrl')?.value || '').trim();
     const riptideId = (document.getElementById('kDiscordRiptideId')?.value || '').trim();
     const paydayDay = parseInt(document.getElementById('kDiscordPaydayDay')?.value ?? '1', 10);
 
     const validUrl = url => !url || url.startsWith('https://discord.com/api/webhooks/');
-    if (!validUrl(analyticsUrl) || !validUrl(payoutsUrl)) {
+    if (!validUrl(analyticsUrl) || !validUrl(payoutsUrl) || !validUrl(mechLogsUrl)) {
       kShowToast('Webhook URLs must start with https://discord.com/api/webhooks/', 'error', 4000);
       return;
     }
@@ -329,6 +339,7 @@ function kAttachSettingsListeners() {
     kDiscordSaveConfig({
       analyticsWebhookUrl: analyticsUrl,
       payoutsWebhookUrl: payoutsUrl,
+      mechLogsWebhookUrl: mechLogsUrl,
       riptide248UserId: riptideId,
       paydayDay: isNaN(paydayDay) ? 1 : paydayDay
     });
