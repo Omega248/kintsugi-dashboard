@@ -18,11 +18,10 @@ crons = ["0 18 * * SUN"]
 # Used to persist the analytics message ID and the last reminder week so the
 # cron edits existing messages rather than posting new ones each run.
 #
-# ⚠️  SETUP REQUIRED before first deployment:
-#   1. Run:  wrangler kv:namespace create "KINTSUGI_BOT"
-#   2. Copy the returned `id` and paste it as the value below, replacing the placeholder.
-#   3. Re-deploy:  wrangler deploy
-
+# The KV namespace is provisioned automatically by the GitHub Actions deploy
+# workflow (.github/workflows/deploy-bot.yml). The binding is injected into
+# this file at deploy time — no manual setup or id pasting is required.
+# The namespace is named "KINTSUGI_BOT" in your Cloudflare account.
 
 # ===== Required Secrets =====
 # Set each secret once with:  wrangler secret put <NAME>

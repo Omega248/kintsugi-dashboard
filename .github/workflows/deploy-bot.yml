@@ -6,7 +6,7 @@
 #   - Manual dispatch from the Actions tab
 #
 # Required GitHub repository secrets:
-#   CLOUDFLARE_API_TOKEN   — Cloudflare API token with Workers:Edit permission
+#   CLOUDFLARE_API_TOKEN   — Cloudflare API token with Workers Scripts:Edit AND Workers KV Storage:Edit permissions
 #   CLOUDFLARE_ACCOUNT_ID  — Your Cloudflare account ID
 #   DISCORD_PUBLIC_KEY     — From Discord Developer Portal → "Public Key"
 #   DISCORD_BOT_TOKEN      — From Discord Developer Portal → Bot → "Reset Token"
@@ -14,6 +14,10 @@
 #   JOBS_CHANNEL_ID        — Discord channel ID for the #jobs channel
 #   PAYOUTS_CHANNEL_ID     — Discord channel ID for the #payouts channel
 #   RIPTIDE_USER_ID        — (Optional) Numeric Discord user ID to @mention on payday
+#
+# KV provisioning is fully automatic: this workflow ensures a KV namespace
+# named "KINTSUGI_BOT" exists in your Cloudflare account (creating it if it
+# doesn't), then binds it to the Worker as "KV" — no manual steps required.
 # =======================================
 name: Deploy Discord Bot
 
@@ -33,6 +37,89 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # ---- Automatically provision the Workers KV namespace ----
+      # Uses the Cloudflare REST API to look up (or create) a namespace named
+      # "KINTSUGI_BOT", then writes its id into wrangler.toml for the deploy step.
+      # The namespace id is NOT a credential — it is safe to embed in config files,
+      # but we avoid committing it to the repo so deploys always use the live id.
+      - name: Provision KV namespace (KINTSUGI_BOT)
+        id: kv
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          # ---- List existing KV namespaces (up to 100) ----
+          NAMESPACES=$(curl -s \
+            "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces?per_page=100" \
+            -H "Authorization: Bearer ${CF_API_TOKEN}")
+
+          KV_ID=$(echo "${NAMESPACES}" | python3 - << 'PYEOF'
+import json, sys
+
+raw = sys.stdin.read()
+try:
+    data = json.loads(raw)
+except json.JSONDecodeError as e:
+    print(f"ERROR: Cloudflare API returned non-JSON response: {e}", file=sys.stderr)
+    print(f"Response was: {raw[:500]}", file=sys.stderr)
+    sys.exit(1)
+
+if not data.get("success"):
+    errors = data.get("errors", [])
+    print(f"ERROR: Cloudflare API call failed: {errors}", file=sys.stderr)
+    sys.exit(1)
+
+for ns in data.get("result") or []:
+    if ns.get("title") == "KINTSUGI_BOT":
+        print(ns["id"])
+        break
+PYEOF
+          )
+
+          if [ -z "${KV_ID}" ]; then
+            echo "KV namespace 'KINTSUGI_BOT' not found — creating it..."
+            CREATED=$(curl -s -X POST \
+              "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces" \
+              -H "Authorization: Bearer ${CF_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d '{"title":"KINTSUGI_BOT"}')
+            KV_ID=$(echo "${CREATED}" | python3 - << 'PYEOF'
+import json, sys
+
+raw = sys.stdin.read()
+try:
+    data = json.loads(raw)
+except json.JSONDecodeError as e:
+    print(f"ERROR: Cloudflare API returned non-JSON response: {e}", file=sys.stderr)
+    print(f"Response was: {raw[:500]}", file=sys.stderr)
+    sys.exit(1)
+
+if not data.get("success"):
+    errors = data.get("errors", [])
+    print(f"ERROR: Cloudflare API call failed: {errors}", file=sys.stderr)
+    print("Ensure CLOUDFLARE_API_TOKEN has 'Workers KV Storage:Edit' permission.", file=sys.stderr)
+    sys.exit(1)
+
+print(data["result"]["id"])
+PYEOF
+            )
+            echo "Created KV namespace 'KINTSUGI_BOT'."
+          else
+            echo "Found existing KV namespace 'KINTSUGI_BOT'."
+          fi
+
+          echo "kv_namespace_id=${KV_ID}" >> "${GITHUB_OUTPUT}"
+
+      # ---- Append the KV binding to wrangler.toml for this run only ----
+      # This modifies the checked-out copy; it is never committed to the repo.
+      - name: Inject KV binding into wrangler.toml
+        run: |
+          printf '\n[[kv_namespaces]]\nbinding = "KV"\nid      = "%s"\n' \
+            "${{ steps.kv.outputs.kv_namespace_id }}" \
+            >> discord-bot/wrangler.toml
 
       - name: Deploy Worker
         uses: cloudflare/wrangler-action@v3
