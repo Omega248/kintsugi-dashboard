@@ -367,131 +367,6 @@ async function loadAnalytics() {
   }
 }
 
-// ===== Discord Trigger: Post Weekly Update =====
-// The bot URL is fixed — it always points to the Kintsugi Discord bot worker.
-// Only the TRIGGER_TOKEN needs to be configured (via browser storage or
-// deploy-time injection via bot-config.js).
-
-const BOT_TOKEN_KEY = 'kintsugi_bot_api_token';
-
-const _BOT_URL = 'https://kintsugi-discord-bot.reecestangoe0824.workers.dev';
-
-// Fallback token used when no token is configured in the browser or via bot-config.js.
-// Must match FALLBACK_TRIGGER_TOKEN in discord-bot/worker.js.
-const _FALLBACK_TOKEN = 'HnoKPfn9ZIYXD79c8PRos4cMphPKNHf5bfCbsjIS';
-
-function getAnalyticsBotConfig() {
-  // Prefer deploy-time config injected by GitHub Actions (bot-config.js)
-  const injected = (typeof window !== 'undefined') && window.KINTSUGI_BOT_CONFIG;
-  return {
-    url:   _BOT_URL,
-    token: injected?.token || localStorage.getItem(BOT_TOKEN_KEY) || _FALLBACK_TOKEN,
-  };
-}
-
-function saveAnalyticsBotConfig(_url, token) {
-  localStorage.setItem(BOT_TOKEN_KEY, token.trim());
-}
-
-/**
- * POST to the worker's /api/trigger-weekly endpoint and display a toast.
- * Returns true on success so the caller can hide the config panel.
- */
-async function sendTriggerWeeklyRequest(url, token) {
-  const triggerBtn = document.getElementById('triggerWeeklyBtn');
-  if (triggerBtn) {
-    triggerBtn.disabled = true;
-    triggerBtn.textContent = '📊 Posting…';
-  }
-
-  try {
-    const endpoint = url.replace(/\/$/, '') + '/api/trigger-weekly';
-    const res = await fetch(endpoint, {
-      method:  'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-
-    let data = {};
-    try { data = await res.json(); } catch (_) { /* use HTTP status */ }
-
-    if (res.ok && data.ok) {
-      const parts = [`✅ Weekly Discord update posted! Week ending ${data.weekEnding}.`];
-      if (!data.analytics) parts.push('⚠️ Analytics channel post failed.');
-      if (!data.jobs)      parts.push('⚠️ Jobs channel post failed.');
-      if (!data.payouts)   parts.push('⚠️ Payouts reminder failed.');
-      kShowToast(parts.join(' '), 'success', 7000);
-      return true;
-    } else {
-      kShowToast(`❌ ${data.error || 'Failed to post weekly update to Discord.'}`, 'error', 5000);
-      return false;
-    }
-  } catch (err) {
-    kShowToast(`❌ Network error: ${err.message}`, 'error', 5000);
-    return false;
-  } finally {
-    if (triggerBtn) {
-      triggerBtn.disabled = false;
-      triggerBtn.textContent = '📊 Post Weekly Update to Discord';
-    }
-  }
-}
-
-/** Wire up the "Post Weekly Update to Discord" button and its config panel. */
-function initDiscordTriggerButton() {
-  const triggerBtn      = document.getElementById('triggerWeeklyBtn');
-  const configPanel     = document.getElementById('analyticsConfigPanel');
-  const tokenInput      = document.getElementById('analyticsBotApiToken');
-  const saveBtn         = document.getElementById('saveAnalyticsConfigBtn');
-  const cancelBtn       = document.getElementById('cancelAnalyticsConfigBtn');
-  const clearBtn        = document.getElementById('clearAnalyticsConfigBtn');
-
-  if (!triggerBtn || !configPanel) return;
-
-  triggerBtn.addEventListener('click', async () => {
-    const { url, token } = getAnalyticsBotConfig();
-    // Skip config panel if deploy-time config already provides the token
-    const hasInjectedToken = !!(window.KINTSUGI_BOT_CONFIG?.token);
-    if (!token && !hasInjectedToken) {
-      if (tokenInput) tokenInput.value = token;
-      configPanel.classList.remove('hidden');
-      if (tokenInput) tokenInput.focus();
-      return;
-    }
-    await sendTriggerWeeklyRequest(url, token);
-  });
-
-  if (saveBtn) {
-    saveBtn.addEventListener('click', async () => {
-      const { url } = getAnalyticsBotConfig();
-      const token = (tokenInput ? tokenInput.value : '').trim();
-      if (!token) {
-        kShowToast('Please enter the Trigger Token.', 'warning', 3000);
-        return;
-      }
-      saveAnalyticsBotConfig(url, token);
-      configPanel.classList.add('hidden');
-      await sendTriggerWeeklyRequest(url, token);
-    });
-  }
-
-  if (cancelBtn) {
-    cancelBtn.addEventListener('click', () => {
-      configPanel.classList.add('hidden');
-    });
-  }
-
-  if (clearBtn) {
-    clearBtn.addEventListener('click', () => {
-      localStorage.removeItem(BOT_TOKEN_KEY);
-      if (tokenInput) tokenInput.value = '';
-      kShowToast('Bot config cleared from browser storage.', 'success', 2500);
-    });
-  }
-}
-
 // ===== Keyboard shortcuts =====
 
 function initKeyboardShortcuts() {
@@ -512,7 +387,6 @@ function initKeyboardShortcuts() {
 document.addEventListener("DOMContentLoaded", async () => {
   kSyncNavLinksWithCurrentSearch();
   initKeyboardShortcuts();
-  initDiscordTriggerButton();
 
   await loadAnalytics();
 

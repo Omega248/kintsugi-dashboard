@@ -35,14 +35,14 @@ if (!BOT_TOKEN || !CHANNEL_ID) {
 }
 
 // ===== Panel message payload =====
-// The panel is static.  The bot automatically edits this channel's pinned
-// analytics summary every 5 minutes via the scheduled cron trigger.
+// The panel is static.  The bot automatically edits a separate analytics
+// summary message in this channel every 5 minutes via the scheduled cron trigger.
 const panelPayload = {
   embeds: [
     {
       title:       '📊 Kintsugi Analytics',
       description:
-        "The weekly analytics summary is shown above and automatically updated every 5 minutes.\n\n" +
+        "The weekly analytics summary is automatically updated every 5 minutes.\n\n" +
         '> • The **current week\'s** analytics are shown (falling back to the most recent week with data)\n' +
         '> • Data is loaded live from the job sheet\n' +
         '> • Updates are visible to **everyone in the channel**',
