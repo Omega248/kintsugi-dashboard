@@ -19,9 +19,9 @@
 #   RIPTIDE_USER_ID        — Numeric Discord user ID to @mention on payday
 #   TRIGGER_TOKEN          — Secret token for the dashboard "Notify Discord" and "Trigger Weekly" buttons
 #
-# The worker is deployed as "kintsugi-bot" — a dedicated Cloudflare Worker
+# The worker is deployed as "kintsugi-discord-bot" — a dedicated Cloudflare Worker
 # separate from the static-assets worker ("kintsugi").  After deployment,
-# copy the worker URL (e.g. https://kintsugi-bot.<subdomain>.workers.dev)
+# copy the worker URL (e.g. https://kintsugi-discord-bot.<subdomain>.workers.dev)
 # and paste it into Discord Developer Portal → General Information →
 # Interactions Endpoint URL.
 #

@@ -19,3 +19,6 @@ discord-bot/.wrangler/
 # Logs
 *.log
 npm-debug.log*
+
+# Auto-generated at deploy time by GitHub Actions (contains secrets — never commit)
+bot-config.js
