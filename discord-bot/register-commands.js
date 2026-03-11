@@ -33,10 +33,17 @@ if (!APP_ID || !BOT_TOKEN) {
 const commands = [
   {
     name:                       'payouts',
-    description:                'Post a payouts-processed announcement for the most recent week.',
+    description:                'Post a payouts-processed announcement with per-mechanic amounts for the most recent week.',
     dm_permission:              false,
     // Requires Manage Guild permission by default — configurable per-server in
     // Discord Server Settings → Integrations → Kintsugi Bot → /payouts.
+    default_member_permissions: '32',
+  },
+  {
+    name:                       'analytics',
+    description:                'Show the current week\'s analytics summary with per-mechanic breakdown.',
+    dm_permission:              false,
+    // Same permission requirement as /payouts — adjust per-server as needed.
     default_member_permissions: '32',
   },
 ];
