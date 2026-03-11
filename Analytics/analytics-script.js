@@ -367,6 +367,126 @@ async function loadAnalytics() {
   }
 }
 
+// ===== Discord Trigger: Post Weekly Update =====
+// Reuses the same localStorage keys as the Payouts page bot config so the
+// user only needs to enter the Worker URL and token once across both pages.
+
+const BOT_URL_KEY   = 'kintsugi_bot_api_url';
+const BOT_TOKEN_KEY = 'kintsugi_bot_api_token';
+
+function getAnalyticsBotConfig() {
+  return {
+    url:   localStorage.getItem(BOT_URL_KEY)   || '',
+    token: localStorage.getItem(BOT_TOKEN_KEY) || '',
+  };
+}
+
+function saveAnalyticsBotConfig(url, token) {
+  localStorage.setItem(BOT_URL_KEY,   url.trim());
+  localStorage.setItem(BOT_TOKEN_KEY, token.trim());
+}
+
+/**
+ * POST to the worker's /api/trigger-weekly endpoint and display a toast.
+ * Returns true on success so the caller can hide the config panel.
+ */
+async function sendTriggerWeeklyRequest(url, token) {
+  const triggerBtn = document.getElementById('triggerWeeklyBtn');
+  if (triggerBtn) {
+    triggerBtn.disabled = true;
+    triggerBtn.textContent = '📊 Posting…';
+  }
+
+  try {
+    const endpoint = url.replace(/\/$/, '') + '/api/trigger-weekly';
+    const res = await fetch(endpoint, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    let data = {};
+    try { data = await res.json(); } catch (_) { /* use HTTP status */ }
+
+    if (res.ok && data.ok) {
+      const parts = [`✅ Weekly Discord update posted! Week ending ${data.weekEnding}.`];
+      if (!data.analytics) parts.push('⚠️ Analytics channel post failed.');
+      if (!data.jobs)      parts.push('⚠️ Jobs channel post failed.');
+      if (!data.payouts)   parts.push('⚠️ Payouts reminder failed.');
+      kShowToast(parts.join(' '), 'success', 7000);
+      return true;
+    } else {
+      kShowToast(`❌ ${data.error || 'Failed to post weekly update to Discord.'}`, 'error', 5000);
+      return false;
+    }
+  } catch (err) {
+    kShowToast(`❌ Network error: ${err.message}`, 'error', 5000);
+    return false;
+  } finally {
+    if (triggerBtn) {
+      triggerBtn.disabled = false;
+      triggerBtn.textContent = '📊 Post Weekly Update to Discord';
+    }
+  }
+}
+
+/** Wire up the "Post Weekly Update to Discord" button and its config panel. */
+function initDiscordTriggerButton() {
+  const triggerBtn      = document.getElementById('triggerWeeklyBtn');
+  const configPanel     = document.getElementById('analyticsConfigPanel');
+  const urlInput        = document.getElementById('analyticsBotApiUrl');
+  const tokenInput      = document.getElementById('analyticsBotApiToken');
+  const saveBtn         = document.getElementById('saveAnalyticsConfigBtn');
+  const cancelBtn       = document.getElementById('cancelAnalyticsConfigBtn');
+  const clearBtn        = document.getElementById('clearAnalyticsConfigBtn');
+
+  if (!triggerBtn || !configPanel) return;
+
+  triggerBtn.addEventListener('click', async () => {
+    const { url, token } = getAnalyticsBotConfig();
+    if (!url || !token) {
+      if (urlInput)   urlInput.value   = url;
+      if (tokenInput) tokenInput.value = token;
+      configPanel.classList.remove('hidden');
+      if (urlInput) urlInput.focus();
+      return;
+    }
+    await sendTriggerWeeklyRequest(url, token);
+  });
+
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+      const url   = (urlInput   ? urlInput.value   : '').trim();
+      const token = (tokenInput ? tokenInput.value : '').trim();
+      if (!url || !token) {
+        kShowToast('Please enter both the Worker URL and the Trigger Token.', 'warning', 3000);
+        return;
+      }
+      saveAnalyticsBotConfig(url, token);
+      configPanel.classList.add('hidden');
+      await sendTriggerWeeklyRequest(url, token);
+    });
+  }
+
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
+      configPanel.classList.add('hidden');
+    });
+  }
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      localStorage.removeItem(BOT_URL_KEY);
+      localStorage.removeItem(BOT_TOKEN_KEY);
+      if (urlInput)   urlInput.value   = '';
+      if (tokenInput) tokenInput.value = '';
+      kShowToast('Bot config cleared from browser storage.', 'success', 2500);
+    });
+  }
+}
+
 // ===== Keyboard shortcuts =====
 
 function initKeyboardShortcuts() {
@@ -387,6 +507,7 @@ function initKeyboardShortcuts() {
 document.addEventListener("DOMContentLoaded", async () => {
   kSyncNavLinksWithCurrentSearch();
   initKeyboardShortcuts();
+  initDiscordTriggerButton();
 
   await loadAnalytics();
 
