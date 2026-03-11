@@ -31,6 +31,9 @@
 # KV provisioning is fully automatic: this workflow ensures a KV namespace
 # named "KINTSUGI_BOT" exists in your Cloudflare account (creating it if it
 # doesn't), then binds it to the Worker as "KV" — no manual steps required.
+#
+# Retry policy: every step that calls an external API retries up to 5 times
+# with exponential back-off (15 s → 30 s → 60 s → 120 s → give up).
 # =======================================
 name: Deploy Discord Bot
 
@@ -40,6 +43,7 @@ on:
     paths:
       - 'discord-bot/**'
       - '.github/workflows/deploy-bot.yml'
+      - '.github/scripts/with_retry.sh'
   workflow_dispatch:
 
 jobs:
@@ -62,6 +66,7 @@ jobs:
       # "KINTSUGI_BOT", then writes its id into wrangler.toml for the deploy step.
       # The namespace id is NOT a credential — it is safe to embed in config files,
       # but we avoid committing it to the repo so deploys always use the live id.
+      # Retries up to 5 times with exponential back-off on transient API failures.
       - name: Provision KV namespace (KINTSUGI_BOT)
         id: kv
         env:
@@ -70,11 +75,19 @@ jobs:
         run: |
           set -euo pipefail
 
-          # ---- List existing KV namespaces (up to 100) ----
-          NAMESPACES=$(curl -s \
-            "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces?per_page=100" \
-            -H "Authorization: Bearer ${CF_API_TOKEN}")
+          # Retry helper: up to 5 attempts, doubling the wait each time.
+          # shellcheck source=.github/scripts/with_retry.sh
+          . "$GITHUB_WORKSPACE/.github/scripts/with_retry.sh"
 
+          # Fetch the list of KV namespaces (retrying on transient failures).
+          fetch_namespaces() {
+            NAMESPACES=$(curl -sf \
+              "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces?per_page=100" \
+              -H "Authorization: Bearer ${CF_API_TOKEN}")
+          }
+          with_retry fetch_namespaces
+
+          # ---- List existing KV namespaces (up to 100) ----
           KV_ID=$(echo "${NAMESPACES}" | python3 -c '
           import json, sys
           raw = sys.stdin.read()
@@ -95,11 +108,16 @@ jobs:
 
           if [ -z "${KV_ID}" ]; then
             echo "KV namespace 'KINTSUGI_BOT' not found — creating it..."
-            CREATED=$(curl -s -X POST \
-              "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces" \
-              -H "Authorization: Bearer ${CF_API_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -d '{"title":"KINTSUGI_BOT"}')
+
+            create_namespace() {
+              CREATED=$(curl -sf -X POST \
+                "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces" \
+                -H "Authorization: Bearer ${CF_API_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d '{"title":"KINTSUGI_BOT"}')
+            }
+            with_retry create_namespace
+
             KV_ID=$(echo "${CREATED}" | python3 -c '
           import json, sys
           raw = sys.stdin.read()
@@ -130,21 +148,29 @@ jobs:
             "${{ steps.kv.outputs.kv_namespace_id }}" \
             >> discord-bot/wrangler.toml
 
+      # ---- Deploy the Worker script with retry ----
+      # Uses the Wrangler CLI directly (installed globally above) so we can
+      # wrap the deploy in our own retry loop.  Retries up to 5 times with
+      # exponential back-off on transient Cloudflare API or network errors.
       - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken:         ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId:        ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: discord-bot
-          # Secrets are pushed in the next step so that missing secrets
-          # (e.g. during initial setup before Discord credentials are added)
-          # do not cause a hard failure here.
+        env:
+          CLOUDFLARE_API_TOKEN:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: discord-bot
+        run: |
+          set -euo pipefail
+
+          # shellcheck source=.github/scripts/with_retry.sh
+          . "$GITHUB_WORKSPACE/.github/scripts/with_retry.sh"
+
+          with_retry wrangler deploy
 
       # ---- Push all secrets only when they are configured ----
       # wrangler secret put rejects empty-string values, so we skip any secret
       # whose corresponding GitHub Secret is not set.  This makes the workflow
       # resilient to first-time deploys where Discord secrets have not yet been
       # added to the GitHub repository.
+      # Each secret push is retried up to 5 times on failure.
       - name: Push secrets
         env:
           CLOUDFLARE_API_TOKEN:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -159,12 +185,24 @@ jobs:
         working-directory: discord-bot
         run: |
           set -euo pipefail
+
+          # push_secret retries the wrangler secret put call on failure.
           push_secret() {
             local name="$1"
             local value="${2:-}"
             if [ -n "${value}" ]; then
               echo "Pushing ${name}..."
-              printf '%s' "${value}" | wrangler secret put "${name}"
+              local max=5 attempt=1 delay=15
+              until printf '%s' "${value}" | wrangler secret put "${name}"; do
+                if [ "$attempt" -ge "$max" ]; then
+                  echo "All $max attempts to push ${name} failed." >&2
+                  return 1
+                fi
+                echo "Attempt $attempt/$max to push ${name} failed — retrying in ${delay}s…" >&2
+                sleep "$delay"
+                attempt=$((attempt + 1))
+                delay=$((delay * 2))
+              done
             else
               echo "${name} not set — skipping."
             fi
@@ -182,16 +220,21 @@ jobs:
       # Requires DISCORD_APP_ID and DISCORD_BOT_TOKEN.
       # Skipped gracefully if DISCORD_APP_ID is not configured (commands can
       # be registered later by running the Register Slash Commands workflow).
+      # Retried up to 5 times on failure.
       - name: Register slash commands
         env:
           DISCORD_APP_ID:    ${{ secrets.DISCORD_APP_ID }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
         working-directory: discord-bot
         run: |
+          set -euo pipefail
+
           if [ -z "${DISCORD_APP_ID:-}" ]; then
             echo "DISCORD_APP_ID not set — skipping slash command registration."
             echo "Add DISCORD_APP_ID to GitHub Secrets and redeploy, or run the 'Register Slash Commands' workflow manually."
           else
-            node register-commands.js
+            # shellcheck source=.github/scripts/with_retry.sh
+            . "$GITHUB_WORKSPACE/.github/scripts/with_retry.sh"
+            with_retry node register-commands.js
           fi
 
