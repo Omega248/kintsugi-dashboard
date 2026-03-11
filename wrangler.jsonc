@@ -2,6 +2,13 @@
   // =======================================
   // Kintsugi Dashboard — Cloudflare Workers static assets config
   // https://developers.cloudflare.com/workers/wrangler/configuration/
+  //
+  // This worker ("kintsugi") serves the web dashboard as static assets and
+  // provides CORS support for /api/* preflight requests.
+  //
+  // The Discord bot is deployed as a SEPARATE worker named "kintsugi-bot"
+  // (see discord-bot/wrangler.toml).  Do NOT set Discord-related secrets on
+  // this worker — they belong on the bot worker only.
   // =======================================
   "name": "kintsugi",
   "compatibility_date": "2026-03-10",
@@ -10,11 +17,4 @@
     "directory": "./",
     "binding": "ASSETS"
   }
-  // Required Worker secrets (set via `wrangler secret put <NAME>`):
-  //   DISCORD_PUBLIC_KEY  — Ed25519 public key from the Discord Developer Portal.
-  //                         Used by worker.js to verify Discord interaction signatures
-  //                         and respond to the PING handshake so Discord can confirm
-  //                         this URL as a valid Interactions Endpoint.
-  //   DISCORD_BOT_TOKEN   — Bot token from the Discord Developer Portal.
-  //                         Used by the Discord bot worker for posting/editing messages.
 }
