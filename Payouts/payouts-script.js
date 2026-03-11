@@ -1479,7 +1479,7 @@ const BOT_TOKEN_KEY = 'kintsugi_bot_api_token';
 
 function getBotConfig() {
   return {
-    url:   localStorage.getItem(BOT_URL_KEY)   || '',
+    url:   localStorage.getItem(BOT_URL_KEY)   || 'https://kintsugi.reecestangoe0824.workers.dev',
     token: localStorage.getItem(BOT_TOKEN_KEY) || '',
   };
 }
