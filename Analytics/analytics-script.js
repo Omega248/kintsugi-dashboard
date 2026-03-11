@@ -378,7 +378,7 @@ const _BOT_URL = 'https://kintsugi-discord-bot.reecestangoe0824.workers.dev';
 
 // Fallback token used when no token is configured in the browser or via bot-config.js.
 // Must match FALLBACK_TRIGGER_TOKEN in discord-bot/worker.js.
-const _FALLBACK_TOKEN = 'kintsugi-bot-trigger-2025';
+const _FALLBACK_TOKEN = 'HnoKPfn9ZIYXD79c8PRos4cMphPKNHf5bfCbsjIS';
 
 function getAnalyticsBotConfig() {
   // Prefer deploy-time config injected by GitHub Actions (bot-config.js)

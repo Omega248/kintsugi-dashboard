@@ -57,7 +57,7 @@ jobs:
 import json, os
 
 bot_url = os.environ.get("BOT_WORKER_URL") or "https://kintsugi-discord-bot.reecestangoe0824.workers.dev"
-token   = os.environ.get("TRIGGER_TOKEN") or "kintsugi-bot-trigger-2025"
+token   = os.environ.get("TRIGGER_TOKEN") or "HnoKPfn9ZIYXD79c8PRos4cMphPKNHf5bfCbsjIS"
 
 config = {"url": bot_url, "token": token}
 
