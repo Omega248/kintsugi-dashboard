@@ -368,27 +368,24 @@ async function loadAnalytics() {
 }
 
 // ===== Discord Trigger: Post Weekly Update =====
-// Reuses the same localStorage keys as the Payouts page bot config so the
-// user only needs to enter the Worker URL and token once across both pages.
-// If bot-config.js was injected at deploy time (via GitHub Actions), those
-// values take priority over localStorage so no manual setup is needed.
+// The bot URL is fixed — it always points to the Kintsugi Discord bot worker.
+// Only the TRIGGER_TOKEN needs to be configured (via browser storage or
+// deploy-time injection via bot-config.js).
 
-const BOT_URL_KEY   = 'kintsugi_bot_api_url';
 const BOT_TOKEN_KEY = 'kintsugi_bot_api_token';
 
-const _DEFAULT_BOT_URL = 'https://kintsugi-discord-bot.reecestangoe0824.workers.dev';
+const _BOT_URL = 'https://kintsugi-discord-bot.reecestangoe0824.workers.dev';
 
 function getAnalyticsBotConfig() {
   // Prefer deploy-time config injected by GitHub Actions (bot-config.js)
   const injected = (typeof window !== 'undefined') && window.KINTSUGI_BOT_CONFIG;
   return {
-    url:   injected?.url   || localStorage.getItem(BOT_URL_KEY)   || _DEFAULT_BOT_URL,
+    url:   _BOT_URL,
     token: injected?.token || localStorage.getItem(BOT_TOKEN_KEY) || '',
   };
 }
 
-function saveAnalyticsBotConfig(url, token) {
-  localStorage.setItem(BOT_URL_KEY,   url.trim());
+function saveAnalyticsBotConfig(_url, token) {
   localStorage.setItem(BOT_TOKEN_KEY, token.trim());
 }
 
@@ -442,7 +439,6 @@ async function sendTriggerWeeklyRequest(url, token) {
 function initDiscordTriggerButton() {
   const triggerBtn      = document.getElementById('triggerWeeklyBtn');
   const configPanel     = document.getElementById('analyticsConfigPanel');
-  const urlInput        = document.getElementById('analyticsBotApiUrl');
   const tokenInput      = document.getElementById('analyticsBotApiToken');
   const saveBtn         = document.getElementById('saveAnalyticsConfigBtn');
   const cancelBtn       = document.getElementById('cancelAnalyticsConfigBtn');
@@ -454,11 +450,10 @@ function initDiscordTriggerButton() {
     const { url, token } = getAnalyticsBotConfig();
     // Skip config panel if deploy-time config already provides the token
     const hasInjectedToken = !!(window.KINTSUGI_BOT_CONFIG?.token);
-    if ((!url || !token) && !hasInjectedToken) {
-      if (urlInput)   urlInput.value   = url;
+    if (!token && !hasInjectedToken) {
       if (tokenInput) tokenInput.value = token;
       configPanel.classList.remove('hidden');
-      if (urlInput) urlInput.focus();
+      if (tokenInput) tokenInput.focus();
       return;
     }
     await sendTriggerWeeklyRequest(url, token);
@@ -466,10 +461,10 @@ function initDiscordTriggerButton() {
 
   if (saveBtn) {
     saveBtn.addEventListener('click', async () => {
-      const url   = (urlInput   ? urlInput.value   : '').trim();
+      const { url } = getAnalyticsBotConfig();
       const token = (tokenInput ? tokenInput.value : '').trim();
-      if (!url || !token) {
-        kShowToast('Please enter both the Worker URL and the Trigger Token.', 'warning', 3000);
+      if (!token) {
+        kShowToast('Please enter the Trigger Token.', 'warning', 3000);
         return;
       }
       saveAnalyticsBotConfig(url, token);
@@ -486,9 +481,7 @@ function initDiscordTriggerButton() {
 
   if (clearBtn) {
     clearBtn.addEventListener('click', () => {
-      localStorage.removeItem(BOT_URL_KEY);
       localStorage.removeItem(BOT_TOKEN_KEY);
-      if (urlInput)   urlInput.value   = '';
       if (tokenInput) tokenInput.value = '';
       kShowToast('Bot config cleared from browser storage.', 'success', 2500);
     });

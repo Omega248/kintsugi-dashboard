@@ -2,13 +2,13 @@
 // Kintsugi Discord Bot — Cloudflare Worker
 //
 // Handles Discord component interactions (button presses + select menus) for
-// three permanent panels:
+// two permanent panels:
 //   • Job Logs panel    — request any mechanic's repair history by week
-//   • Analytics panel   — view the current week's analytics summary
 //   • Payouts panel     — view the current week's payout breakdown
 //
 // Also handles /analytics and /payouts slash commands, and the weekly cron
-// trigger that posts summaries to #analytics, #jobs, and #payouts channels.
+// trigger that posts/edits summaries to #analytics, #jobs, and #payouts
+// channels every 5 minutes (defined in wrangler.toml).
 //
 // The bot is deployed as "kintsugi-bot" — a separate Cloudflare Worker from
 // the static-assets worker ("kintsugi"). The Interactions Endpoint URL in the
@@ -836,53 +836,6 @@ async function handleWeekSelect(interaction, ctx) {
   return jsonResponse({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
 }
 
-// ===== Analytics panel handler =====
-
-/**
- * "View Analytics" button pressed on the permanent analytics panel.
- *
- * Responds immediately with a public deferral (visible to everyone in the
- * channel), then fetches live sheet data and posts the current week's analytics
- * summary (falling back to the most recent week if the current week has no
- * jobs yet).  The panel message itself is never touched.
- */
-async function handleAnalyticsPanelButton(interaction, ctx) {
-  const { application_id: appId, token } = interaction;
-
-  ctx.waitUntil((async () => {
-    try {
-      const jobRows = await fetchSheet(JOBS_SHEET);
-      const allJobs = parseJobsSheet(jobRows);
-
-      let summary = buildCurrentWeekSummary(allJobs);
-      if (summary.totalRepairs === 0) {
-        const latest = buildLatestWeekSummary(allJobs);
-        if (latest && latest.totalRepairs > 0) summary = latest;
-      }
-
-      if (summary.totalRepairs === 0) {
-        await editOriginalMessage(appId, token, {
-          content:    '📊 No repairs found in any recent week.',
-          components: [],
-        });
-        return;
-      }
-
-      await editOriginalMessage(appId, token, buildAnalyticsPayload(summary));
-    } catch (err) {
-      await editOriginalMessage(appId, token, {
-        content:    `❌ Failed to load analytics data.\n\`${err.message}\``,
-        components: [],
-      }).catch(() => {});
-    }
-  })());
-
-  // Acknowledge immediately — visible to everyone in the channel (not ephemeral)
-  return jsonResponse({
-    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
-  });
-}
-
 // ===== Payouts panel handlers =====
 
 /**
@@ -1589,11 +1542,6 @@ export default {
       }
       if (customId.startsWith('joblogs_week_select:')) {
         return handleWeekSelect(interaction, ctx);
-      }
-
-      // Analytics panel button
-      if (customId === 'analytics_panel_start') {
-        return handleAnalyticsPanelButton(interaction, ctx);
       }
 
       // Payouts panel button + mechanic select
