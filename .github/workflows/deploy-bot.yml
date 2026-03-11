@@ -52,7 +52,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install Wrangler
+        run: npm install -g wrangler@4.72.0
+
       # ---- Automatically provision the Workers KV namespace ----
+      # NOTE: CLOUDFLARE_API_TOKEN must have "Workers KV Storage:Edit" permission
+      #       in addition to "Workers Scripts:Edit" for this step to succeed.
       # Uses the Cloudflare REST API to look up (or create) a namespace named
       # "KINTSUGI_BOT", then writes its id into wrangler.toml for the deploy step.
       # The namespace id is NOT a credential — it is safe to embed in config files,
