@@ -57,7 +57,7 @@ jobs:
 import json, os
 
 bot_url = os.environ.get("BOT_WORKER_URL") or "https://kintsugi-discord-bot.reecestangoe0824.workers.dev"
-token   = os.environ.get("TRIGGER_TOKEN") or ""
+token   = os.environ.get("TRIGGER_TOKEN") or "kintsugi-bot-trigger-2025"
 
 config = {"url": bot_url, "token": token}
 
@@ -68,8 +68,8 @@ with open("bot-config.js", "w") as f:
     f.write(json.dumps(config))
     f.write(";\n")
 
-if not token:
-    print("WARNING: TRIGGER_TOKEN is not set — dashboard Discord buttons will still prompt for the token manually.")
+if not os.environ.get("TRIGGER_TOKEN"):
+    print("INFO: TRIGGER_TOKEN not set — using hardcoded fallback token.")
 else:
     print("OK: bot-config.js generated with bot URL and trigger token.")
 PYEOF
