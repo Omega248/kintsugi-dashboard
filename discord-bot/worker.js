@@ -167,11 +167,11 @@ function parseDateLike(raw) {
   // This must be checked BEFORE the generic new Date(s) fallback because V8 interprets
   // ambiguous d/m/yyyy strings as MM/DD (US format), which gives wrong results for
   // UK-format dates like "11/03/2026" (would be parsed as November 3 instead of March 11).
-  let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
-  if (m) {
-    const dd   = parseInt(m[1], 10);
-    const mm   = parseInt(m[2], 10);
-    const yy   = m[3];
+  const ddmmMatch = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (ddmmMatch) {
+    const dd   = parseInt(ddmmMatch[1], 10);
+    const mm   = parseInt(ddmmMatch[2], 10);
+    const yy   = ddmmMatch[3];
     const yyyy = yy.length === 2 ? '20' + yy : yy;
     if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
       const d = new Date(`${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`);
@@ -180,9 +180,9 @@ function parseDateLike(raw) {
   }
 
   // YYYY-MM-DD (ISO date, possibly with time component)
-  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (m) {
-    const d = new Date(`${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`);
+  const isoMatch = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    const d = new Date(`${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`);
     if (!isNaN(d.getTime())) return d;
   }
 
