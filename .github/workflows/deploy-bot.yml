@@ -67,28 +67,23 @@ jobs:
             "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces?per_page=100" \
             -H "Authorization: Bearer ${CF_API_TOKEN}")
 
-          KV_ID=$(echo "${NAMESPACES}" | python3 - << 'PYEOF'
-import json, sys
-
-raw = sys.stdin.read()
-try:
-    data = json.loads(raw)
-except json.JSONDecodeError as e:
-    print(f"ERROR: Cloudflare API returned non-JSON response: {e}", file=sys.stderr)
-    print(f"Response was: {raw[:500]}", file=sys.stderr)
-    sys.exit(1)
-
-if not data.get("success"):
-    errors = data.get("errors", [])
-    print(f"ERROR: Cloudflare API call failed: {errors}", file=sys.stderr)
-    sys.exit(1)
-
-for ns in data.get("result") or []:
-    if ns.get("title") == "KINTSUGI_BOT":
-        print(ns["id"])
-        break
-PYEOF
-          )
+          KV_ID=$(echo "${NAMESPACES}" | python3 -c '
+          import json, sys
+          raw = sys.stdin.read()
+          try:
+              data = json.loads(raw)
+          except ValueError as e:
+              print("ERROR: Cloudflare API returned non-JSON response: " + str(e), file=sys.stderr)
+              print("Response was: " + raw[:500], file=sys.stderr)
+              sys.exit(1)
+          if not data.get("success"):
+              print("ERROR: Cloudflare API call failed: " + str(data.get("errors", [])), file=sys.stderr)
+              sys.exit(1)
+          for ns in (data.get("result") or []):
+              if ns.get("title") == "KINTSUGI_BOT":
+                  print(ns["id"])
+                  break
+          ')
 
           if [ -z "${KV_ID}" ]; then
             echo "KV namespace 'KINTSUGI_BOT' not found — creating it..."
@@ -97,26 +92,21 @@ PYEOF
               -H "Authorization: Bearer ${CF_API_TOKEN}" \
               -H "Content-Type: application/json" \
               -d '{"title":"KINTSUGI_BOT"}')
-            KV_ID=$(echo "${CREATED}" | python3 - << 'PYEOF'
-import json, sys
-
-raw = sys.stdin.read()
-try:
-    data = json.loads(raw)
-except json.JSONDecodeError as e:
-    print(f"ERROR: Cloudflare API returned non-JSON response: {e}", file=sys.stderr)
-    print(f"Response was: {raw[:500]}", file=sys.stderr)
-    sys.exit(1)
-
-if not data.get("success"):
-    errors = data.get("errors", [])
-    print(f"ERROR: Cloudflare API call failed: {errors}", file=sys.stderr)
-    print("Ensure CLOUDFLARE_API_TOKEN has 'Workers KV Storage:Edit' permission.", file=sys.stderr)
-    sys.exit(1)
-
-print(data["result"]["id"])
-PYEOF
-            )
+            KV_ID=$(echo "${CREATED}" | python3 -c '
+            import json, sys
+            raw = sys.stdin.read()
+            try:
+                data = json.loads(raw)
+            except ValueError as e:
+                print("ERROR: Cloudflare API returned non-JSON response: " + str(e), file=sys.stderr)
+                print("Response was: " + raw[:500], file=sys.stderr)
+                sys.exit(1)
+            if not data.get("success"):
+                print("ERROR: Cloudflare API call failed: " + str(data.get("errors", [])), file=sys.stderr)
+                print("Ensure CLOUDFLARE_API_TOKEN has Workers KV Storage:Edit permission.", file=sys.stderr)
+                sys.exit(1)
+            print(data["result"]["id"])
+            ')
             echo "Created KV namespace 'KINTSUGI_BOT'."
           else
             echo "Found existing KV namespace 'KINTSUGI_BOT'."
@@ -176,7 +166,7 @@ PYEOF
             echo "Pushing TRIGGER_TOKEN..."
             printf '%s' "${TRIGGER_TOKEN}" | wrangler secret put TRIGGER_TOKEN
           else
-            echo "TRIGGER_TOKEN not set — skipping (Notify Discord / Trigger Weekly buttons will return 501 until it is set)."
+            echo "TRIGGER_TOKEN not set — skipping (buttons will use the hardcoded fallback token)."
           fi
 
       # ---- Register slash commands ----
