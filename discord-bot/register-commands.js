@@ -5,6 +5,10 @@
 // Registers application commands with Discord.
 // Run this once after initial deployment or whenever commands change.
 //
+// Registered commands:
+//   /payouts   — Post a payouts-processed announcement for the most recent week
+//   /analytics — Post this week's analytics summary with per-mechanic leaderboard
+//
 // Requirements:
 //   - Node.js 18+ (built-in fetch)
 //   - DISCORD_APP_ID environment variable
@@ -37,6 +41,12 @@ const commands = [
     dm_permission:              false,
     // Requires Manage Guild permission by default — configurable per-server in
     // Discord Server Settings → Integrations → Kintsugi Bot → /payouts.
+    default_member_permissions: '32',
+  },
+  {
+    name:                       'analytics',
+    description:                'Post the current week\'s analytics summary (repairs, payout, leaderboard).',
+    dm_permission:              false,
     default_member_permissions: '32',
   },
 ];

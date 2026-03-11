@@ -1,9 +1,16 @@
 // =======================================
 // Kintsugi Discord Bot — Cloudflare Worker
 //
-// Handles Discord component interactions (button press + select menus) for
-// the permanent job-log panel. No slash commands — the panel is a static
-// message posted once via setup-panel.js.
+// Handles Discord slash commands and component interactions (button + select menus).
+//
+// Slash commands:
+//   /payouts   — Post payouts-processed embed with per-mechanic breakdown and amounts
+//   /analytics — Post current week's analytics summary with per-mechanic leaderboard
+//
+// Component interactions:
+//   joblogs_start        — "Request Job Logs" button on the permanent panel
+//   joblogs_mech_select  — Mechanic selection dropdown
+//   joblogs_week_select  — Week selection dropdown
 //
 // Required secrets (set via `wrangler secret put` or synced by GitHub Actions):
 //   DISCORD_PUBLIC_KEY    — Ed25519 public key from the Discord Developer Portal
@@ -335,59 +342,111 @@ async function editOriginalMessage(appId, token, payload) {
 
 /**
  * Find the most recent week from all job data and return the mechanics who
- * worked that week (sorted A→Z), plus the week-ending date.
+ * worked that week — with full per-mechanic payout details — plus the
+ * week-ending date.
+ *
+ * @param {ReturnType<parseJobsSheet>} allJobs
+ * @param {Map<string,string>} [stateMap]
+ * @returns {{ weekEndDate: Date|null, mechanics: string[], mechanicDetails: object[] }}
  */
-function getLatestWeekMechanics(allJobs) {
+function getLatestWeekMechanics(allJobs, stateMap = new Map()) {
   const allWeeks = buildWeeklyStats(allJobs);
-  if (!allWeeks.length) return { weekEndDate: null, mechanics: [] };
+  if (!allWeeks.length) return { weekEndDate: null, mechanics: [], mechanicDetails: [] };
 
-  const latestWeek = allWeeks[0]; // buildWeeklyStats sorts newest first
+  const latestWeek  = allWeeks[0]; // buildWeeklyStats sorts newest first
   const weekEndDate = latestWeek.weekEndDate || new Date(latestWeek.weekKey + 'T00:00:00Z');
   const weekJobs    = filterByWeekEnding(allJobs, weekEndDate);
 
-  const mechanics = [...new Set(weekJobs.map(j => j.mechanic))].sort(
-    (a, b) => a.localeCompare(b)
-  );
-  return { weekEndDate, mechanics };
+  // Build per-mechanic breakdown
+  const mechMap = new Map();
+  for (const j of weekJobs) {
+    const rec = mechMap.get(j.mechanic) || { name: j.mechanic, repairs: 0, engineReplacements: 0 };
+    rec.repairs            += j.across || 0;
+    rec.engineReplacements += j.engineReplacements || 0;
+    mechMap.set(j.mechanic, rec);
+  }
+
+  const mechanicDetails = [...mechMap.values()]
+    .sort((a, b) => b.repairs - a.repairs)  // sort by repairs desc (highest earner first)
+    .map(m => {
+      const enginePay = m.engineReplacements * (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD);
+      return {
+        name:               m.name,
+        stateId:            stateMap.get(m.name) || 'N/A',
+        repairs:            m.repairs,
+        engineReplacements: m.engineReplacements,
+        totalPayout:        m.repairs * PAY_PER_REPAIR + enginePay,
+      };
+    });
+
+  const mechanics = mechanicDetails.map(m => m.name);
+  return { weekEndDate, mechanics, mechanicDetails };
 }
 
 /**
  * Build the payouts-processed embed payload.
- * Mirrors kDiscordPostPayoutsProcessed from the old browser discord-service.js.
+ * When mechanicDetails are provided, shows per-mechanic breakdown with
+ * state ID, repair count, engine count, and exact payout amount.
+ *
+ * @param {Date}    weekEndDate
+ * @param {string[]} mechanics        - mechanic names (fallback)
+ * @param {object[]} mechanicDetails  - full per-mechanic data (preferred)
  */
-function buildPayoutsProcessedPayload(weekEndDate, mechanics) {
+function buildPayoutsProcessedPayload(weekEndDate, mechanics, mechanicDetails = []) {
   let description =
     `✅ Payouts for the week ending **${fmtDate(weekEndDate)}** have been processed.\n\n` +
     'All mechanics listed below have been paid. If you believe there is an error, please contact management.';
 
-  if (mechanics.length > 0) {
+  if (mechanicDetails.length > 0) {
+    const lines = mechanicDetails.map(m => {
+      let line = `• **${m.name}**`;
+      if (m.stateId && m.stateId !== 'N/A') line += ` _(${m.stateId})_`;
+      line += ` — ${m.repairs} repair${m.repairs !== 1 ? 's' : ''}`;
+      if (m.engineReplacements > 0) {
+        line += `, ${m.engineReplacements} engine${m.engineReplacements !== 1 ? 's' : ''}`;
+      }
+      line += ` → **${fmtMoney(m.totalPayout)}**`;
+      return line;
+    });
+    description += '\n\n' + lines.join('\n');
+
+    const totalPayout = mechanicDetails.reduce((s, m) => s + m.totalPayout, 0);
+    if (totalPayout > 0) {
+      description += `\n\n**Total Paid Out:** ${fmtMoney(totalPayout)}`;
+    }
+  } else if (mechanics.length > 0) {
+    // Fallback: just names
     description += `\n\n**Mechanics paid this week:**\n${mechanics.map(m => `• ${m}`).join('\n')}`;
   }
 
   return {
     embeds: [{
-      title:     '✅ Payouts Processed',
-      description,
-      color:     0x22c55e,
-      timestamp: new Date().toISOString(),
-      footer:    { text: 'Kintsugi Motorworks · Payouts' },
+      title:       '✅ Payouts Processed',
+      description: description.slice(0, 4096), // Discord embed description limit (4096 chars)
+      color:       0x22c55e,
+      timestamp:   new Date().toISOString(),
+      footer:      { text: 'Kintsugi Motorworks · Payouts' },
     }],
   };
 }
 
 /**
  * Handle the /payouts slash command.
- * Defers publicly (everyone in the channel sees the response), reads the sheet,
- * and edits the deferred response with the payouts-processed embed.
+ * Fetches state IDs alongside job data so the embed includes per-mechanic
+ * payout breakdown with amounts.
  */
 async function handlePayoutsCommand(interaction, ctx) {
   const { application_id: appId, token } = interaction;
 
   ctx.waitUntil((async () => {
     try {
-      const jobRows = await fetchSheet(JOBS_SHEET);
-      const allJobs = parseJobsSheet(jobRows);
-      const { weekEndDate, mechanics } = getLatestWeekMechanics(allJobs);
+      const [jobRows, stateRows] = await Promise.all([
+        fetchSheet(JOBS_SHEET),
+        fetchSheet(STATE_IDS_SHEET),
+      ]);
+      const allJobs  = parseJobsSheet(jobRows);
+      const stateMap = parseStateIds(stateRows);
+      const { weekEndDate, mechanics, mechanicDetails } = getLatestWeekMechanics(allJobs, stateMap);
 
       if (!weekEndDate || mechanics.length === 0) {
         await editOriginalMessage(appId, token, {
@@ -399,7 +458,7 @@ async function handlePayoutsCommand(interaction, ctx) {
 
       await editOriginalMessage(
         appId, token,
-        buildPayoutsProcessedPayload(weekEndDate, mechanics)
+        buildPayoutsProcessedPayload(weekEndDate, mechanics, mechanicDetails)
       );
     } catch (err) {
       await editOriginalMessage(appId, token, {
@@ -410,6 +469,33 @@ async function handlePayoutsCommand(interaction, ctx) {
   })());
 
   // Deferred public response — visible to everyone in the channel
+  return jsonResponse({
+    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+  });
+}
+
+/**
+ * Handle the /analytics slash command.
+ * Defers publicly, reads the jobs sheet, and replies with this week's
+ * analytics summary embed (same content as the scheduled Sunday post).
+ */
+async function handleAnalyticsCommand(interaction, ctx) {
+  const { application_id: appId, token } = interaction;
+
+  ctx.waitUntil((async () => {
+    try {
+      const jobRows = await fetchSheet(JOBS_SHEET);
+      const allJobs = parseJobsSheet(jobRows);
+      const summary = buildCurrentWeekSummary(allJobs);
+      await editOriginalMessage(appId, token, buildAnalyticsPayload(summary));
+    } catch (err) {
+      await editOriginalMessage(appId, token, {
+        content:    `❌ Failed to load analytics data.\n\`${err.message}\``,
+        components: [],
+      }).catch(() => {});
+    }
+  })());
+
   return jsonResponse({
     type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
   });
@@ -812,11 +898,11 @@ function validateConfig(env) {
 
 /**
  * Build the weekly analytics embed payload so it can be reused for both
- * posting and editing.
+ * posting and editing.  Includes a per-mechanic leaderboard (top 10).
  */
 function buildAnalyticsPayload(summary) {
   const { weekEndDate, totalRepairs, totalEngines, totalPayout,
-          mechanicCount, topMechanic, topRepairs } = summary;
+          mechanicCount, topMechanic, topRepairs, mechanics } = summary;
 
   const fields = [
     { name: '📅 Week Ending',      value: fmtDate(weekEndDate),  inline: true },
@@ -828,13 +914,34 @@ function buildAnalyticsPayload(summary) {
     fields.push({ name: '🔩 Engine Replacements', value: String(totalEngines), inline: true });
   }
   if (topMechanic) {
-    fields.push({ name: '🏆 Top Mechanic', value: `${topMechanic} (${topRepairs} repairs)`, inline: false });
+    fields.push({
+      name:   '🏆 Top Mechanic',
+      value:  `${topMechanic} (${topRepairs} repair${topRepairs !== 1 ? 's' : ''})`,
+      inline: false,
+    });
+  }
+
+  // Per-mechanic leaderboard — top 10 sorted by repairs desc
+  if (mechanics && mechanics.length > 0) {
+    const medals    = ['🥇', '🥈', '🥉'];
+    const topList   = mechanics.slice(0, 10); // already sorted desc by buildCurrentWeekSummary
+    const leaderboard = topList.map((m, i) => {
+      const medal = medals[i] ?? `${i + 1}.`;
+      const pay   = m.repairs * PAY_PER_REPAIR;
+      return `${medal} **${m.name}** — ${m.repairs} repair${m.repairs !== 1 ? 's' : ''} · ${fmtMoney(pay)}`;
+    }).join('\n');
+
+    fields.push({
+      name:   '📋 Mechanic Breakdown',
+      value:  leaderboard.slice(0, 1024), // Discord embed field value limit (1024 chars)
+      inline: false,
+    });
   }
 
   return {
     embeds: [{
       title:     '📊 Kintsugi Motorworks — Weekly Summary',
-      color:     0x4f46e5,
+      color:     0x22d3ee,
       fields,
       timestamp: new Date().toISOString(),
       footer:    { text: 'Kintsugi Motorworks · Weekly Analytics' },
@@ -992,9 +1099,13 @@ async function handleNotifyPayouts(request, env) {
 
   try {
     // Fetch live sheet data — safe even on first run (empty sheet returns [])
-    const jobRows = await fetchSheet(JOBS_SHEET);
-    const allJobs = parseJobsSheet(jobRows);
-    const { weekEndDate, mechanics } = getLatestWeekMechanics(allJobs);
+    const [jobRows, stateRows] = await Promise.all([
+      fetchSheet(JOBS_SHEET),
+      fetchSheet(STATE_IDS_SHEET),
+    ]);
+    const allJobs  = parseJobsSheet(jobRows);
+    const stateMap = parseStateIds(stateRows);
+    const { weekEndDate, mechanics, mechanicDetails } = getLatestWeekMechanics(allJobs, stateMap);
 
     if (!weekEndDate || mechanics.length === 0) {
       return apiJson({
@@ -1003,7 +1114,7 @@ async function handleNotifyPayouts(request, env) {
       }, 404);
     }
 
-    const payload   = buildPayoutsProcessedPayload(weekEndDate, mechanics);
+    const payload   = buildPayoutsProcessedPayload(weekEndDate, mechanics, mechanicDetails);
     const messageId = await botPost(env.PAYOUTS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, payload);
 
     if (!messageId) {
@@ -1079,6 +1190,9 @@ export default {
     if (interaction.type === InteractionType.APPLICATION_COMMAND) {
       if (interaction.data?.name === 'payouts') {
         return handlePayoutsCommand(interaction, ctx);
+      }
+      if (interaction.data?.name === 'analytics') {
+        return handleAnalyticsCommand(interaction, ctx);
       }
     }
 
