@@ -5,6 +5,7 @@
   // =======================================
   "name": "kintsugi",
   "compatibility_date": "2026-03-10",
+  "main": "worker.js",
   "assets": {
     "directory": "./"
   }
