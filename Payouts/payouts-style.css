@@ -1,9 +1,10 @@
 /* =============================================
    Payouts Page - Specific Styles
    Common styles are in ../shared-styles.css
+   Redesigned: dark navy · cyan accents · 8px radius
    ============================================= */
 
-/* ===== Controls row (extends shared-styles.css) ===== */
+/* ===== Controls row ===== */
 
 .controls {
   display: flex;
@@ -36,10 +37,10 @@
 /* Advanced filters panel */
 
 .advanced-filters {
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-primary);
-  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background: var(--bg-secondary);
+  padding: var(--space-md);
   margin-bottom: var(--space-sm);
   display: flex;
   flex-wrap: wrap;
@@ -55,80 +56,73 @@
 
 .advanced-field label {
   font-size: var(--font-size-sm);
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
 }
 
 .advanced-note {
   font-size: var(--font-size-sm);
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
 }
 
 /* ===== Segmented sub-tabs (Weekly / Monthly / Jobs) ===== */
 
 .seg-tabs {
   display: inline-flex;
-  padding: 3px;
-  border-radius: var(--radius-full);
-  background: linear-gradient(135deg, rgba(10, 16, 32, 0.98), rgba(15, 23, 42, 0.95));
-  border: 1px solid rgba(79, 70, 229, 0.15);
-  gap: 2px;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  gap: 3px;
   margin-left: auto;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-sm);
 }
 
 .seg-btn {
-  padding: 6px 14px;
-  border-radius: var(--radius-full);
+  padding: 6px 16px;
+  border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   cursor: pointer;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
-  transition: all 0.18s var(--ease-smooth);
-  position: relative;
-  overflow: hidden;
+  transition: all var(--duration-fast) var(--ease-smooth);
+  font-weight: 500;
 }
 
 .seg-btn::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at center, var(--accent-hover), transparent);
-  opacity: 0;
-  transition: opacity 0.18s var(--ease-smooth);
+  content: none;
 }
 
 .seg-btn:hover {
-  background-color: var(--accent-hover);
+  background: var(--bg-elevated);
+  border-color: var(--border-default);
   color: var(--text-primary);
 }
 
-.seg-btn:hover::before {
-  opacity: 1;
-}
-
 .seg-btn.active {
-  background: radial-gradient(circle at top left, var(--accent-secondary), var(--accent-primary));
-  color: var(--text-inverse);
-  box-shadow: 0 0 12px rgba(79, 70, 229, 0.8);
+  background: var(--cyan);
+  color: #0b0e17;
+  border-color: transparent;
+  font-weight: 600;
+  box-shadow: 0 2px 12px var(--cyan-glow);
 }
 
 /* ===== Week group header (collapsible) ===== */
 
 .week-group-header {
-  background: rgba(79, 70, 229, 0.10);
-  border-top: 2px solid rgba(79, 70, 229, 0.25);
+  background: rgba(34, 211, 238, 0.06);
+  border-top: 1px solid rgba(34, 211, 238, 0.18);
   cursor: pointer;
   user-select: none;
 }
 
 .week-group-header:hover {
-  background: rgba(79, 70, 229, 0.18);
+  background: rgba(34, 211, 238, 0.10);
 }
 
 .week-group-header td {
-  padding: 10px 12px;
-  font-size: var(--font-size-md);
+  padding: 10px 14px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   font-weight: 600;
   text-align: left;
@@ -143,19 +137,19 @@
   width: 20px;
   height: 20px;
   border: none;
-  background: rgba(79, 70, 229, 0.2);
-  color: var(--accent-secondary);
-  border-radius: var(--radius-sm);
+  background: var(--cyan-soft);
+  color: var(--cyan);
+  border-radius: var(--radius-xs);
   font-size: var(--font-size-sm);
   cursor: pointer;
-  transition: background var(--transition-fast), transform var(--transition-fast);
+  transition: background var(--transition-fast);
   flex-shrink: 0;
   margin-right: 8px;
   vertical-align: middle;
 }
 
 .week-group-toggle:hover {
-  background: rgba(79, 70, 229, 0.4);
+  background: var(--cyan-hover);
 }
 
 .week-group-label {
@@ -177,11 +171,11 @@
 /* ===== Mechanic summary panel ===== */
 .mech-summary {
   margin-top: var(--space-md);
-  padding: var(--space-md);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-  background: linear-gradient(135deg, rgba(15,23,42,0.95), rgba(15,23,42,0.7));
-  box-shadow: var(--shadow-soft);
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-cyan);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-card);
 }
 
 .mech-summary-header {
@@ -193,13 +187,15 @@
 }
 
 .mech-summary-title {
-  font-size: var(--font-size-base);
-  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
 
 .mech-summary-name {
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--cyan);
   margin-left: var(--space-xs);
 }
 
@@ -212,12 +208,12 @@
 .mech-summary-item .label-soft {
   font-size: var(--font-size-xs);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
 }
 
 .mech-summary-value {
   font-size: var(--font-size-md);
-  font-weight: 500;
+  font-weight: 600;
   margin-top: 2px;
   color: var(--text-primary);
 }
@@ -228,12 +224,13 @@
   padding: 0;
   margin: 0;
   font-size: var(--font-size-base);
-  color: var(--accent-secondary);
+  color: var(--cyan);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .mech-link:hover {
+  color: var(--text-primary);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -244,20 +241,15 @@
   align-items: center;
 }
 
-
 /* ===== Page Shell ===== */
 
 .page-shell {
   margin-top: var(--space-md);
-  border-radius: var(--radius-xl);
-  border: 1px solid rgba(255, 255, 255, 0.03);
-  background: linear-gradient(
-      135deg,
-      rgba(10, 14, 28, 0.92),
-      rgba(6, 10, 20, 0.96)
-    );
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75);
-  padding: 28px 28px 28px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-card);
+  padding: 28px;
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
@@ -282,7 +274,6 @@
   font-size: 20px;
   font-weight: 600;
   color: var(--text-primary);
-  letter-spacing: 0.02em;
 }
 
 .summary-sub {
@@ -294,7 +285,7 @@
 
 .link-soft {
   font-size: var(--font-size-base);
-  color: var(--accent-secondary);
+  color: var(--cyan);
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -304,11 +295,12 @@
 }
 
 .link-soft:hover {
+  color: var(--text-primary);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
-/* Additional special styles for comment column */
+/* Comment column */
 .payout-comment {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
@@ -318,134 +310,43 @@
 }
 
 /* ===== Table Column Widths (Weekly View) ===== */
-#weeklyWrap table {
-  width: 100%;
-}
+#weeklyWrap table { width: 100%; }
 
 #weeklyWrap th:nth-child(1),
-#weeklyWrap td:nth-child(1) {
-  width: 25%;
-  text-align: left;
-  padding-left: 16px;
-}
-
+#weeklyWrap td:nth-child(1) { width: 25%; text-align: left; padding-left: 16px; }
 #weeklyWrap th:nth-child(2),
-#weeklyWrap td:nth-child(2) {
-  width: 18%;
-  text-align: center;
-}
-
+#weeklyWrap td:nth-child(2) { width: 18%; text-align: center; }
 #weeklyWrap th:nth-child(3),
-#weeklyWrap td:nth-child(3) {
-  width: 17%;
-  text-align: center;
-}
-
+#weeklyWrap td:nth-child(3) { width: 17%; text-align: center; }
 #weeklyWrap th:nth-child(4),
-#weeklyWrap td:nth-child(4) {
-  width: 25%;
-  text-align: right;
-  padding-right: 16px;
-}
-
+#weeklyWrap td:nth-child(4) { width: 25%; text-align: right; padding-right: 16px; }
 #weeklyWrap th:nth-child(5),
-#weeklyWrap td:nth-child(5) {
-  width: 15%;
-  text-align: center;
-  padding-right: 16px;
-}
+#weeklyWrap td:nth-child(5) { width: 15%; text-align: center; padding-right: 16px; }
 
 /* ===== Table Column Widths (Monthly View) ===== */
-#monthlyWrap table {
-  width: 100%;
-}
+#monthlyWrap table { width: 100%; }
 
 #monthlyWrap th:nth-child(1),
-#monthlyWrap td:nth-child(1) {
-  width: 28%;
-  text-align: left;
-  padding-left: 16px;
-}
-
+#monthlyWrap td:nth-child(1) { width: 28%; text-align: left; padding-left: 16px; }
 #monthlyWrap th:nth-child(2),
-#monthlyWrap td:nth-child(2) {
-  width: 20%;
-  text-align: center;
-}
-
+#monthlyWrap td:nth-child(2) { width: 20%; text-align: center; }
 #monthlyWrap th:nth-child(3),
-#monthlyWrap td:nth-child(3) {
-  width: 20%;
-  text-align: center;
-}
-
+#monthlyWrap td:nth-child(3) { width: 20%; text-align: center; }
 #monthlyWrap th:nth-child(4),
-#monthlyWrap td:nth-child(4) {
-  width: 32%;
-  text-align: right;
-  padding-right: 16px;
-}
+#monthlyWrap td:nth-child(4) { width: 32%; text-align: right; padding-right: 16px; }
 
 /* ===== Table Column Widths (Jobs View) ===== */
-#jobsWrap table {
-  width: 100%;
-}
+#jobsWrap table { width: 100%; }
 
-#jobsWrap th:nth-child(1),
-#jobsWrap td:nth-child(1) {
-  width: 10%;
-  text-align: left;
-  padding-left: 16px;
-}
-
-#jobsWrap th:nth-child(2),
-#jobsWrap td:nth-child(2) {
-  width: 13%;
-  text-align: left;
-}
-
-#jobsWrap th:nth-child(3),
-#jobsWrap td:nth-child(3) {
-  width: 11%;
-  text-align: left;
-}
-
-#jobsWrap th:nth-child(4),
-#jobsWrap td:nth-child(4) {
-  width: 9%;
-  text-align: center;
-}
-
-#jobsWrap th:nth-child(5),
-#jobsWrap td:nth-child(5) {
-  width: 8%;
-  text-align: center;
-}
-
-#jobsWrap th:nth-child(6),
-#jobsWrap td:nth-child(6) {
-  width: 9%;
-  text-align: center;
-}
-
-#jobsWrap th:nth-child(7),
-#jobsWrap td:nth-child(7) {
-  width: 12%;
-  text-align: center;
-}
-
-#jobsWrap th:nth-child(8),
-#jobsWrap td:nth-child(8) {
-  width: 12%;
-  text-align: center;
-}
-
-#jobsWrap th:nth-child(9),
-#jobsWrap td:nth-child(9) {
-  width: 16%;
-  text-align: right;
-  padding-right: 16px;
-}
+#jobsWrap th:nth-child(1), #jobsWrap td:nth-child(1) { width: 10%; text-align: left; padding-left: 16px; }
+#jobsWrap th:nth-child(2), #jobsWrap td:nth-child(2) { width: 13%; text-align: left; }
+#jobsWrap th:nth-child(3), #jobsWrap td:nth-child(3) { width: 11%; text-align: left; }
+#jobsWrap th:nth-child(4), #jobsWrap td:nth-child(4) { width:  9%; text-align: center; }
+#jobsWrap th:nth-child(5), #jobsWrap td:nth-child(5) { width:  8%; text-align: center; }
+#jobsWrap th:nth-child(6), #jobsWrap td:nth-child(6) { width:  9%; text-align: center; }
+#jobsWrap th:nth-child(7), #jobsWrap td:nth-child(7) { width: 12%; text-align: center; }
+#jobsWrap th:nth-child(8), #jobsWrap td:nth-child(8) { width: 12%; text-align: center; }
+#jobsWrap th:nth-child(9), #jobsWrap td:nth-child(9) { width: 16%; text-align: right; padding-right: 16px; }
 
 /* ===== Copy Summary Button ===== */
 .col-actions {
@@ -454,22 +355,24 @@
 }
 
 .btn-copy-summary {
-  padding: 6px 12px;
+  padding: 6px 14px;
   font-size: var(--font-size-sm);
   white-space: nowrap;
   min-width: 85px;
-  border-radius: var(--radius-full);
-  background: rgba(79, 70, 229, 0.15);
-  color: var(--text-primary);
-  border: 1px solid rgba(79, 70, 229, 0.3);
+  border-radius: var(--radius-sm);
+  background: var(--cyan-soft);
+  color: var(--cyan);
+  border: 1px solid rgba(34, 211, 238, 0.25);
   transition: all var(--duration-fast) var(--ease-smooth);
+  font-weight: 500;
 }
 
 .btn-copy-summary:hover {
-  background: var(--accent-primary);
-  color: var(--text-inverse);
+  background: var(--cyan);
+  color: #0b0e17;
+  border-color: transparent;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.5);
+  box-shadow: 0 4px 14px var(--cyan-glow);
 }
 
 .btn-copy-summary:active {
@@ -478,13 +381,13 @@
 
 .btn-copy-summary.btn-success {
   background: var(--color-success);
-  color: var(--text-inverse);
-  border-color: var(--color-success);
+  color: #fff;
+  border-color: transparent;
 }
 
 .btn-copy-summary:disabled {
   cursor: not-allowed;
-  opacity: 0.7;
+  opacity: 0.6;
 }
 
 /* Responsive Design */
@@ -492,11 +395,11 @@
   .page-shell {
     padding: var(--space-md);
   }
-  
+
   .controls {
     gap: var(--space-xs);
   }
-  
+
   .seg-tabs {
     width: 100%;
     justify-content: center;

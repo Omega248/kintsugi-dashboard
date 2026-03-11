@@ -84,27 +84,27 @@ function chartDefaults() {
   return {
     responsive: true,
     maintainAspectRatio: false,
-    animation: { duration: 600 },
+    animation: { duration: 500 },
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: "rgba(10, 14, 28, 0.95)",
-        borderColor: "rgba(79, 70, 229, 0.5)",
+        backgroundColor: "rgba(19, 23, 41, 0.96)",
+        borderColor: "rgba(34, 211, 238, 0.35)",
         borderWidth: 1,
-        titleColor: "#e5e7eb",
-        bodyColor: "#9ca3af",
-        padding: 10,
+        titleColor: "#e2e8f0",
+        bodyColor: "#94a3b8",
+        padding: 12,
         cornerRadius: 8,
       },
     },
     scales: {
       x: {
-        grid: { color: "rgba(31, 41, 55, 0.6)" },
-        ticks: { color: "#6b7280", font: { size: 10 } },
+        grid: { color: "rgba(255, 255, 255, 0.04)" },
+        ticks: { color: "#64748b", font: { size: 10 } },
       },
       y: {
-        grid: { color: "rgba(31, 41, 55, 0.6)" },
-        ticks: { color: "#6b7280", font: { size: 10 } },
+        grid: { color: "rgba(255, 255, 255, 0.04)" },
+        ticks: { color: "#64748b", font: { size: 10 } },
         beginAtZero: true,
       },
     },
@@ -146,8 +146,8 @@ function renderBarChart(canvasId, labels, data, label, colors, existing) {
       datasets: [{
         label,
         data,
-        backgroundColor: colors || "rgba(79, 70, 229, 0.7)",
-        borderColor: colors ? colors.map(c => c.replace("0.7)", "1)")) : "rgba(79, 70, 229, 1)",
+        backgroundColor: colors || "rgba(34, 211, 238, 0.65)",
+        borderColor: colors ? colors.map(c => c.replace("0.65)", "0.9)")) : "rgba(34, 211, 238, 0.9)",
         borderWidth: 1,
         borderRadius: 4,
       }],
@@ -317,17 +317,17 @@ async function loadAnalytics() {
 
       repairsChartInst = renderLineChart(
         "repairsChart", labels, repData, "Repairs",
-        "rgba(79, 70, 229, 1)", repairsChartInst
+        "rgba(34, 211, 238, 1)", repairsChartInst
       );
       payoutChartInst = renderLineChart(
         "payoutChart", labels, payData, "Payout ($)",
-        "rgba(212, 175, 55, 1)", payoutChartInst
+        "rgba(245, 158, 11, 1)", payoutChartInst
       );
 
       const sortedMechs = Object.entries(mechTotals).sort((a, b) => b[1] - a[1]).slice(0, 12);
       const mechLabels  = sortedMechs.map(([n]) => n);
       const mechData    = sortedMechs.map(([, v]) => v);
-      const mechColors  = mechData.map((_, i) => `hsla(${230 + i * 15}, 65%, 58%, 0.7)`);
+      const mechColors  = mechData.map((_, i) => `hsla(${185 + i * 12}, 75%, 55%, 0.65)`);
 
       mechanicChartInst = renderBarChart(
         "mechanicChart", mechLabels, mechData, "Repairs", mechColors, mechanicChartInst

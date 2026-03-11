@@ -1,6 +1,7 @@
 /* =============================================
    Analytics Page - Specific Styles
    Common styles are in shared-styles.css
+   Redesigned: dark navy · cyan accents · 8px radius
    ============================================= */
 
 /* ===== KPI Summary Cards ===== */
@@ -13,49 +14,68 @@
 }
 
 .analytics-kpi-card {
-  padding: 20px;
-  border-radius: var(--radius-lg);
-  background:
-    radial-gradient(circle at top left, rgba(148, 163, 253, 0.10), transparent),
-    rgba(6, 11, 25, 0.98);
+  padding: 22px 24px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-default);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75);
+  box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
-  transition: all var(--duration-fast) var(--ease-smooth);
-  animation: kpiFadeIn 0.5s var(--ease-smooth) backwards;
+  gap: 6px;
+  transition: transform var(--duration-fast) var(--ease-smooth),
+              box-shadow var(--duration-fast) var(--ease-smooth),
+              border-color var(--duration-fast) var(--ease-smooth);
+  animation: kpiFadeIn 0.4s var(--ease-smooth) backwards;
+  position: relative;
+  overflow: hidden;
 }
 
-.analytics-kpi-card:nth-child(1) { animation-delay: 0.05s; }
-.analytics-kpi-card:nth-child(2) { animation-delay: 0.10s; }
-.analytics-kpi-card:nth-child(3) { animation-delay: 0.15s; }
-.analytics-kpi-card:nth-child(4) { animation-delay: 0.20s; }
+.analytics-kpi-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--cyan), var(--purple));
+  opacity: 0;
+  transition: opacity var(--duration-fast);
+}
+
+.analytics-kpi-card:nth-child(1) { animation-delay: 0.04s; }
+.analytics-kpi-card:nth-child(2) { animation-delay: 0.08s; }
+.analytics-kpi-card:nth-child(3) { animation-delay: 0.12s; }
+.analytics-kpi-card:nth-child(4) { animation-delay: 0.16s; }
 
 @keyframes kpiFadeIn {
-  from { opacity: 0; transform: translateY(16px); }
+  from { opacity: 0; transform: translateY(14px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
 .analytics-kpi-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.95), 0 0 32px rgba(79, 70, 229, 0.4);
-  border-color: var(--accent-primary);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-hover-cyan);
+  border-color: var(--border-cyan);
+}
+
+.analytics-kpi-card:hover::after {
+  opacity: 1;
 }
 
 .analytics-kpi-label {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   text-transform: uppercase;
-  letter-spacing: 0.18em;
-  color: var(--text-secondary);
+  letter-spacing: 0.14em;
+  color: var(--text-tertiary);
   font-weight: 600;
 }
 
 .analytics-kpi-value {
   font-size: var(--font-size-2xl);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   line-height: 1.1;
+  letter-spacing: -0.01em;
 }
 
 .analytics-kpi-sub {
@@ -73,14 +93,19 @@
 }
 
 .analytics-panel {
-  padding: var(--space-lg);
-  border-radius: var(--radius-lg);
-  background: rgba(5, 9, 20, 0.98);
+  padding: var(--space-lg) var(--space-lg) var(--space-md);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-default);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75);
+  box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+  transition: border-color var(--duration-fast);
+}
+
+.analytics-panel:hover {
+  border-color: var(--border-strong);
 }
 
 .chart-container {
@@ -98,7 +123,7 @@
 .analytics-leaderboard {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: 6px;
   overflow-y: auto;
   max-height: 280px;
 }
@@ -107,22 +132,23 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  background: rgba(10, 14, 28, 0.6);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
   border: 1px solid var(--border-subtle);
   transition: all var(--duration-fast) var(--ease-smooth);
 }
 
 .leaderboard-row:hover {
-  border-color: var(--accent-primary);
-  background: var(--accent-hover);
+  border-color: var(--border-cyan);
+  background: var(--cyan-soft);
+  transform: translateX(3px);
 }
 
 .leaderboard-rank {
   font-size: var(--font-size-sm);
   font-weight: 700;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
   width: 24px;
   text-align: center;
   flex-shrink: 0;
@@ -144,16 +170,15 @@
 
 .leaderboard-stats {
   font-size: var(--font-size-sm);
-  color: var(--text-secondary);
+  color: var(--cyan);
   text-align: right;
   white-space: nowrap;
+  font-weight: 600;
 }
 
 .leaderboard-bar-wrap {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  bottom: 0; left: 0; right: 0;
   height: 2px;
   background: var(--border-subtle);
   border-radius: 2px;
@@ -162,7 +187,7 @@
 
 .leaderboard-bar {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent-primary), var(--gold-primary));
+  background: linear-gradient(90deg, var(--cyan), var(--purple));
   border-radius: 2px;
   transition: width 0.6s var(--ease-smooth);
 }
@@ -174,7 +199,29 @@
   font-size: var(--font-size-md);
 }
 
-/* ===== Chart.js canvas placeholder ===== */
+/* ===== Panel headers (shared across Payouts, Mechanics) ===== */
+
+.panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.panel-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.panel-subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+/* ===== Chart.js canvas ===== */
 
 canvas {
   display: block;
@@ -205,15 +252,15 @@ canvas {
 
 .chart-placeholder-bar {
   flex: 1;
-  background: linear-gradient(180deg, var(--accent-primary), var(--accent-soft));
+  background: linear-gradient(180deg, var(--cyan), var(--cyan-soft));
   border-radius: 4px 4px 0 0;
-  opacity: 0.4;
+  opacity: 0.35;
   animation: barPulse 1.8s var(--ease-smooth) infinite alternate;
 }
 
 @keyframes barPulse {
-  from { opacity: 0.25; }
-  to   { opacity: 0.55; }
+  from { opacity: 0.2; }
+  to   { opacity: 0.5; }
 }
 
 /* ===== Responsive ===== */

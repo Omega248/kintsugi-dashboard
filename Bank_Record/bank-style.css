@@ -1,21 +1,21 @@
 :root {
-  --bg: #020817;
-  --bg-soft: #050816;
-  --bg-soft2: #030712;
-  --border-subtle: #111827;
-  --border-strong: #1f2937;
-  --text-main: #e5e7eb;
-  --text-soft: #9ca3af;
-  --accent: #4f46e5;
-  --accent-soft: rgba(79, 70, 229, 0.22);
-  --accent-strong: #6366f1;
-  --in: #22c55e;
-  --out: #f97316;
-  --net: #38bdf8;
-  --radius-lg: 18px;
-  --shadow-soft: 0 24px 70px rgba(0, 0, 0, 0.9);
+  --bg: var(--bg-body, #0b0e17);
+  --bg-soft: var(--bg-secondary, #131729);
+  --bg-soft2: var(--bg-primary, #0f1220);
+  --border-subtle: var(--border-default, rgba(255,255,255,0.09));
+  --border-strong: var(--border-strong, rgba(255,255,255,0.16));
+  --text-main: var(--text-primary, #e2e8f0);
+  --text-soft: var(--text-tertiary, #64748b);
+  --accent: var(--cyan, #22d3ee);
+  --accent-soft: var(--cyan-soft, rgba(34,211,238,0.12));
+  --accent-strong: var(--cyan, #22d3ee);
+  --in: var(--color-success, #10b981);
+  --out: var(--color-error, #ef4444);
+  --net: var(--color-info, #22d3ee);
+  --radius-lg: var(--radius-sm, 8px);
+  --shadow-soft: var(--shadow-card, 0 4px 24px rgba(0,0,0,0.5));
   --font: system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
-  --flag: #facc15;
+  --flag: var(--color-warning, #f59e0b);
 }
 
 /* Global */
@@ -28,30 +28,30 @@
 
 body {
   margin: 0;
-  padding: 22px;
+  padding: 24px;
   font-family: var(--font);
-  font-size: 15px;
+  font-size: 13px;
   color: var(--text-main);
-  background: radial-gradient(circle at top, #020817 0, #020817 40%, #000 100%);
+  background: var(--bg-body, #0b0e17);
   display: flex;
   justify-content: center;
-  scrollbar-color: #4f46e5 #050816;
+  scrollbar-color: var(--border-strong) var(--bg-soft);
   scrollbar-width: thin;
 }
 
 body::-webkit-scrollbar {
-  width: 9px;
-  height: 9px;
+  width: 6px;
+  height: 6px;
 }
 body::-webkit-scrollbar-track {
-  background: #050816;
+  background: var(--bg-soft);
 }
 body::-webkit-scrollbar-thumb {
-  background: #29304a;
+  background: var(--border-strong);
   border-radius: 999px;
 }
 body::-webkit-scrollbar-thumb:hover {
-  background: #4f46e5;
+  background: var(--cyan-dim, #0891b2);
 }
 
 /* App wrapper */
@@ -115,8 +115,8 @@ body::-webkit-scrollbar-thumb:hover {
   display: inline-flex;
   padding: var(--space-xs);
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(10, 16, 32, 0.98), rgba(15, 23, 42, 0.95));
-  border: 1px solid rgba(79, 70, 229, 0.15);
+  background: linear-gradient(135deg, var(--bg-secondary), var(--bg-secondary));
+  border: 1px solid var(--cyan-soft);
   gap: var(--space-xs);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7), 0 0 1px rgba(79, 70, 229, 0.5);
   backdrop-filter: blur(8px);
@@ -149,7 +149,7 @@ body::-webkit-scrollbar-thumb:hover {
 .nav-pill:hover {
   color: #e5e7eb;
   background: rgba(148, 163, 253, 0.12);
-  border-color: rgba(79, 70, 229, 0.35);
+  border-color: var(--cyan-glow);
   transform: translateY(-1px);
 }
 
@@ -211,7 +211,7 @@ body::-webkit-scrollbar-thumb:hover {
   display: inline-flex;
   background: #020817;
   border-radius: 999px;
-  border: 1px solid #111827;
+  border: 1px solid var(--border-default);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.9);
   overflow: hidden;
 }
@@ -281,7 +281,7 @@ body::-webkit-scrollbar-thumb:hover {
 
 .search-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.25);
+  box-shadow: 0 0 0 1px var(--cyan-hover);
 }
 
 /* Toggles */
@@ -319,7 +319,7 @@ body::-webkit-scrollbar-thumb:hover {
   padding: 9px 10px;
   border-radius: 12px;
   background: #050814;
-  border: 1px solid #111827;
+  border: 1px solid var(--border-default);
   display: none;
   gap: 18px;
   font-size: 11px;
@@ -354,15 +354,15 @@ body::-webkit-scrollbar-thumb:hover {
 
 .summary-card {
   padding: 18px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
   background:
-    radial-gradient(circle at top left, rgba(148, 163, 253, 0.10), transparent),
-    rgba(6, 11, 25, 0.98);
+    
+    var(--bg-secondary);
   border: 1px solid var(--border-strong);
   display: flex;
   flex-direction: column;
   gap: 4px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75);
+  box-shadow: var(--shadow-card);
   transition: all 0.15s ease;
   position: relative;
   overflow: hidden;
@@ -372,7 +372,7 @@ body::-webkit-scrollbar-thumb:hover {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at top left, rgba(148, 163, 253, 0.15), transparent);
+  background: ;
   opacity: 0;
   transition: opacity 0.15s;
 }
@@ -389,7 +389,7 @@ body::-webkit-scrollbar-thumb:hover {
 
 .summary-card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.95), 0 0 32px rgba(79, 70, 229, 0.4);
+  box-shadow: var(--shadow-hover-cyan);
   border-color: var(--accent);
   filter: brightness(1.02);
 }
@@ -433,12 +433,12 @@ body::-webkit-scrollbar-thumb:hover {
 
 .table-wrap {
   margin-top: var(--space-md);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
   background: var(--bg-primary);
   overflow: auto;
   max-height: calc(100vh - 140px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-card);
   width: 100%;
   scrollbar-color: #4f46e5 #020817;
   scrollbar-width: thin;
@@ -487,9 +487,9 @@ th .col-resizer {
 /* Stripes & hover */
 
 tbody tr:hover {
-  background: rgba(79, 70, 229, 0.18);
+  background: var(--cyan-soft);
   transform: scale(1.01);
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+  box-shadow: 0 2px 8px var(--cyan-glow);
 }
 
 .row-bet {
@@ -560,7 +560,7 @@ td.col-date {
   padding: 10px 11px;
   border-radius: 12px;
   background: #050814;
-  border: 1px solid #111827;
+  border: 1px solid var(--border-default);
   font-size: 11px;
   color: var(--text-soft);
   display: none;
@@ -616,7 +616,7 @@ td.col-date {
 .toggle span:hover {
   border-color: var(--accent);
   color: var(--accent);
-  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.25);
+  box-shadow: 0 0 0 1px var(--cyan-hover);
 }
 
 /* active state when checkbox is checked */
@@ -650,7 +650,7 @@ td.col-date {
 .toggle span:hover {
   border-color: var(--accent);
   color: var(--accent);
-  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.25);
+  box-shadow: 0 0 0 1px var(--cyan-hover);
 }
 
 /* active state when checkbox is checked */

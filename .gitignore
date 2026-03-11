@@ -19,3 +19,4 @@ discord-bot/.wrangler/
 # Logs
 *.log
 npm-debug.log*
+nohup.out
