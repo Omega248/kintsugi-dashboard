@@ -92,7 +92,42 @@
             <option value="month">Month</option>
           </select>
         </span>
+
+        <button id="triggerWeeklyBtn" class="btn btn-primary">
+          📊 Post Weekly Update to Discord
+        </button>
       </section>
+
+      <!-- Bot config panel (shown when trigger button is clicked without a saved config) -->
+      <div id="analyticsConfigPanel" class="analytics-discord-panel hidden">
+        <div class="analytics-discord-note">
+          <strong>Discord Bot Configuration</strong> — enter your Cloudflare Worker URL and the
+          <code>TRIGGER_TOKEN</code> secret you set in GitHub. These are saved in your browser only.
+        </div>
+        <div class="analytics-discord-field">
+          <label for="analyticsBotApiUrl">Bot Worker URL</label>
+          <input
+            id="analyticsBotApiUrl"
+            type="url"
+            class="advanced-input"
+            placeholder="https://kintsugi-discord-bot.YOUR-SUBDOMAIN.workers.dev"
+          />
+        </div>
+        <div class="analytics-discord-field">
+          <label for="analyticsBotApiToken">Trigger Token (TRIGGER_TOKEN secret)</label>
+          <input
+            id="analyticsBotApiToken"
+            type="password"
+            class="advanced-input"
+            placeholder="Your secret trigger token"
+          />
+        </div>
+        <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+          <button id="saveAnalyticsConfigBtn" class="btn btn-primary">Save &amp; Post Now</button>
+          <button id="cancelAnalyticsConfigBtn" class="btn">Cancel</button>
+          <button id="clearAnalyticsConfigBtn" class="btn" style="margin-left:auto;">Clear saved config</button>
+        </div>
+      </div>
 
       <!-- Charts row -->
       <div class="analytics-charts-grid">

@@ -487,11 +487,17 @@ async function handleAnalyticsCommand(interaction, ctx) {
     try {
       const jobRows = await fetchSheet(JOBS_SHEET);
       const allJobs = parseJobsSheet(jobRows);
-      const summary = buildCurrentWeekSummary(allJobs);
+
+      // Try current week first; fall back to the most recent week with data
+      let summary = buildCurrentWeekSummary(allJobs);
+      if (summary.totalRepairs === 0) {
+        const latest = buildLatestWeekSummary(allJobs);
+        if (latest && latest.totalRepairs > 0) summary = latest;
+      }
 
       if (summary.totalRepairs === 0) {
         await editOriginalMessage(appId, token, {
-          content:    '📊 No repairs logged for the current week yet.',
+          content:    '📊 No repairs found in any recent week.',
           components: [],
         });
         return;
@@ -801,6 +807,48 @@ async function handleWeekSelect(interaction, ctx) {
 }
 
 // ===== Scheduled helpers (Cron Triggers) =====
+
+/**
+ * Build a summary for the most recent week that contains actual job data.
+ * Used as a fallback when the current week has no jobs yet (e.g. early in
+ * the week) so that /analytics and /api/trigger-weekly always return useful
+ * data rather than an empty "0 repairs" state.
+ * Returns null if no jobs exist at all.
+ */
+function buildLatestWeekSummary(allJobs) {
+  const allWeeks = buildWeeklyStats(allJobs); // sorted newest first
+  if (!allWeeks.length) return null;
+
+  const latestWeek  = allWeeks[0];
+  const weekEndDate = latestWeek.weekEndDate
+    || new Date(latestWeek.weekKey + 'T00:00:00Z');
+  const weekJobs = filterByWeekEnding(allJobs, weekEndDate);
+
+  const mechMap = new Map();
+  for (const j of weekJobs) {
+    mechMap.set(j.mechanic, (mechMap.get(j.mechanic) || 0) + (j.across || 0));
+  }
+
+  let topMechanic = null, topRepairs = 0;
+  for (const [name, repairs] of mechMap) {
+    if (repairs > topRepairs) { topMechanic = name; topRepairs = repairs; }
+  }
+
+  const mechanics = [...mechMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, repairs]) => ({ name, repairs }));
+
+  return {
+    weekEndDate,
+    totalRepairs:  latestWeek.totalRepairs,
+    totalEngines:  latestWeek.engineReplacements,
+    totalPayout:   latestWeek.totalPayout,
+    mechanicCount: mechMap.size,
+    topMechanic,
+    topRepairs,
+    mechanics,
+  };
+}
 
 /**
  * Build a summary of the current week's jobs across all mechanics.
@@ -1148,14 +1196,83 @@ async function handleNotifyPayouts(request, env) {
   }
 }
 
+// ===== Dashboard API: POST /api/trigger-weekly =====
+
+/**
+ * Handle POST /api/trigger-weekly — triggered from the web dashboard button.
+ *
+ * Runs the same logic as the Sunday cron trigger:
+ *   1. Reads live job data from Google Sheets.
+ *   2. Posts/edits the weekly analytics summary in #analytics.
+ *   3. Posts the job-activity list in #jobs.
+ *   4. Sends the payday reminder ping in #payouts.
+ *
+ * Protected by TRIGGER_TOKEN bearer authentication.
+ * Useful for immediately populating channels after first deploy or for testing.
+ */
+async function handleTriggerWeekly(request, env) {
+  if (!env.TRIGGER_TOKEN) {
+    return apiJson({
+      ok:    false,
+      error: 'TRIGGER_TOKEN is not configured on the bot. Add it as a GitHub repository secret and redeploy (the deploy workflow syncs it to the Worker automatically).',
+    }, 501);
+  }
+
+  const authHeader = request.headers.get('Authorization') || '';
+  const provided   = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  if (!provided || provided !== env.TRIGGER_TOKEN) {
+    return apiJson({ ok: false, error: 'Invalid or missing token.' }, 401);
+  }
+
+  const missing = validateConfig(env);
+  if (missing.length > 0) {
+    return apiJson({
+      ok:    false,
+      error: `Bot is missing required secrets: ${missing.join(', ')}`,
+    }, 503);
+  }
+
+  try {
+    const jobRows = await fetchSheet(JOBS_SHEET);
+    const allJobs = parseJobsSheet(jobRows);
+
+    // Use the most recent week with actual data so the trigger is useful even
+    // when called mid-week (before the current week has any jobs).
+    let summary = buildCurrentWeekSummary(allJobs);
+    if (summary.totalRepairs === 0) {
+      const latest = buildLatestWeekSummary(allJobs);
+      if (latest && latest.totalRepairs > 0) summary = latest;
+    }
+
+    const [analyticsOk, jobsOk, payoutsOk] = await Promise.all([
+      postWeeklyAnalytics(env, summary),
+      postJobsUpdate(env, summary),
+      postPaydayReminder(env, summary.weekEndDate),
+    ]);
+
+    return apiJson({
+      ok:          true,
+      weekEnding:  fmtDate(summary.weekEndDate),
+      totalRepairs: summary.totalRepairs,
+      analytics:   analyticsOk,
+      jobs:        jobsOk,
+      payouts:     payoutsOk,
+    });
+  } catch (err) {
+    console.error('handleTriggerWeekly error:', err.message);
+    return apiJson({ ok: false, error: err.message }, 500);
+  }
+}
+
 // ===== Worker entry-point =====
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // CORS preflight for the dashboard API endpoint
-    if (request.method === 'OPTIONS' && url.pathname === '/api/notify-payouts') {
+    // CORS preflight for the dashboard API endpoints
+    if (request.method === 'OPTIONS' &&
+        (url.pathname === '/api/notify-payouts' || url.pathname === '/api/trigger-weekly')) {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
 
@@ -1165,6 +1282,13 @@ export default {
     // Discord signature) are handled correctly.
     if (request.method === 'POST' && url.pathname === '/api/notify-payouts') {
       return handleNotifyPayouts(request, env);
+    }
+
+    // Dashboard API: POST /api/trigger-weekly
+    // Manually triggers the same posts as the Sunday cron (analytics, jobs,
+    // payouts reminder). Useful for first-time setup and testing.
+    if (request.method === 'POST' && url.pathname === '/api/trigger-weekly') {
+      return handleTriggerWeekly(request, env);
     }
 
     // Health check
