@@ -1,9 +1,18 @@
 // =======================================
 // Kintsugi Discord Bot — Cloudflare Worker
 //
-// Handles Discord component interactions (button press + select menus) for
-// the permanent job-log panel. No slash commands — the panel is a static
-// message posted once via setup-panel.js.
+// Handles Discord component interactions (button presses + select menus) for
+// three permanent panels:
+//   • Job Logs panel    — request any mechanic's repair history by week
+//   • Analytics panel   — view the current week's analytics summary
+//   • Payouts panel     — view the current week's payout breakdown
+//
+// Also handles /analytics and /payouts slash commands, and the weekly cron
+// trigger that posts summaries to #analytics, #jobs, and #payouts channels.
+//
+// The bot is deployed as "kintsugi-bot" — a separate Cloudflare Worker from
+// the static-assets worker ("kintsugi"). The Interactions Endpoint URL in the
+// Discord Developer Portal must point to THIS worker's URL.
 //
 // Required secrets (set via `wrangler secret put` or synced by GitHub Actions):
 //   DISCORD_PUBLIC_KEY    — Ed25519 public key from the Discord Developer Portal
@@ -11,7 +20,11 @@
 //   ANALYTICS_CHANNEL_ID  — Discord channel ID for weekly analytics summaries
 //   JOBS_CHANNEL_ID       — Discord channel ID for weekly job-activity updates
 //   PAYOUTS_CHANNEL_ID    — Discord channel ID for payday reminder pings
-//   RIPTIDE_USER_ID       — Numeric Discord user ID to @mention on payday (optional)
+//
+// Optional secrets:
+//   RIPTIDE_USER_ID       — Numeric Discord user ID to @mention on payday
+//   TRIGGER_TOKEN         — Bearer token for the dashboard "Notify Discord" and
+//                           "Trigger Weekly" buttons
 // =======================================
 
 // ===== Sheet config (mirrors kintsugi-core.js) =====
@@ -806,7 +819,204 @@ async function handleWeekSelect(interaction, ctx) {
   return jsonResponse({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
 }
 
-// ===== Scheduled helpers (Cron Triggers) =====
+// ===== Analytics panel handler =====
+
+/**
+ * "View Analytics" button pressed on the permanent analytics panel.
+ *
+ * Responds immediately with an ephemeral deferral, then fetches live sheet
+ * data and edits that private message with the current week's analytics
+ * summary (falling back to the most recent week if the current week has no
+ * jobs yet).  The panel message itself is never touched.
+ */
+async function handleAnalyticsPanelButton(interaction, ctx) {
+  const { application_id: appId, token } = interaction;
+
+  ctx.waitUntil((async () => {
+    try {
+      const jobRows = await fetchSheet(JOBS_SHEET);
+      const allJobs = parseJobsSheet(jobRows);
+
+      let summary = buildCurrentWeekSummary(allJobs);
+      if (summary.totalRepairs === 0) {
+        const latest = buildLatestWeekSummary(allJobs);
+        if (latest && latest.totalRepairs > 0) summary = latest;
+      }
+
+      if (summary.totalRepairs === 0) {
+        await editOriginalMessage(appId, token, {
+          content:    '📊 No repairs found in any recent week.',
+          components: [],
+        });
+        return;
+      }
+
+      await editOriginalMessage(appId, token, buildAnalyticsPayload(summary));
+    } catch (err) {
+      await editOriginalMessage(appId, token, {
+        content:    `❌ Failed to load analytics data.\n\`${err.message}\``,
+        components: [],
+      }).catch(() => {});
+    }
+  })());
+
+  // Acknowledge immediately — ephemeral so only the button-clicker sees it
+  return jsonResponse({
+    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+    data: { flags: 64 },
+  });
+}
+
+// ===== Payouts panel handlers =====
+
+/**
+ * "View My Payout" button pressed on the permanent payouts panel.
+ *
+ * Responds immediately with an ephemeral deferral, fetches the mechanic list,
+ * and edits the private message with a mechanic select menu so the user can
+ * choose which mechanic's payout they want to view.
+ */
+async function handlePayoutsPanelButton(interaction, ctx) {
+  const { application_id: appId, token } = interaction;
+
+  ctx.waitUntil((async () => {
+    try {
+      const jobRows = await fetchSheet(JOBS_SHEET);
+      const allJobs = parseJobsSheet(jobRows);
+      const names   = [...new Set(allJobs.map(j => j.mechanic))].sort(
+        (a, b) => a.localeCompare(b)
+      );
+
+      if (names.length === 0) {
+        await editOriginalMessage(appId, token, {
+          content:    '❌ No mechanics found in the sheet.',
+          components: [],
+        });
+        return;
+      }
+
+      const options = names.slice(0, 25).map(name => ({
+        label: name.length > 100 ? name.slice(0, 97) + '…' : name,
+        value: name,
+      }));
+      const overflow = names.length > 25
+        ? `\n_Showing 25 of ${names.length} mechanics (sorted A→Z)._`
+        : '';
+
+      await editOriginalMessage(appId, token, {
+        content: `💸 **Select a mechanic to view their payout:**${overflow}`,
+        components: [
+          {
+            type: 1,
+            components: [
+              {
+                type:        3,
+                custom_id:   'payouts_mech_select',
+                placeholder: 'Choose a mechanic…',
+                options,
+              },
+            ],
+          },
+        ],
+      });
+    } catch (err) {
+      await editOriginalMessage(appId, token, {
+        content:    `❌ Failed to load mechanic list.\n\`${err.message}\``,
+        components: [],
+      }).catch(() => {});
+    }
+  })());
+
+  return jsonResponse({
+    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+    data: { flags: 64 },
+  });
+}
+
+/**
+ * Mechanic selected from the payouts panel dropdown.
+ *
+ * Fetches live sheet data, finds that mechanic's payout for the most recent
+ * week (or the current week if it has data), and edits the private message
+ * with a formatted payout embed.
+ */
+async function handlePayoutsMechSelect(interaction, ctx) {
+  const { application_id: appId, token } = interaction;
+  const mechanic = interaction.data.values[0];
+
+  ctx.waitUntil((async () => {
+    try {
+      const [jobRows, stateRows] = await Promise.all([
+        fetchSheet(JOBS_SHEET),
+        fetchSheet(STATE_IDS_SHEET).catch(() => []),
+      ]);
+      const allJobs  = parseJobsSheet(jobRows);
+      const stateMap = parseStateIds(stateRows);
+      const stateId  = stateMap.get(mechanic) || 'N/A';
+
+      // Find the most recent week that has data for anyone (not just this mechanic)
+      const allWeeks = buildWeeklyStats(allJobs);
+      if (!allWeeks.length) {
+        await editOriginalMessage(appId, token, {
+          content:    '❌ No payout data found.',
+          components: [],
+        });
+        return;
+      }
+
+      const latestWeek    = allWeeks[0];
+      const weekEndDate   = latestWeek.weekEndDate
+        || new Date(latestWeek.weekKey + 'T00:00:00Z');
+      const weekJobs      = filterByWeekEnding(allJobs, weekEndDate);
+      const mechanicJobs  = weekJobs.filter(j => j.mechanic === mechanic);
+
+      // Aggregate this mechanic's repairs and engines for that week
+      let repairs  = 0, engines = 0;
+      for (const j of mechanicJobs) {
+        repairs += j.across || 0;
+        engines += j.engineReplacements || 0;
+      }
+      const payout = repairs * PAY_PER_REPAIR + engines * ENGINE_PAY_DEFAULT;
+
+      const fields = [
+        { name: '📅 Week Ending',   value: fmtDate(weekEndDate), inline: true },
+        { name: '🔧 Repairs',        value: String(repairs),      inline: true },
+        { name: '💰 Payout',         value: fmtMoney(payout),     inline: true },
+      ];
+      if (engines > 0) {
+        fields.push({ name: '🔩 Engines', value: String(engines), inline: true });
+      }
+      if (stateId && stateId !== 'N/A') {
+        fields.push({ name: '🪪 State ID', value: stateId, inline: true });
+      }
+
+      const color  = repairs > 0 ? 0x22c55e : 0xef4444;
+      const notice = repairs === 0
+        ? `No jobs were recorded for **${mechanic}** in the week ending **${fmtDate(weekEndDate)}**.`
+        : '';
+
+      await editOriginalMessage(appId, token, {
+        content:    '',
+        components: [],
+        embeds: [{
+          title:       `💸 Payout — ${mechanic}`,
+          description: notice || undefined,
+          color,
+          fields,
+          footer:      { text: 'Kintsugi Motorworks · Payouts' },
+          timestamp:   new Date().toISOString(),
+        }],
+      });
+    } catch (err) {
+      await editOriginalMessage(appId, token, {
+        content:    `❌ Failed to load payout data.\n\`${err.message}\``,
+        components: [],
+      }).catch(() => {});
+    }
+  })());
+
+  return jsonResponse({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
+}
 
 /**
  * Build a summary for the most recent week that contains actual job data.
@@ -1343,6 +1553,19 @@ export default {
       }
       if (customId.startsWith('joblogs_week_select:')) {
         return handleWeekSelect(interaction, ctx);
+      }
+
+      // Analytics panel button
+      if (customId === 'analytics_panel_start') {
+        return handleAnalyticsPanelButton(interaction, ctx);
+      }
+
+      // Payouts panel button + mechanic select
+      if (customId === 'payouts_panel_start') {
+        return handlePayoutsPanelButton(interaction, ctx);
+      }
+      if (customId === 'payouts_mech_select') {
+        return handlePayoutsMechSelect(interaction, ctx);
       }
     }
 

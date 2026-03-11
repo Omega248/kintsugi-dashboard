@@ -1,65 +1,75 @@
 # Kintsugi Discord Bot
 
-A lightweight Discord bot that puts a **permanent "Request Job Logs" panel** in any channel. Anyone with access clicks the button, picks a mechanic and time period from private dropdowns, and instantly gets their formatted job-log report — all without leaving Discord or opening the dashboard.
+A lightweight Discord bot that puts **three permanent panels** in your Discord channels. Members click a button, make a selection if needed, and instantly get a private result — all without leaving Discord or opening the dashboard.
 
 ```
-┌─────────────────────────────────────────────────────┐
-│ 📋 Kintsugi Job Logs                                │
-│ Click Request Job Logs below to view a mechanic's   │
-│ repair history.                                     │
-│                                                     │
-│  1. Select a mechanic from the dropdown             │
-│  2. Select a time period                            │
-│  3. Your job log appears privately                  │
-│                                                     │
-│  [ 📋 Request Job Logs ]                            │
-└─────────────────────────────────────────────────────┘
+#jobs channel                 #analytics channel            #payouts channel
+┌─────────────────────┐       ┌─────────────────────┐       ┌─────────────────────┐
+│ 📋 Kintsugi Job Logs│       │ 📊 Kintsugi Analytics│       │ 💸 Kintsugi Payouts │
+│                     │       │                     │       │                     │
+│  1. Select mechanic │       │ Click View Analytics│       │  1. Select mechanic │
+│  2. Select week     │       │ to see this week's  │       │  2. See their payout│
+│  3. See job log     │       │ repair summary      │       │     privately       │
+│  [ 📋 Request Logs ]│       │  [ 📊 View Analytics]│       │  [ 💸 View My Payout]│
+└─────────────────────┘       └─────────────────────┘       └─────────────────────┘
 ```
 
-The panel message **never changes** — it lives in the channel permanently. All interactions are handled privately (ephemeral), so the channel stays clean no matter how many people use it.
+All interaction results are **private (ephemeral)** — only the person who clicked the button sees them. Channels stay clean no matter how many people use the panels.
 
 ---
 
 ## How it works
 
+**Job Logs panel** (in #jobs):
 ```
-User clicks  📋 Request Job Logs  button
-          │
-          ▼  (panel is never touched again)
-Bot sends private "thinking…" message visible only to that user
-          │
-          ▼
-Bot fetches mechanic names from Google Sheets
-          │
-          ▼
-Private message updates → mechanic dropdown appears
-          │
-          ▼
-User picks a mechanic → private message updates → period dropdown appears
-   ┌──────────────────────────────────┐
-   │  📅 Current Week                │
-   │  📆 This Month                  │
-   │  📋 All Time                    │
-   └──────────────────────────────────┘
-          │
-          ▼
-Bot fetches full job data from Google Sheets
-          │
-          ▼
-Private message updates → formatted job-log embed appears
+Click 📋 Request Job Logs
+  → Private mechanic dropdown
+  → Private week dropdown
+  → Private job-log embed
 ```
+
+**Analytics panel** (in #analytics):
+```
+Click 📊 View Analytics
+  → Private analytics summary for the current week
+     (falls back to most recent week if no data yet)
+```
+
+**Payouts panel** (in #payouts):
+```
+Click 💸 View My Payout
+  → Private mechanic dropdown
+  → Private payout embed for the most recent completed week
+```
+
+The bot also:
+- Posts/edits a weekly analytics summary in #analytics every Sunday at 18:00 UTC
+- Posts weekly job-activity to #jobs every Sunday at 18:00 UTC
+- Sends a payday reminder ping in #payouts every Sunday at 18:00 UTC
+- Handles `/analytics` and `/payouts` slash commands
 
 **Stack — 100 % free:**
 
 | Layer | Service | Free tier |
 |---|---|---|
-| Bot hosting | Cloudflare Workers | 100k req/day |
+| Bot hosting | Cloudflare Workers (named `kintsugi-bot`) | 100k req/day |
 | Interactions delivery | Discord Components API | Free |
 | Data source | Google Sheets (public CSV) | Free |
 | State persistence | Cloudflare Workers KV | 1 GB / 100k reads / 1k writes per day |
 | CI/CD | GitHub Actions | Free |
 
-The Worker is stateless for interactions — the mechanic name is encoded directly into each select menu's `custom_id`. Workers KV is used only by the weekly cron to persist the analytics message ID (so it edits rather than re-posts) and to deduplicate the payday reminder. **The KV namespace is created and bound automatically by the deploy workflow — no manual setup required.**
+---
+
+## Architecture
+
+Two separate Cloudflare Workers:
+
+| Worker | Name | Purpose |
+|---|---|---|
+| Static assets | `kintsugi` | Serves the web dashboard, CORS gateway |
+| Discord bot | `kintsugi-bot` | Handles all Discord interactions |
+
+The **Interactions Endpoint URL** in the Discord Developer Portal must point to the **`kintsugi-bot` worker URL** (e.g. `https://kintsugi-bot.<subdomain>.workers.dev`).
 
 ---
 
@@ -67,7 +77,7 @@ The Worker is stateless for interactions — the mechanic name is encoded direct
 
 - A [Discord account](https://discord.com) with permission to add bots to your server
 - A [Cloudflare account](https://cloudflare.com) (free tier is enough)
-- [Node.js 18+](https://nodejs.org) on your machine (only for the two setup scripts)
+- [Node.js 18+](https://nodejs.org) on your machine (only for the setup scripts if running locally)
 
 ---
 
@@ -77,82 +87,104 @@ The Worker is stateless for interactions — the mechanic name is encoded direct
 
 1. Go to <https://discord.com/developers/applications> → **New Application**.
 2. Name it (e.g. *Kintsugi Bot*) and click **Create**.
-3. **General Information** tab → copy the **Public Key**.
+3. **General Information** tab → copy the **Application ID** and **Public Key**.
 4. **Bot** tab → **Reset Token** → copy the **Bot Token** (keep it secret).
 
 ### 2 · Invite the bot to your server
 
 1. **OAuth2 → URL Generator** in the Developer Portal.
-2. **Scopes**: tick `bot`.
+2. **Scopes**: tick `bot` and `applications.commands`.
 3. **Bot Permissions**: tick `Send Messages` and `Read Message History`.
 4. Copy the generated URL, open it in a browser, and invite the bot.
-
-> No `applications.commands` scope is needed — the bot uses no slash commands.
 
 ### 3 · Set up Cloudflare Workers
 
 1. Log in to <https://dash.cloudflare.com> → **Workers & Pages** → **Create**.
-2. Give it any temporary name (the `wrangler.toml` sets `kintsugi` on deploy).
+2. Give it any temporary name (the `wrangler.toml` sets `kintsugi-bot` on deploy).
 3. Note your **Account ID** from the dashboard URL or right-hand sidebar.
 
 ### 4 · Add GitHub repository secrets
 
 **Settings → Secrets and variables → Actions → New repository secret**
 
+**Required secrets:**
+
 | Secret name | Value |
 |---|---|
 | `CLOUDFLARE_API_TOKEN` | Cloudflare API token with **Workers Scripts:Edit** and **Workers KV Storage:Edit** permissions ([create one here](https://dash.cloudflare.com/profile/api-tokens)) |
 | `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID |
-| `DISCORD_PUBLIC_KEY` | The Public Key from step 1 |
-| `DISCORD_BOT_TOKEN` | The Bot Token from step 1 (keep it secret — treat it like a password) |
-| `ANALYTICS_CHANNEL_ID` | The Discord channel ID for your **#analytics** channel |
-| `JOBS_CHANNEL_ID` | The Discord channel ID for your **#jobs** channel |
-| `PAYOUTS_CHANNEL_ID` | The Discord channel ID for your **#payouts** channel |
-| `RIPTIDE_USER_ID` | *(Optional)* Numeric Discord user ID to @mention on payday |
-| `TRIGGER_TOKEN` | A strong random secret (e.g. `openssl rand -hex 32`) that lets the web dashboard's **"Notify Discord: Payouts Processed"** button post to Discord. Keep it secret and set the same value in your browser when prompted. |
+| `DISCORD_PUBLIC_KEY` | The **Public Key** from step 1 |
+| `DISCORD_APP_ID` | The **Application ID** from step 1 (used to register slash commands) |
+| `DISCORD_BOT_TOKEN` | The **Bot Token** from step 1 (keep it secret) |
+| `ANALYTICS_CHANNEL_ID` | Discord channel ID for your **#analytics** channel |
+| `JOBS_CHANNEL_ID` | Discord channel ID for your **#jobs** channel |
+| `PAYOUTS_CHANNEL_ID` | Discord channel ID for your **#payouts** channel |
+
+**Optional secrets:**
+
+| Secret name | Value |
+|---|---|
+| `RIPTIDE_USER_ID` | Numeric Discord user ID to @mention on payday (e.g. `123456789012345678`) |
+| `TRIGGER_TOKEN` | A strong random secret (e.g. `openssl rand -hex 32`) for the dashboard **"Notify Discord"** and **"Trigger Weekly"** buttons |
 
 > **How to get a channel ID:** Enable Developer Mode in Discord (Settings → Advanced → Developer Mode), then right-click any channel and choose **Copy Channel ID**.
 
-The deploy workflow automatically syncs all of these into the Cloudflare Worker's secret store on every deploy — you don't need to run `wrangler secret put` by hand.
-
-### 5 · Deploy the Worker
+### 5 · Deploy the Bot Worker
 
 Push any change to `discord-bot/` on the `main` branch, **or** go to:  
 **Actions → Deploy Discord Bot → Run workflow**
 
-The deploy workflow does the following automatically — **no manual steps required**:
-1. Looks up the `KINTSUGI_BOT` KV namespace in your Cloudflare account.
-2. Creates it if it doesn't exist yet.
-3. Binds it to the Worker as `KV` for persistent analytics/reminder state.
-4. Deploys `worker.js` and syncs all secrets (`DISCORD_PUBLIC_KEY`, `DISCORD_BOT_TOKEN`, `ANALYTICS_CHANNEL_ID`, `JOBS_CHANNEL_ID`, `PAYOUTS_CHANNEL_ID`, `RIPTIDE_USER_ID`) into the Worker's secret store.
-
-After it finishes, copy the Worker URL from Cloudflare (e.g. `https://kintsugi.reecestangoe0824.workers.dev`).
+The deploy workflow automatically:
+1. Provisions the `KINTSUGI_BOT` KV namespace in Cloudflare (creates it if needed).
+2. Binds it to the Worker as `KV` for persistent analytics/reminder state.
+3. Deploys `worker.js` to Cloudflare as **`kintsugi-bot`**.
+4. Syncs required secrets to the Worker's secret store.
+5. Pushes optional secrets if they are configured (skips gracefully if not).
+6. Registers `/payouts` and `/analytics` slash commands with Discord (if `DISCORD_APP_ID` is set).
 
 ### 6 · Set the Interactions Endpoint URL
 
+After the deploy finishes, find the Worker URL in Cloudflare:  
+**Workers & Pages → kintsugi-bot → Settings** — copy the URL (e.g. `https://kintsugi-bot.reecestangoe0824.workers.dev`).
+
 1. Discord Developer Portal → your app → **General Information**.
-2. Paste the Worker URL into **Interactions Endpoint URL**.
+2. Paste the **`kintsugi-bot` worker URL** into **Interactions Endpoint URL**.
 3. Click **Save Changes** — Discord sends a PING; the Worker responds with PONG automatically. ✅
 
-### 7 · Post the panel message
+> ⚠️ **Important:** Use the `kintsugi-bot` worker URL, NOT the static-assets (`kintsugi`) worker URL.
 
-The easiest way — no terminal required:
+### 7 · Post the panel messages
 
-1. Go to **Actions → Post Job Logs Panel → Run workflow** in GitHub.
-2. Leave **channel ID** blank to post to your `#jobs` channel (uses the `JOBS_CHANNEL_ID` secret), or type a different channel ID to post elsewhere.
-3. Click **Run workflow**.
+Post all three panels using GitHub Actions (no terminal required):
 
-The Action prints the new message ID in its logs. **Pin the message** in Discord (right-click → Pin) so it stays at the top of the channel.
+**Job Logs panel** (in #jobs):
+1. **Actions → Post Job Logs Panel → Run workflow**
+2. Leave channel ID blank to use `JOBS_CHANNEL_ID`, or enter a different ID.
 
-That's it — the panel is live! 🎉
+**Analytics panel** (in #analytics):
+1. **Actions → Post Analytics Panel → Run workflow**
+2. Leave channel ID blank to use `ANALYTICS_CHANNEL_ID`, or enter a different ID.
+
+**Payouts panel** (in #payouts):
+1. **Actions → Post Payouts Panel → Run workflow**
+2. Leave channel ID blank to use `PAYOUTS_CHANNEL_ID`, or enter a different ID.
+
+After posting each panel, **pin the message** in Discord (right-click → Pin) so it stays at the top.
+
+That's it — all three panels are live! 🎉
 
 <details>
 <summary>Alternatively, run locally</summary>
 
 ```bash
-DISCORD_BOT_TOKEN=<your bot token> \
-DISCORD_CHANNEL_ID=<channel id> \
-node discord-bot/setup-panel.js
+# Job Logs panel
+DISCORD_BOT_TOKEN=<token> DISCORD_CHANNEL_ID=<jobs-channel-id> node discord-bot/setup-panel.js
+
+# Analytics panel
+DISCORD_BOT_TOKEN=<token> DISCORD_CHANNEL_ID=<analytics-channel-id> node discord-bot/setup-analytics-panel.js
+
+# Payouts panel
+DISCORD_BOT_TOKEN=<token> DISCORD_CHANNEL_ID=<payouts-channel-id> node discord-bot/setup-payouts-panel.js
 ```
 
 > To get a channel ID: right-click the channel in Discord → **Copy Channel ID**  
@@ -162,35 +194,54 @@ node discord-bot/setup-panel.js
 
 ---
 
-## Using the panel
+## Using the panels
 
-1. Any member with access to the channel clicks **📋 Request Job Logs**.
-2. A private dropdown appears — only they can see it.
-3. They pick a mechanic from the list.
-4. A second private dropdown appears — they pick a time period.
+### Job Logs panel
+
+1. Any member clicks **📋 Request Job Logs**.
+2. A private mechanic dropdown appears — only they can see it.
+3. They pick a mechanic.
+4. A private week dropdown appears — they pick a week.
 5. The private message updates with the formatted job log.
 
-No other members see the interaction — the channel panel stays clean.
+### Analytics panel
+
+1. Any member clicks **📊 View Analytics**.
+2. The current week's analytics summary appears privately.
+   - If the current week has no jobs yet, the most recent week with data is shown instead.
+
+### Payouts panel
+
+1. Any member clicks **💸 View My Payout**.
+2. A private mechanic dropdown appears — only they can see it.
+3. They pick their name.
+4. Their payout for the most recent completed week appears privately, showing repairs, engine replacements, and total amount.
+
+---
+
+## Slash commands
+
+After running the deploy workflow (or **Register Slash Commands**), two slash commands are available:
+
+| Command | Description |
+|---|---|
+| `/analytics` | Shows the current week's analytics summary publicly in the channel |
+| `/payouts` | Posts the payouts-processed embed publicly, listing all mechanics and amounts |
+
+Both commands require **Manage Guild** permission by default. This can be changed per-server in **Server Settings → Integrations → Kintsugi Bot**.
 
 ---
 
 ## "Notify Discord: Payouts Processed" button (web dashboard)
 
-The **Payouts** page in the dashboard has a **📢 Notify Discord: Payouts Processed** button. When clicked, it reads the most recent week's data from the Google Sheet and posts a "Payouts Processed" embed to your **#payouts** Discord channel — listing every mechanic who was paid that week.
+The **Payouts** page has a **📢 Notify Discord: Payouts Processed** button. When clicked, it reads the most recent week's data from the Google Sheet and posts a "Payouts Processed" embed to your **#payouts** channel.
 
-### First-time setup
-
-1. Copy your Worker URL from the Cloudflare dashboard (e.g. `https://kintsugi.reecestangoe0824.workers.dev`).
-2. Generate a `TRIGGER_TOKEN` — any strong random string, e.g.:
-   ```bash
-   openssl rand -hex 32
-   ```
-3. Add it as a GitHub secret named **`TRIGGER_TOKEN`** (same place as the other secrets in step 4 above).
-4. Re-deploy by pushing to `main` or triggering the **Deploy Discord Bot** workflow — the token is synced to the Worker automatically.
-5. Open the **Payouts** page in the dashboard and click **📢 Notify Discord: Payouts Processed**.
-6. A config panel appears asking for the Worker URL and the token — enter them and click **Save & Send Notification**. The values are saved in your browser so you only need to do this once.
-
-The button always fetches fresh data from the sheet — it is **first-run safe** and requires no existing KV state.
+**First-time setup:**
+1. Copy the bot worker URL from Cloudflare (e.g. `https://kintsugi-bot.reecestangoe0824.workers.dev`).
+2. Generate a `TRIGGER_TOKEN` if you haven't already: `openssl rand -hex 32`
+3. Add it as a GitHub secret named **`TRIGGER_TOKEN`** and redeploy.
+4. Open the **Payouts** page and click **📢 Notify Discord: Payouts Processed**.
+5. Enter the Worker URL and token in the config panel → **Save & Send**. Values are saved in your browser.
 
 ---
 
@@ -198,16 +249,20 @@ The button always fetches fresh data from the sheet — it is **first-run safe**
 
 ```
 discord-bot/
-├── worker.js             Cloudflare Worker — all bot logic
-├── setup-panel.js        Run once to post the permanent panel message
-├── register-commands.js  Utility to clear old slash commands (if any)
-├── wrangler.toml         Cloudflare Workers deployment config
-└── README.md             This file
+├── worker.js                  Cloudflare Worker — all bot logic (interactions + cron)
+├── setup-panel.js             Post the Job Logs panel (run once)
+├── setup-analytics-panel.js   Post the Analytics panel (run once)
+├── setup-payouts-panel.js     Post the Payouts panel (run once)
+├── register-commands.js       Register /analytics and /payouts slash commands
+├── wrangler.toml              Cloudflare Workers deployment config (worker: kintsugi-bot)
+└── README.md                  This file
 
-.github/
-└── workflows/
-    ├── deploy-bot.yml    GitHub Actions — auto-deploy on push
-    └── setup-panel.yml   GitHub Actions — post the panel message on demand
+.github/workflows/
+├── deploy-bot.yml             Auto-deploy bot on push to discord-bot/**
+├── setup-panel.yml            Post the Job Logs panel on demand
+├── setup-analytics-panel.yml  Post the Analytics panel on demand
+├── setup-payouts-panel.yml    Post the Payouts panel on demand
+└── register-commands.yml      Register slash commands on demand
 ```
 
 ---
@@ -216,25 +271,22 @@ discord-bot/
 
 | Symptom | Fix |
 |---|---|
+| "The specified interactions endpoint URL could not be verified" | Ensure you are using the **`kintsugi-bot` worker URL** (not the static-assets `kintsugi` worker). Check that `DISCORD_PUBLIC_KEY` in Cloudflare matches the Developer Portal value exactly. |
 | "Invalid signature" in Worker logs | Confirm `DISCORD_PUBLIC_KEY` in Cloudflare exactly matches the Developer Portal value. |
 | Button does nothing / shows error | Check Cloudflare Worker logs → likely the Google Sheet is private or the URL has changed. |
 | Mechanic not in list | The sheet must be publicly accessible. Check that the **Mechanic** column name matches exactly. |
-| Panel disappeared | Re-run the **Post Job Logs Panel** Action (or `setup-panel.js` locally) to post a new one and pin it. |
-| Bot was already using `/joblogs` | Run `node discord-bot/register-commands.js` to clear the old slash command. |
-| Deploy Action fails at KV provisioning step | Verify `CLOUDFLARE_API_TOKEN` has **Workers Scripts:Edit** and **Workers KV Storage:Edit** permissions and `CLOUDFLARE_ACCOUNT_ID` is correct. |
-| Deploy Action fails at deploy step | Verify `CLOUDFLARE_API_TOKEN` has Workers Scripts:Edit permission and `CLOUDFLARE_ACCOUNT_ID` is correct. |
-| Cron runs but "env.KV is not bound" warning in logs | The deploy workflow did not complete successfully. Re-run **Deploy Discord Bot** and check the "Provision KV namespace" step for errors. |
-| Cron posts nothing / "missing required configuration" in logs | At least one channel ID secret is not set. Add `DISCORD_BOT_TOKEN`, `ANALYTICS_CHANNEL_ID`, `JOBS_CHANNEL_ID`, and `PAYOUTS_CHANNEL_ID` to GitHub Secrets and re-deploy. |
-| Cron posts to wrong channel | Double-check the channel IDs in GitHub Secrets — copy each ID fresh from Discord (right-click channel → Copy Channel ID). |
-| Analytics posts a new message every week instead of editing | Confirm the KV namespace was provisioned (check the deploy workflow logs) and that the Worker has a `KV` binding in the Cloudflare dashboard under Workers & Pages → your Worker → Settings → Bindings. |
-| "Notify Discord" button shows config panel every time | Enter the Worker URL and `TRIGGER_TOKEN` in the config panel and click **Save & Send** — the values are stored in your browser's localStorage. If they keep disappearing, your browser may be clearing site data. |
-| "Notify Discord" returns 401 | The token entered in the dashboard doesn't match `TRIGGER_TOKEN` in the Worker. Re-check the GitHub secret and redeploy, then update the token in the dashboard config panel (click **Clear saved config** first). |
-| "Notify Discord" returns 501 | `TRIGGER_TOKEN` was not added to GitHub Secrets. Add it and trigger a redeploy. |
-| "Notify Discord" returns 503 | `DISCORD_BOT_TOKEN` or `PAYOUTS_CHANNEL_ID` is missing. Add both to GitHub Secrets and redeploy. |
-| "No payout data found" when notifying | The Google Sheet has no jobs recorded for any completed week yet. This means no mechanic has submitted a job form at all — check that form responses are appearing in the sheet and that the **Mechanic** and **How many Across** columns contain data. |
+| Panel disappeared | Re-run the relevant **Post … Panel** Action to post a new one and pin it. |
+| Slash commands not working | Run **Register Slash Commands** workflow (or add `DISCORD_APP_ID` to GitHub Secrets and redeploy). |
+| Deploy fails at KV provisioning | Verify `CLOUDFLARE_API_TOKEN` has **Workers Scripts:Edit** and **Workers KV Storage:Edit** permissions. |
+| Cron posts nothing / "missing required configuration" in logs | At least one channel ID secret is not set. Add all required secrets and redeploy. |
+| Analytics posts a new message every week instead of editing | Confirm the KV namespace was provisioned (check deploy workflow logs) and the Worker has a `KV` binding in Cloudflare → Workers & Pages → kintsugi-bot → Settings → Bindings. |
+| "Notify Discord" button shows config panel every time | Enter the bot Worker URL and `TRIGGER_TOKEN` — they are stored in your browser's localStorage. |
+| "Notify Discord" returns 401 | The token doesn't match `TRIGGER_TOKEN` in the Worker. Re-check the secret and redeploy. |
+| "Notify Discord" returns 501 | `TRIGGER_TOKEN` is not set. Add it to GitHub Secrets and redeploy. |
+| "Notify Discord" returns 503 | `DISCORD_BOT_TOKEN` or `PAYOUTS_CHANNEL_ID` is missing. Add both and redeploy. |
 
 ---
 
 ## Data privacy
 
-The Worker fetches the Google Sheet in read-only mode each time a user interacts. Interaction results are always ephemeral (private to the requesting user). The only data persisted by Cloudflare is stored in the `KINTSUGI_BOT` Workers KV namespace: the Discord message ID of the weekly analytics embed (so it can be edited rather than re-posted) and the date of the last payday reminder (to prevent duplicate pings). No personal data is stored.
+The Worker fetches the Google Sheet in read-only mode each time a user interacts. All panel interaction results are ephemeral (private to the requesting user). The only data persisted in Cloudflare KV is: the Discord message ID of the weekly analytics embed (so it can be edited rather than re-posted) and the date of the last payday reminder (to prevent duplicate pings). No personal data is stored.

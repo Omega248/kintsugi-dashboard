@@ -1,0 +1,52 @@
+# =======================================
+# Register slash commands with Discord
+#
+# Registers /payouts and /analytics globally with Discord.
+# This workflow is also called automatically by the Deploy Discord Bot workflow
+# after each successful deployment.
+#
+# Trigger: manual only (Actions tab → "Register Slash Commands" → Run workflow)
+#
+# Required GitHub repository secrets:
+#   DISCORD_APP_ID    — Application ID from Discord Developer Portal → General Information
+#   DISCORD_BOT_TOKEN — Bot token from the Discord Developer Portal
+#
+# Optional workflow input:
+#   guild_id — Register commands for a specific guild (server) instead of globally.
+#              Global commands can take up to 1 hour to propagate; guild commands
+#              update instantly. Leave blank for global registration.
+# =======================================
+name: Register Slash Commands
+
+on:
+  workflow_dispatch:
+    inputs:
+      guild_id:
+        description: >
+          (Optional) Discord guild (server) ID to register commands in.
+          Leave blank to register globally (may take up to 1 hour to propagate).
+        required: false
+        default: ''
+
+jobs:
+  register:
+    name: Register commands with Discord
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Register slash commands
+        working-directory: discord-bot
+        env:
+          DISCORD_APP_ID:    ${{ secrets.DISCORD_APP_ID }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID:  ${{ inputs.guild_id }}
+        run: node register-commands.js
