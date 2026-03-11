@@ -3,7 +3,7 @@
   // Kintsugi Dashboard — Cloudflare Workers static assets config
   // https://developers.cloudflare.com/workers/wrangler/configuration/
   // =======================================
-  "name": "kintsugi-discord-bot",
+  "name": "kintsugi",
   "compatibility_date": "2026-03-10",
   "assets": {
     "directory": "./"
