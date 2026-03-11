@@ -7,7 +7,8 @@
   "compatibility_date": "2026-03-10",
   "main": "worker.js",
   "assets": {
-    "directory": "./"
+    "directory": "./",
+    "binding": "ASSETS"
   }
   // Required Worker secrets (set via `wrangler secret put <NAME>`):
   //   DISCORD_PUBLIC_KEY  — Ed25519 public key from the Discord Developer Portal.
