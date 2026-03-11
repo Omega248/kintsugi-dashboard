@@ -3,7 +3,7 @@
   // Kintsugi Dashboard — Cloudflare Workers static assets config
   // https://developers.cloudflare.com/workers/wrangler/configuration/
   // =======================================
-  "name": "kintsugi",
+  "name": "kintsugi-dashboard",
   "compatibility_date": "2026-03-10",
   "main": "worker.js",
   "assets": {

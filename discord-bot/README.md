@@ -92,7 +92,7 @@ The Worker is stateless for interactions — the mechanic name is encoded direct
 ### 3 · Set up Cloudflare Workers
 
 1. Log in to <https://dash.cloudflare.com> → **Workers & Pages** → **Create**.
-2. Give it any temporary name (the `wrangler.toml` sets `kintsugi-discord-bot` on deploy).
+2. Give it any temporary name (the `wrangler.toml` sets `kintsugi` on deploy).
 3. Note your **Account ID** from the dashboard URL or right-hand sidebar.
 
 ### 4 · Add GitHub repository secrets
@@ -126,7 +126,7 @@ The deploy workflow does the following automatically — **no manual steps requi
 3. Binds it to the Worker as `KV` for persistent analytics/reminder state.
 4. Deploys `worker.js` and syncs all secrets (`DISCORD_PUBLIC_KEY`, `DISCORD_BOT_TOKEN`, `ANALYTICS_CHANNEL_ID`, `JOBS_CHANNEL_ID`, `PAYOUTS_CHANNEL_ID`, `RIPTIDE_USER_ID`) into the Worker's secret store.
 
-After it finishes, copy the Worker URL from Cloudflare (e.g. `https://kintsugi-discord-bot.<subdomain>.workers.dev`).
+After it finishes, copy the Worker URL from Cloudflare (e.g. `https://kintsugi.reecestangoe0824.workers.dev`).
 
 ### 6 · Set the Interactions Endpoint URL
 
@@ -180,7 +180,7 @@ The **Payouts** page in the dashboard has a **📢 Notify Discord: Payouts Proce
 
 ### First-time setup
 
-1. Copy your Worker URL from the Cloudflare dashboard (e.g. `https://kintsugi-discord-bot.YOUR-SUBDOMAIN.workers.dev`).
+1. Copy your Worker URL from the Cloudflare dashboard (e.g. `https://kintsugi.reecestangoe0824.workers.dev`).
 2. Generate a `TRIGGER_TOKEN` — any strong random string, e.g.:
    ```bash
    openssl rand -hex 32

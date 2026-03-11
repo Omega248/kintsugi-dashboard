@@ -34,7 +34,7 @@ export default {
           error:
             'API route not found on this worker. ' +
             'Set the Bot Worker URL in your dashboard settings to your ' +
-            'Discord bot worker URL (e.g. https://kintsugi-discord-bot.<subdomain>.workers.dev).',
+            'Discord bot worker URL (e.g. https://kintsugi.reecestangoe0824.workers.dev).',
         }),
         {
           status: 404,
