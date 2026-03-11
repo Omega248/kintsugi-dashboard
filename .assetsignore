@@ -10,6 +10,7 @@ discord-bot/
 
 # Exclude Wrangler configuration and cache
 wrangler.jsonc
+worker.js
 .assetsignore
 .wrangler/
 
