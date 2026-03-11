@@ -50,7 +50,29 @@ export default {
       );
     }
 
-    // Serve static assets for all other requests
+    // Serve static assets for all other requests.
+    // Special case: bot-config.js is generated at deploy time by GitHub Actions
+    // and contains the bot URL + trigger token. If it hasn't been deployed yet
+    // (e.g. Cloudflare secrets aren't configured), serve a default config with
+    // the hardcoded fallback values so the dashboard still functions.
+    if (url.pathname === '/bot-config.js') {
+      const assetResponse = await env.ASSETS.fetch(request);
+      if (assetResponse.status !== 404) return assetResponse;
+      // These fallback values match the FALLBACK_TRIGGER_TOKEN and _BOT_URL
+      // constants already present in the public client-side scripts
+      // (Analytics/analytics-script.js, Payouts/payouts-script.js), so
+      // serving them here adds no additional exposure.
+      const defaultConfig = {
+        url:   'https://kintsugi-discord-bot.reecestangoe0824.workers.dev',
+        token: 'HnoKPfn9ZIYXD79c8PRos4cMphPKNHf5bfCbsjIS',
+      };
+      return new Response(
+        '// Auto-generated fallback (deploy via GitHub Actions to inject real secrets).\n' +
+        'window.KINTSUGI_BOT_CONFIG = ' + JSON.stringify(defaultConfig) + ';\n',
+        { headers: { 'Content-Type': 'application/javascript' } }
+      );
+    }
+
     return env.ASSETS.fetch(request);
   },
 };
