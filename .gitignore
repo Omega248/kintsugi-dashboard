@@ -12,7 +12,9 @@ Payouts/test-payouts-logic.html
 .DS_Store
 Thumbs.db
 
-# Discord bot — local dependencies and Wrangler cache
+# Local dependencies and Wrangler cache
+node_modules/
+.wrangler/
 discord-bot/node_modules/
 discord-bot/.wrangler/
 

@@ -93,20 +93,20 @@ jobs:
               -H "Content-Type: application/json" \
               -d '{"title":"KINTSUGI_BOT"}')
             KV_ID=$(echo "${CREATED}" | python3 -c '
-            import json, sys
-            raw = sys.stdin.read()
-            try:
-                data = json.loads(raw)
-            except ValueError as e:
-                print("ERROR: Cloudflare API returned non-JSON response: " + str(e), file=sys.stderr)
-                print("Response was: " + raw[:500], file=sys.stderr)
-                sys.exit(1)
-            if not data.get("success"):
-                print("ERROR: Cloudflare API call failed: " + str(data.get("errors", [])), file=sys.stderr)
-                print("Ensure CLOUDFLARE_API_TOKEN has Workers KV Storage:Edit permission.", file=sys.stderr)
-                sys.exit(1)
-            print(data["result"]["id"])
-            ')
+          import json, sys
+          raw = sys.stdin.read()
+          try:
+              data = json.loads(raw)
+          except ValueError as e:
+              print("ERROR: Cloudflare API returned non-JSON response: " + str(e), file=sys.stderr)
+              print("Response was: " + raw[:500], file=sys.stderr)
+              sys.exit(1)
+          if not data.get("success"):
+              print("ERROR: Cloudflare API call failed: " + str(data.get("errors", [])), file=sys.stderr)
+              print("Ensure CLOUDFLARE_API_TOKEN has Workers KV Storage:Edit permission.", file=sys.stderr)
+              sys.exit(1)
+          print(data["result"]["id"])
+          ')
             echo "Created KV namespace 'KINTSUGI_BOT'."
           else
             echo "Found existing KV namespace 'KINTSUGI_BOT'."
