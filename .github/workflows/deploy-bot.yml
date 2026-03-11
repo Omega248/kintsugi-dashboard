@@ -8,16 +8,19 @@
 # Required GitHub repository secrets:
 #   CLOUDFLARE_API_TOKEN   — Cloudflare API token with Workers Scripts:Edit AND Workers KV Storage:Edit permissions
 #   CLOUDFLARE_ACCOUNT_ID  — Your Cloudflare account ID
+#
+# Optional GitHub repository secrets (pushed to the Worker when set):
 #   DISCORD_PUBLIC_KEY     — From Discord Developer Portal → "Public Key"
 #   DISCORD_BOT_TOKEN      — From Discord Developer Portal → Bot → "Reset Token"
 #   DISCORD_APP_ID         — From Discord Developer Portal → "Application ID" (used to register slash commands)
 #   ANALYTICS_CHANNEL_ID   — Discord channel ID for the #analytics channel
 #   JOBS_CHANNEL_ID        — Discord channel ID for the #jobs channel
 #   PAYOUTS_CHANNEL_ID     — Discord channel ID for the #payouts channel
-#
-# Optional GitHub repository secrets:
 #   RIPTIDE_USER_ID        — Numeric Discord user ID to @mention on payday
-#   TRIGGER_TOKEN          — Secret token for the dashboard "Notify Discord" and "Trigger Weekly" buttons
+#   TRIGGER_TOKEN          — Secret token for the "Post Payouts Processed" GitHub Actions workflow
+#
+# Missing optional secrets are skipped gracefully — the Worker will still
+# deploy; it just won't be able to post to Discord until the secrets are added.
 #
 # The worker is deployed as "kintsugi-discord-bot" — a dedicated Cloudflare Worker
 # separate from the static-assets worker ("kintsugi").  After deployment,
@@ -128,46 +131,46 @@ jobs:
           apiToken:         ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId:        ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: discord-bot
-          # Sync required secrets from GitHub Secrets → Cloudflare Worker secret store.
-          # Optional secrets (RIPTIDE_USER_ID, TRIGGER_TOKEN) are pushed separately
-          # below so that a missing optional secret does not fail the deploy.
-          secrets: |
-            DISCORD_PUBLIC_KEY
-            DISCORD_BOT_TOKEN
-            ANALYTICS_CHANNEL_ID
-            JOBS_CHANNEL_ID
-            PAYOUTS_CHANNEL_ID
-        env:
-          DISCORD_PUBLIC_KEY:   ${{ secrets.DISCORD_PUBLIC_KEY }}
-          DISCORD_BOT_TOKEN:    ${{ secrets.DISCORD_BOT_TOKEN }}
-          ANALYTICS_CHANNEL_ID: ${{ secrets.ANALYTICS_CHANNEL_ID }}
-          JOBS_CHANNEL_ID:      ${{ secrets.JOBS_CHANNEL_ID }}
-          PAYOUTS_CHANNEL_ID:   ${{ secrets.PAYOUTS_CHANNEL_ID }}
+          # Secrets are pushed in the next step so that missing secrets
+          # (e.g. during initial setup before Discord credentials are added)
+          # do not cause a hard failure here.
 
-      # ---- Push optional secrets only when they are configured ----
+      # ---- Push all secrets only when they are configured ----
       # wrangler secret put rejects empty-string values, so we skip any secret
-      # whose corresponding GitHub Secret is not set.
-      - name: Push optional secrets
+      # whose corresponding GitHub Secret is not set.  This makes the workflow
+      # resilient to first-time deploys where Discord secrets have not yet been
+      # added to the GitHub repository.
+      - name: Push secrets
         env:
           CLOUDFLARE_API_TOKEN:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DISCORD_PUBLIC_KEY:    ${{ secrets.DISCORD_PUBLIC_KEY }}
+          DISCORD_BOT_TOKEN:     ${{ secrets.DISCORD_BOT_TOKEN }}
+          ANALYTICS_CHANNEL_ID:  ${{ secrets.ANALYTICS_CHANNEL_ID }}
+          JOBS_CHANNEL_ID:       ${{ secrets.JOBS_CHANNEL_ID }}
+          PAYOUTS_CHANNEL_ID:    ${{ secrets.PAYOUTS_CHANNEL_ID }}
           RIPTIDE_USER_ID:       ${{ secrets.RIPTIDE_USER_ID }}
           TRIGGER_TOKEN:         ${{ secrets.TRIGGER_TOKEN }}
         working-directory: discord-bot
         run: |
           set -euo pipefail
-          if [ -n "${RIPTIDE_USER_ID:-}" ]; then
-            echo "Pushing RIPTIDE_USER_ID..."
-            printf '%s' "${RIPTIDE_USER_ID}" | wrangler secret put RIPTIDE_USER_ID
-          else
-            echo "RIPTIDE_USER_ID not set — skipping (bot will still post without a @mention)."
-          fi
-          if [ -n "${TRIGGER_TOKEN:-}" ]; then
-            echo "Pushing TRIGGER_TOKEN..."
-            printf '%s' "${TRIGGER_TOKEN}" | wrangler secret put TRIGGER_TOKEN
-          else
-            echo "TRIGGER_TOKEN not set — skipping (buttons will use the hardcoded fallback token)."
-          fi
+          push_secret() {
+            local name="$1"
+            local value="${2:-}"
+            if [ -n "${value}" ]; then
+              echo "Pushing ${name}..."
+              printf '%s' "${value}" | wrangler secret put "${name}"
+            else
+              echo "${name} not set — skipping."
+            fi
+          }
+          push_secret DISCORD_PUBLIC_KEY    "${DISCORD_PUBLIC_KEY:-}"
+          push_secret DISCORD_BOT_TOKEN     "${DISCORD_BOT_TOKEN:-}"
+          push_secret ANALYTICS_CHANNEL_ID  "${ANALYTICS_CHANNEL_ID:-}"
+          push_secret JOBS_CHANNEL_ID       "${JOBS_CHANNEL_ID:-}"
+          push_secret PAYOUTS_CHANNEL_ID    "${PAYOUTS_CHANNEL_ID:-}"
+          push_secret RIPTIDE_USER_ID       "${RIPTIDE_USER_ID:-}"
+          push_secret TRIGGER_TOKEN         "${TRIGGER_TOKEN:-}"
 
       # ---- Register slash commands ----
       # Registers /payouts and /analytics globally with Discord.

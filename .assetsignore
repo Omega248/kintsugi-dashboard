@@ -1,5 +1,11 @@
+# Exclude node_modules installed by wrangler-action at deploy time
+node_modules/
+
 # Exclude the Discord bot worker (deployed separately via deploy-bot.yml)
 discord-bot/
+
+# Exclude generated deploy-time file (never committed to the repo)
+bot-config.js
 
 # Exclude CI/CD configuration
 .github/
