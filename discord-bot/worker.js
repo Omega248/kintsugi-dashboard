@@ -1270,9 +1270,8 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // CORS preflight for the dashboard API endpoints
-    if (request.method === 'OPTIONS' &&
-        (url.pathname === '/api/notify-payouts' || url.pathname === '/api/trigger-weekly')) {
+    // CORS preflight for all dashboard API endpoints
+    if (request.method === 'OPTIONS' && url.pathname.startsWith('/api/')) {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
 
