@@ -168,13 +168,13 @@ PYEOF
           set -euo pipefail
           if [ -n "${RIPTIDE_USER_ID:-}" ]; then
             echo "Pushing RIPTIDE_USER_ID..."
-            printf '%s' "${RIPTIDE_USER_ID}" | npx wrangler secret put RIPTIDE_USER_ID
+            printf '%s' "${RIPTIDE_USER_ID}" | wrangler secret put RIPTIDE_USER_ID
           else
             echo "RIPTIDE_USER_ID not set — skipping (bot will still post without a @mention)."
           fi
           if [ -n "${TRIGGER_TOKEN:-}" ]; then
             echo "Pushing TRIGGER_TOKEN..."
-            printf '%s' "${TRIGGER_TOKEN}" | npx wrangler secret put TRIGGER_TOKEN
+            printf '%s' "${TRIGGER_TOKEN}" | wrangler secret put TRIGGER_TOKEN
           else
             echo "TRIGGER_TOKEN not set — skipping (Notify Discord / Trigger Weekly buttons will return 501 until it is set)."
           fi
