@@ -2,9 +2,13 @@
 // =======================================
 // Kintsugi Discord Bot — Analytics Panel Setup
 //
-// Posts the permanent "View Analytics" panel to a Discord channel.
-// Run this ONCE.  The message will stay there forever; the bot handles
-// all interactions without ever editing the panel itself.
+// Posts the permanent analytics panel to a Discord channel.
+// Run this ONCE.  The message will stay there forever.
+//
+// The bot's scheduled cron (every 5 minutes) automatically posts/edits a
+// separate analytics summary message in the same channel with live data from
+// Google Sheets.  The panel itself is a static informational embed with no
+// button — analytics are always visible to everyone in the channel.
 //
 // Requirements:
 //   - Node.js 18+ (built-in fetch)
@@ -31,34 +35,19 @@ if (!BOT_TOKEN || !CHANNEL_ID) {
 }
 
 // ===== Panel message payload =====
-// The panel is entirely static.  The bot fetches live analytics data from
-// Google Sheets each time the button is pressed.
+// The panel is static.  The bot automatically edits this channel's pinned
+// analytics summary every 5 minutes via the scheduled cron trigger.
 const panelPayload = {
   embeds: [
     {
       title:       '📊 Kintsugi Analytics',
       description:
-        "Click **View Analytics** below to see this week's repair summary.\n\n" +
-        "> • The **current week's** analytics are shown (falling back to the most recent week with data)\n" +
-        '> • The result is visible to **everyone in the channel**\n' +
-        '> • Data is loaded live from the job sheet each time\n\n' +
-        '_The analytics summary is also automatically updated every 5 minutes above this panel._',
+        "The weekly analytics summary is shown above and automatically updated every 5 minutes.\n\n" +
+        '> • The **current week\'s** analytics are shown (falling back to the most recent week with data)\n' +
+        '> • Data is loaded live from the job sheet\n' +
+        '> • Updates are visible to **everyone in the channel**',
       color:  0x4f46e5,
       footer: { text: 'Kintsugi Motorworks · Analytics Panel' },
-    },
-  ],
-  components: [
-    {
-      type: 1, // ACTION_ROW
-      components: [
-        {
-          type:      2,    // BUTTON
-          custom_id: 'analytics_panel_start',
-          label:     'View Analytics',
-          style:     1,    // PRIMARY (blurple)
-          emoji:     { name: '📊' },
-        },
-      ],
     },
   ],
 };
