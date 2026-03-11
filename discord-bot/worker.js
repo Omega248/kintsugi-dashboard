@@ -37,7 +37,7 @@ const STATE_IDS_SHEET = "State ID's";
 // Used when the TRIGGER_TOKEN secret is not configured in the Worker environment.
 // This allows the dashboard "Notify Discord" and "Trigger Weekly" buttons to work
 // out of the box without needing to set up a GitHub secret.
-const FALLBACK_TRIGGER_TOKEN = 'kintsugi-bot-trigger-2025';
+const FALLBACK_TRIGGER_TOKEN = 'HnoKPfn9ZIYXD79c8PRos4cMphPKNHf5bfCbsjIS';
 
 // ===== Pay rates (mirrors constants.js) =====
 const PAY_PER_REPAIR        = 700;
