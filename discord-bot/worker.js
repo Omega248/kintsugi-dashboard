@@ -24,13 +24,20 @@
 // Optional secrets:
 //   RIPTIDE_USER_ID       — Numeric Discord user ID to @mention on payday
 //   TRIGGER_TOKEN         — Bearer token for the dashboard "Notify Discord" and
-//                           "Trigger Weekly" buttons
+//                           "Trigger Weekly" buttons. Falls back to the hardcoded
+//                           FALLBACK_TRIGGER_TOKEN constant if not set.
 // =======================================
 
 // ===== Sheet config (mirrors kintsugi-core.js) =====
 const SHEET_ID        = '1EJxx9BAUyBgj9XImCXQ5_3nr_o5BXyLZ9SSkaww71Ks';
 const JOBS_SHEET      = 'Form responses 1';
 const STATE_IDS_SHEET = "State ID's";
+
+// ===== Fallback trigger token =====
+// Used when the TRIGGER_TOKEN secret is not configured in the Worker environment.
+// This allows the dashboard "Notify Discord" and "Trigger Weekly" buttons to work
+// out of the box without needing to set up a GitHub secret.
+const FALLBACK_TRIGGER_TOKEN = 'kintsugi-bot-trigger-2025';
 
 // ===== Pay rates (mirrors constants.js) =====
 const PAY_PER_REPAIR        = 700;
@@ -1333,18 +1340,13 @@ function apiJson(data, status = 200) {
  * First-run safe: posts a fresh message every time — no KV state required.
  */
 async function handleNotifyPayouts(request, env) {
-  // Require TRIGGER_TOKEN to be configured
-  if (!env.TRIGGER_TOKEN) {
-    return apiJson({
-      ok:    false,
-      error: 'TRIGGER_TOKEN is not configured on the bot. Add it as a GitHub secret and redeploy.',
-    }, 501);
-  }
+  // Use the configured secret or fall back to the hardcoded token
+  const expectedToken = env.TRIGGER_TOKEN || FALLBACK_TRIGGER_TOKEN;
 
   // Validate bearer token
   const authHeader = request.headers.get('Authorization') || '';
   const provided   = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-  if (!provided || provided !== env.TRIGGER_TOKEN) {
+  if (!provided || provided !== expectedToken) {
     return apiJson({ ok: false, error: 'Invalid or missing token.' }, 401);
   }
 
@@ -1410,16 +1412,12 @@ async function handleNotifyPayouts(request, env) {
  * Useful for immediately populating channels after first deploy or for testing.
  */
 async function handleTriggerWeekly(request, env) {
-  if (!env.TRIGGER_TOKEN) {
-    return apiJson({
-      ok:    false,
-      error: 'TRIGGER_TOKEN is not configured on the bot. Add it as a GitHub repository secret and redeploy (the deploy workflow syncs it to the Worker automatically).',
-    }, 501);
-  }
+  // Use the configured secret or fall back to the hardcoded token
+  const expectedToken = env.TRIGGER_TOKEN || FALLBACK_TRIGGER_TOKEN;
 
   const authHeader = request.headers.get('Authorization') || '';
   const provided   = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-  if (!provided || provided !== env.TRIGGER_TOKEN) {
+  if (!provided || provided !== expectedToken) {
     return apiJson({ ok: false, error: 'Invalid or missing token.' }, 401);
   }
 
