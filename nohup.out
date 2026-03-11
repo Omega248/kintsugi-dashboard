@@ -1,0 +1,12 @@
+127.0.0.1 - - [11/Mar/2026 00:18:59] "HEAD / HTTP/1.1" 200 -
+127.0.0.1 - - [11/Mar/2026 00:19:02] "GET /index.html HTTP/1.1" 200 -
+127.0.0.1 - - [11/Mar/2026 00:19:02] "GET /shared-styles.css HTTP/1.1" 200 -
+127.0.0.1 - - [11/Mar/2026 00:19:02] "GET /dashboard-style.css HTTP/1.1" 200 -
+127.0.0.1 - - [11/Mar/2026 00:19:02] "GET /constants.js HTTP/1.1" 200 -
+127.0.0.1 - - [11/Mar/2026 00:19:02] "GET /utils.js HTTP/1.1" 200 -
+127.0.0.1 - - [11/Mar/2026 00:19:02] "GET /payout-helpers.js HTTP/1.1" 200 -
+127.0.0.1 - - [11/Mar/2026 00:19:02] "GET /settings-ui.js HTTP/1.1" 200 -
+127.0.0.1 - - [11/Mar/2026 00:19:02] "GET /preferences.js HTTP/1.1" 200 -
+127.0.0.1 - - [11/Mar/2026 00:19:02] "GET /ui-enhancements.js HTTP/1.1" 200 -
+127.0.0.1 - - [11/Mar/2026 00:19:02] "GET /kintsugi-core.js HTTP/1.1" 200 -
+127.0.0.1 - - [11/Mar/2026 00:19:02] "GET /dashboard-script.js HTTP/1.1" 200 -
