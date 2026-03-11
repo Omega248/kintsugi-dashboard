@@ -370,14 +370,20 @@ async function loadAnalytics() {
 // ===== Discord Trigger: Post Weekly Update =====
 // Reuses the same localStorage keys as the Payouts page bot config so the
 // user only needs to enter the Worker URL and token once across both pages.
+// If bot-config.js was injected at deploy time (via GitHub Actions), those
+// values take priority over localStorage so no manual setup is needed.
 
 const BOT_URL_KEY   = 'kintsugi_bot_api_url';
 const BOT_TOKEN_KEY = 'kintsugi_bot_api_token';
 
+const _DEFAULT_BOT_URL = 'https://kintsugi-discord-bot.reecestangoe0824.workers.dev';
+
 function getAnalyticsBotConfig() {
+  // Prefer deploy-time config injected by GitHub Actions (bot-config.js)
+  const injected = (typeof window !== 'undefined') && window.KINTSUGI_BOT_CONFIG;
   return {
-    url:   localStorage.getItem(BOT_URL_KEY)   || 'https://kintsugi.reecestangoe0824.workers.dev',
-    token: localStorage.getItem(BOT_TOKEN_KEY) || '',
+    url:   injected?.url   || localStorage.getItem(BOT_URL_KEY)   || _DEFAULT_BOT_URL,
+    token: injected?.token || localStorage.getItem(BOT_TOKEN_KEY) || '',
   };
 }
 
@@ -446,7 +452,9 @@ function initDiscordTriggerButton() {
 
   triggerBtn.addEventListener('click', async () => {
     const { url, token } = getAnalyticsBotConfig();
-    if (!url || !token) {
+    // Skip config panel if deploy-time config already provides the token
+    const hasInjectedToken = !!(window.KINTSUGI_BOT_CONFIG?.token);
+    if ((!url || !token) && !hasInjectedToken) {
       if (urlInput)   urlInput.value   = url;
       if (tokenInput) tokenInput.value = token;
       configPanel.classList.remove('hidden');

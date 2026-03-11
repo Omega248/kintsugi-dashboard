@@ -40,9 +40,9 @@ const panelPayload = {
       description:
         "Click **View Analytics** below to see this week's repair summary.\n\n" +
         "> • The **current week's** analytics are shown (falling back to the most recent week with data)\n" +
-        '> • Only you can see the result — it is **private** and clears when dismissed\n' +
+        '> • The result is visible to **everyone in the channel**\n' +
         '> • Data is loaded live from the job sheet each time\n\n' +
-        '_Press the button any time to get a fresh snapshot._',
+        '_The analytics summary is also automatically updated every 5 minutes above this panel._',
       color:  0x4f46e5,
       footer: { text: 'Kintsugi Motorworks · Analytics Panel' },
     },

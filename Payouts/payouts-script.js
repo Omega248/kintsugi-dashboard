@@ -1477,10 +1477,14 @@ function updateView() {
 const BOT_URL_KEY   = 'kintsugi_bot_api_url';
 const BOT_TOKEN_KEY = 'kintsugi_bot_api_token';
 
+const _DEFAULT_BOT_URL = 'https://kintsugi-discord-bot.reecestangoe0824.workers.dev';
+
 function getBotConfig() {
+  // Prefer deploy-time config injected by GitHub Actions (bot-config.js)
+  const injected = (typeof window !== 'undefined') && window.KINTSUGI_BOT_CONFIG;
   return {
-    url:   localStorage.getItem(BOT_URL_KEY)   || 'https://kintsugi.reecestangoe0824.workers.dev',
-    token: localStorage.getItem(BOT_TOKEN_KEY) || '',
+    url:   injected?.url   || localStorage.getItem(BOT_URL_KEY)   || _DEFAULT_BOT_URL,
+    token: injected?.token || localStorage.getItem(BOT_TOKEN_KEY) || '',
   };
 }
 
@@ -1556,8 +1560,10 @@ function initNotifyDiscordButton() {
 
   notifyBtn.addEventListener('click', async () => {
     const { url, token } = getBotConfig();
+    // Skip config panel if deploy-time config already provides the token
+    const hasInjectedToken = !!(window.KINTSUGI_BOT_CONFIG?.token);
 
-    if (!url || !token) {
+    if ((!url || !token) && !hasInjectedToken) {
       // Pre-fill any previously saved (partial) values and show config panel
       if (urlInput)   urlInput.value   = url;
       if (tokenInput) tokenInput.value = token;

@@ -163,18 +163,32 @@ function parseDateLike(raw) {
   const s = String(raw).trim();
   if (!s) return null;
 
-  // Standard ISO / US formats
-  const d = new Date(s);
-  if (!isNaN(d.getTime())) return d;
-
-  // DD/MM/YYYY or DD/MM/YY
-  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  // DD/MM/YYYY or DD-MM-YYYY (with optional time — UK/European format used by the sheet).
+  // This must be checked BEFORE the generic new Date(s) fallback because V8 interprets
+  // ambiguous d/m/yyyy strings as MM/DD (US format), which gives wrong results for
+  // UK-format dates like "11/03/2026" (would be parsed as November 3 instead of March 11).
+  let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
   if (m) {
-    const [, dd, mm, yy] = m;
+    const dd   = parseInt(m[1], 10);
+    const mm   = parseInt(m[2], 10);
+    const yy   = m[3];
     const yyyy = yy.length === 2 ? '20' + yy : yy;
-    return new Date(`${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`);
+    if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+      const d = new Date(`${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`);
+      if (!isNaN(d.getTime())) return d;
+    }
   }
-  return null;
+
+  // YYYY-MM-DD (ISO date, possibly with time component)
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) {
+    const d = new Date(`${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Fallback: let the engine try (handles RFC 2822, some locale formats, etc.)
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 function fmtDate(d) {
@@ -273,11 +287,14 @@ function parseJobsSheet(rows) {
   const headers  = rows[0].map(h => (h || '').trim());
   const lower    = headers.map(h => h.toLowerCase());
 
-  const iMech   = headers.indexOf('Mechanic');
-  const iAcross = headers.indexOf('How many Across');
-  const iTime   = headers.indexOf('Timestamp');
-  const iWeek   = headers.indexOf('Week Ending');
-  const iMonth  = headers.indexOf('Month Ending');
+  // Use fuzzy matching (like the web dashboard) to tolerate minor header
+  // variations such as "Mechanic Name" vs "Mechanic", or "How many Across?"
+  // vs "How many Across".
+  const iMech   = lower.findIndex(h => h.includes('mechanic'));
+  const iAcross = lower.findIndex(h => h.includes('across') || h.includes('repairs'));
+  const iTime   = lower.findIndex(h => h.includes('timestamp'));
+  const iWeek   = lower.findIndex(h => h.includes('week') && h.includes('end'));
+  const iMonth  = lower.findIndex(h => h.includes('month') && h.includes('end'));
   const iEngine = lower.findIndex(h => h.includes('engine') && h.includes('replacement'));
 
   if (iMech === -1 || iAcross === -1) return [];
@@ -824,8 +841,8 @@ async function handleWeekSelect(interaction, ctx) {
 /**
  * "View Analytics" button pressed on the permanent analytics panel.
  *
- * Responds immediately with an ephemeral deferral, then fetches live sheet
- * data and edits that private message with the current week's analytics
+ * Responds immediately with a public deferral (visible to everyone in the
+ * channel), then fetches live sheet data and posts the current week's analytics
  * summary (falling back to the most recent week if the current week has no
  * jobs yet).  The panel message itself is never touched.
  */
@@ -860,10 +877,9 @@ async function handleAnalyticsPanelButton(interaction, ctx) {
     }
   })());
 
-  // Acknowledge immediately — ephemeral so only the button-clicker sees it
+  // Acknowledge immediately — visible to everyone in the channel (not ephemeral)
   return jsonResponse({
     type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
-    data: { flags: 64 },
   });
 }
 
@@ -1277,12 +1293,32 @@ function buildJobsPayload(summary) {
 }
 
 /**
- * Post the weekly job-activity summary to the #jobs channel.
- * Uses DISCORD_BOT_TOKEN and JOBS_CHANNEL_ID from env.
+ * Post or edit the weekly job-activity summary in the #jobs channel.
+ * Uses KV to persist the jobs message ID so the same message is edited
+ * each run rather than posting a new one.  If the stored message no longer
+ * exists (deleted), a new message is posted and its ID stored.
+ * Uses DISCORD_BOT_TOKEN, JOBS_CHANNEL_ID, and the KV namespace from env.
  */
 async function postJobsUpdate(env, summary) {
   if (!env.DISCORD_BOT_TOKEN || !env.JOBS_CHANNEL_ID) return false;
-  const messageId = await botPost(env.JOBS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, buildJobsPayload(summary));
+
+  const payload = buildJobsPayload(summary);
+
+  // Try to edit the existing jobs message
+  if (env.KV) {
+    const storedId = await env.KV.get('jobs_message_id');
+    if (storedId) {
+      const edited = await botEdit(env.JOBS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, storedId, payload);
+      if (edited) return true;
+      // Message was deleted — fall through to post a new one
+    }
+  }
+
+  // Post a new message and persist its ID
+  const messageId = await botPost(env.JOBS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, payload);
+  if (messageId && env.KV) {
+    await env.KV.put('jobs_message_id', messageId);
+  }
   return messageId !== null;
 }
 
@@ -1604,7 +1640,14 @@ export default {
     try {
       const jobRows = await fetchSheet(JOBS_SHEET);
       const allJobs = parseJobsSheet(jobRows);
-      const summary = buildCurrentWeekSummary(allJobs);
+
+      // Use current week data; fall back to the most recent week with actual
+      // data so the messages are always useful even early in the week.
+      let summary = buildCurrentWeekSummary(allJobs);
+      if (summary.totalRepairs === 0) {
+        const latest = buildLatestWeekSummary(allJobs);
+        if (latest && latest.totalRepairs > 0) summary = latest;
+      }
 
       await Promise.all([
         postWeeklyAnalytics(env, summary),

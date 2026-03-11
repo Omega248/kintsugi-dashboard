@@ -11,21 +11,22 @@
 # PING; the Worker responds with PONG automatically. ✅
 # =======================================
 
-name               = "kintsugi-bot"
+name               = "kintsugi-discord-bot"
 main               = "worker.js"
 compatibility_date = "2024-09-23"
 
 # ===== Scheduled Cron Trigger =====
-# Fires every Sunday at 18:00 UTC to:
+# Fires every 5 minutes to:
 #   • Edit the pinned analytics summary (or post it fresh if it doesn't exist yet)
-#   • Post the weekly job-activity list to #jobs
-#   • Send a payday reminder ping (once per week, deduplicated via KV)
+#   • Edit the pinned job-activity message in #jobs (or post it fresh if needed)
+#   • Send the weekly payday reminder ping (once per week, deduplicated via KV)
 [triggers]
-crons = ["0 18 * * SUN"]
+crons = ["*/5 * * * *"]
 
 # ===== KV Namespace =====
-# Used to persist the analytics message ID and the last reminder week so the
-# cron edits existing messages rather than posting new ones each run.
+# Used to persist the analytics message ID, jobs message ID, and the last
+# reminder week so the cron edits existing messages rather than posting new
+# ones each run.
 #
 # The KV namespace is provisioned automatically by the GitHub Actions deploy
 # workflow (.github/workflows/deploy-bot.yml). The binding is injected into
