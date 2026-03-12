@@ -115,7 +115,7 @@ function fmtDate(d) {
 }
 
 function fmtMoney(n) {
-  return '£' + Math.round(n || 0).toLocaleString('en-GB');
+  return '$' + Math.round(Number.isFinite(n) ? n : 0).toLocaleString('en-US');
 }
 
 // ===== Sheet parsers =====
@@ -207,9 +207,13 @@ function filterByWeekEnding(jobs, weekEndDate) {
 // ===== Build payouts embed =====
 
 function buildPayload(weekEndDate, payouts) {
+  // Encode the week-end date in the button so the worker can filter to this
+  // exact week when a mechanic clicks "View My Payout".
+  const weekEndISO = weekEndDate.toISOString().slice(0, 10);
+
   const header =
-    `✅ Payouts for the week ending **${fmtDate(weekEndDate)}** have been processed.\n\n` +
-    'All mechanics listed below have been paid. If you believe there is an error, please contact management.';
+    `Payouts for the week ending **${fmtDate(weekEndDate)}** have been processed.\n\n` +
+    'All mechanics listed below have been paid. Press **View My Payout** to see your individual breakdown.';
 
   const lines = payouts.map(m => {
     let line = `• **${m.name}**`;
@@ -226,7 +230,7 @@ function buildPayload(weekEndDate, payouts) {
 
   return {
     embeds: [{
-      title:       '✅ Payouts Processed',
+      title:       `✅ Payouts Processed — Week Ending ${fmtDate(weekEndDate)}`,
       description: header,
       color:       0x22c55e,
       fields: [
@@ -240,6 +244,16 @@ function buildPayload(weekEndDate, payouts) {
       ],
       timestamp: new Date().toISOString(),
       footer:    { text: 'Kintsugi Motorworks · Payouts' },
+    }],
+    components: [{
+      type: 1, // ACTION_ROW
+      components: [{
+        type:      2,    // BUTTON
+        custom_id: `payouts_week_view:${weekEndISO}`,
+        label:     'View My Payout',
+        style:     1,    // PRIMARY (blurple)
+        emoji:     { name: '💸' },
+      }],
     }],
   };
 }

@@ -69,8 +69,8 @@ function mechBuildStateIdMap(stateRows) {
 
 // ===== Calculation helpers =====
 function mechCalculateEngineValue(engineCount) {
-  // LSPD/Other: £12k reimbursement + £1.5k bonus
-  // BCSO: £12k reimbursement only (but we don't track dept here, using LSPD rate)
+  // LSPD/Other: $12k reimbursement + $1.5k bonus
+  // BCSO: $12k reimbursement only (but we don't track dept here, using LSPD rate)
   return engineCount * (MECH_ENGINE_REIMBURSEMENT + MECH_ENGINE_BONUS_LSPD);
 }
 
@@ -95,8 +95,8 @@ function mechFmtDate(d) {
 }
 
 function mechFmtMoney(amount) {
-  // Using UK format (£) for this page
-  return "£" + (amount || 0).toLocaleString("en-GB");
+  // Using US format ($) for this page
+  return "$" + (amount || 0).toLocaleString("en-US");
 }
 
 function mechGetBestDate(job) {
@@ -335,8 +335,8 @@ function mechRenderGlobalSummary(stats, globalEarliest, globalLatest) {
     sumTotalPayoutEl.textContent = mechFmtMoney(totalPayout);
   }
   if (sumTotalPayoutSubEl) {
-    sumTotalPayoutSubEl.textContent = `Assuming £${MECH_PAY_PER_REPAIR.toLocaleString(
-      "en-GB"
+    sumTotalPayoutSubEl.textContent = `Assuming $${MECH_PAY_PER_REPAIR.toLocaleString(
+      "en-US"
     )} per repair.`;
   }
 
