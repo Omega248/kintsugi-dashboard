@@ -46,6 +46,14 @@ const commands = [
     // Same permission requirement as /payouts — adjust per-server as needed.
     default_member_permissions: '32',
   },
+  {
+    name:                       'update-analytics',
+    description:                'Manually refresh the pinned analytics summary in #analytics with live data from the sheet.',
+    dm_permission:              false,
+    // Requires Manage Guild permission — only managers/admins should be able
+    // to force-refresh the public analytics message.
+    default_member_permissions: '32',
+  },
 ];
 
 // ===== Register commands =====

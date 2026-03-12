@@ -554,6 +554,76 @@ async function handleAnalyticsCommand(interaction, ctx) {
   });
 }
 
+// ===== /update-analytics slash-command handler =====
+
+/**
+ * Handle the /update-analytics slash command.
+ * Defers privately (ephemeral), fetches live data from Google Sheets, then
+ * posts or edits the analytics summary message in #analytics — identical to
+ * what the 5-minute cron does.  Only the invoking user sees the confirmation.
+ *
+ * Useful when the automatic cron hasn't fired yet or the channel message needs
+ * an immediate refresh without waiting for the next scheduled run.
+ */
+async function handleUpdateAnalyticsCommand(interaction, env, ctx) {
+  const { application_id: appId, token } = interaction;
+
+  ctx.waitUntil((async () => {
+    try {
+      if (!env.ANALYTICS_CHANNEL_ID) {
+        await editOriginalMessage(appId, token, {
+          content: '❌ `ANALYTICS_CHANNEL_ID` is not configured. Add it as a Worker secret and redeploy.',
+        });
+        return;
+      }
+
+      const jobRows = await fetchSheet(JOBS_SHEET);
+      const allJobs = parseJobsSheet(jobRows);
+
+      if (!allJobs.length) {
+        await editOriginalMessage(appId, token, {
+          content: '❌ No job data found in the sheet. Check that the spreadsheet is shared publicly.',
+        });
+        return;
+      }
+
+      // Use the current week; fall back to the most recent week with data
+      let summary = buildCurrentWeekSummary(allJobs);
+      if (summary.totalRepairs === 0) {
+        const latest = buildLatestWeekSummary(allJobs);
+        if (latest && latest.totalRepairs > 0) summary = latest;
+      }
+
+      const ok = await postWeeklyAnalytics(env, summary);
+
+      if (ok) {
+        await editOriginalMessage(appId, token, {
+          content:
+            `✅ Analytics updated for the week ending **${fmtDate(summary.weekEndDate)}** — ` +
+            `${summary.totalRepairs} repair${summary.totalRepairs !== 1 ? 's' : ''}, ` +
+            `${fmtMoney(summary.totalPayout)} total payout.`,
+        });
+      } else {
+        await editOriginalMessage(appId, token, {
+          content:
+            '❌ Failed to update the analytics message. ' +
+            'Check that `ANALYTICS_CHANNEL_ID` and `DISCORD_BOT_TOKEN` are set correctly.',
+        });
+      }
+    } catch (err) {
+      await editOriginalMessage(appId, token, {
+        content: `❌ Error: ${err.message}`,
+      }).catch(() => {});
+    }
+  })());
+
+  // Deferred ephemeral response — only the command invoker sees the result
+  return jsonResponse({
+    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+    data: { flags: 64 },
+  });
+}
+
 // ===== Mechanic select-menu builder =====
 
 /**
@@ -1667,6 +1737,9 @@ export default {
       }
       if (interaction.data?.name === 'analytics') {
         return handleAnalyticsCommand(interaction, ctx);
+      }
+      if (interaction.data?.name === 'update-analytics') {
+        return handleUpdateAnalyticsCommand(interaction, env, ctx);
       }
     }
 

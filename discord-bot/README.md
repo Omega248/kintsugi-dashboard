@@ -221,14 +221,17 @@ DISCORD_BOT_TOKEN=<token> DISCORD_CHANNEL_ID=<payouts-channel-id> node discord-b
 
 ## Slash commands
 
-After running the deploy workflow (or **Register Slash Commands**), two slash commands are available:
+After running the deploy workflow (or **Register Slash Commands**), three slash commands are available:
 
 | Command | Description |
 |---|---|
 | `/analytics` | Shows the current week's analytics summary publicly in the channel |
+| `/update-analytics` | Force-refreshes the pinned analytics summary in #analytics with live data (edits the existing message — never posts a new one) |
 | `/payouts` | Posts the payouts-processed embed publicly, listing all mechanics and amounts |
 
-Both commands require **Manage Guild** permission by default. This can be changed per-server in **Server Settings → Integrations → Kintsugi Bot**.
+All commands require **Manage Guild** permission by default. This can be changed per-server in **Server Settings → Integrations → Kintsugi Bot**.
+
+> **Tip:** Use `/update-analytics` whenever you want to trigger an immediate refresh instead of waiting for the next 5-minute automatic cycle. The command edits the existing pinned message so the channel stays clean.
 
 ---
 
@@ -253,7 +256,7 @@ discord-bot/
 ├── setup-panel.js             Post the Job Logs panel (run once)
 ├── setup-analytics-panel.js   Post the Analytics panel (run once)
 ├── setup-payouts-panel.js     Post the Payouts panel (run once)
-├── register-commands.js       Register /analytics and /payouts slash commands
+├── register-commands.js       Register /analytics, /update-analytics, and /payouts slash commands
 ├── wrangler.toml              Cloudflare Workers deployment config (worker: kintsugi-bot)
 └── README.md                  This file
 
@@ -277,6 +280,7 @@ discord-bot/
 | Mechanic not in list | The sheet must be publicly accessible. Check that the **Mechanic** column name matches exactly. |
 | Panel disappeared | Re-run the relevant **Post … Panel** Action to post a new one and pin it. |
 | Slash commands not working | Run **Register Slash Commands** workflow (or add `DISCORD_APP_ID` to GitHub Secrets and redeploy). |
+| `/update-analytics` returns "`ANALYTICS_CHANNEL_ID` is not configured" | Add `ANALYTICS_CHANNEL_ID` as a GitHub secret and redeploy so the Worker has access to it. |
 | Deploy fails at KV provisioning | Verify `CLOUDFLARE_API_TOKEN` has **Workers Scripts:Edit** and **Workers KV Storage:Edit** permissions. |
 | Cron posts nothing / "missing required configuration" in logs | At least one channel ID secret is not set. Add all required secrets and redeploy. |
 | Analytics posts a new message every week instead of editing | Confirm the KV namespace was provisioned (check deploy workflow logs) and the Worker has a `KV` binding in Cloudflare → Workers & Pages → kintsugi-bot → Settings → Bindings. |
