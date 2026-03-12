@@ -46,6 +46,24 @@ const commands = [
     // Same permission requirement as /payouts — adjust per-server as needed.
     default_member_permissions: '32',
   },
+  {
+    name:                       'update-analytics',
+    description:                'Refresh the pinned analytics summary now and (optionally) set which channel auto-updates every 5 min.',
+    dm_permission:              false,
+    // Requires Manage Guild permission — only managers/admins should be able
+    // to refresh or reconfigure the analytics channel.
+    default_member_permissions: '32',
+    options: [
+      {
+        name:         'channel',
+        description:
+          'Channel to post analytics to. Saves as the auto-update target for future 5-minute refreshes.',
+        type:          7,    // APPLICATION_COMMAND_OPTION_TYPE: CHANNEL
+        required:      false,
+        channel_types: [0],  // GUILD_TEXT channels only
+      },
+    ],
+  },
 ];
 
 // ===== Register commands =====

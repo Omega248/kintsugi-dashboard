@@ -221,14 +221,32 @@ DISCORD_BOT_TOKEN=<token> DISCORD_CHANNEL_ID=<payouts-channel-id> node discord-b
 
 ## Slash commands
 
-After running the deploy workflow (or **Register Slash Commands**), two slash commands are available:
+After running the deploy workflow (or **Register Slash Commands**), three slash commands are available:
 
 | Command | Description |
 |---|---|
 | `/analytics` | Shows the current week's analytics summary publicly in the channel |
+| `/update-analytics [channel]` | Immediately refreshes the pinned analytics summary (edits the existing message — never spams new ones). If `channel` is specified, that channel is saved as the auto-update target for all future 5-minute refreshes. |
 | `/payouts` | Posts the payouts-processed embed publicly, listing all mechanics and amounts |
 
-Both commands require **Manage Guild** permission by default. This can be changed per-server in **Server Settings → Integrations → Kintsugi Bot**.
+All commands require **Manage Guild** permission by default. This can be changed per-server in **Server Settings → Integrations → Kintsugi Bot**.
+
+### /update-analytics — auto-update target
+
+The `channel` option lets you configure **which channel auto-updates every 5 minutes**, directly from Discord — no need to change GitHub secrets or redeploy.
+
+```
+/update-analytics channel:#analytics
+```
+
+What happens:
+1. Analytics are posted / edited in `#analytics` immediately.
+2. The channel ID is saved in Cloudflare KV (`analytics_channel_id`).
+3. From that point on, every automatic 5-minute refresh targets this channel.
+
+The saved channel persists until you run `/update-analytics channel:#other-channel` again.
+
+> **Without a `channel` argument** the command uses the KV-stored channel from a previous run, or falls back to the `ANALYTICS_CHANNEL_ID` GitHub secret. At least one of these must be configured for the command to work.
 
 ---
 
@@ -253,7 +271,7 @@ discord-bot/
 ├── setup-panel.js             Post the Job Logs panel (run once)
 ├── setup-analytics-panel.js   Post the Analytics panel (run once)
 ├── setup-payouts-panel.js     Post the Payouts panel (run once)
-├── register-commands.js       Register /analytics and /payouts slash commands
+├── register-commands.js       Register /analytics, /update-analytics, and /payouts slash commands
 ├── wrangler.toml              Cloudflare Workers deployment config (worker: kintsugi-bot)
 └── README.md                  This file
 
@@ -277,6 +295,7 @@ discord-bot/
 | Mechanic not in list | The sheet must be publicly accessible. Check that the **Mechanic** column name matches exactly. |
 | Panel disappeared | Re-run the relevant **Post … Panel** Action to post a new one and pin it. |
 | Slash commands not working | Run **Register Slash Commands** workflow (or add `DISCORD_APP_ID` to GitHub Secrets and redeploy). |
+| `/update-analytics` shows "No analytics channel configured" | Run `/update-analytics` and pick a channel from the **channel** dropdown, or add `ANALYTICS_CHANNEL_ID` as a GitHub secret and redeploy. |
 | Deploy fails at KV provisioning | Verify `CLOUDFLARE_API_TOKEN` has **Workers Scripts:Edit** and **Workers KV Storage:Edit** permissions. |
 | Cron posts nothing / "missing required configuration" in logs | At least one channel ID secret is not set. Add all required secrets and redeploy. |
 | Analytics posts a new message every week instead of editing | Confirm the KV namespace was provisioned (check deploy workflow logs) and the Worker has a `KV` binding in Cloudflare → Workers & Pages → kintsugi-bot → Settings → Bindings. |
