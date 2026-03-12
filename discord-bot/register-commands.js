@@ -48,7 +48,7 @@ const commands = [
   },
   {
     name:                       'update-analytics',
-    description:                'Refresh the pinned analytics summary now and (optionally) set which channel auto-updates every 5 min.',
+    description:                'Refresh the pinned analytics summary now and optionally set which channel auto-updates every 5 min.',
     dm_permission:              false,
     // Requires Manage Guild permission — only managers/admins should be able
     // to refresh or reconfigure the analytics channel.
