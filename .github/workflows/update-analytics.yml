@@ -1,0 +1,59 @@
+# =======================================
+# Update Analytics — post/edit the live analytics summary in #analytics
+#
+# Fetches live data from the job sheet and posts or edits the analytics
+# summary message in the configured Discord channel.
+#
+# Triggers:
+#   - Manual:    Actions tab → "Update Analytics" → Run workflow
+#   - Automatic: every 5 minutes via the schedule cron trigger
+#
+# Run the workflow manually once to post the first analytics message.
+# After that it will continue to update automatically every 5 minutes.
+#
+# Required GitHub repository secrets:
+#   DISCORD_BOT_TOKEN   — Bot token from the Discord Developer Portal
+#   ANALYTICS_CHANNEL_ID — Discord channel ID for the #analytics channel
+#                          (right-click channel in Discord → Copy Channel ID)
+#
+# Optional workflow input:
+#   channel_id — Override the target channel ID at run time.
+#                Leave blank to use the ANALYTICS_CHANNEL_ID secret.
+# =======================================
+name: Update Analytics
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      channel_id:
+        description: >
+          Discord channel ID to post the analytics in.
+          Leave blank to use the ANALYTICS_CHANNEL_ID secret (your #analytics channel).
+        required: false
+        default: ''
+
+jobs:
+  update:
+    name: Post / edit analytics summary
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Update analytics message
+        working-directory: discord-bot
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          # Use the manually-supplied channel_id if provided, otherwise fall
+          # back to the ANALYTICS_CHANNEL_ID secret.
+          DISCORD_CHANNEL_ID: ${{ inputs.channel_id != '' && inputs.channel_id || secrets.ANALYTICS_CHANNEL_ID }}
+        run: node update-analytics.js
