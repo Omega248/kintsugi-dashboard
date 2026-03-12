@@ -559,22 +559,40 @@ async function handleAnalyticsCommand(interaction, ctx) {
 /**
  * Handle the /update-analytics slash command.
  * Defers privately (ephemeral), fetches live data from Google Sheets, then
- * posts or edits the analytics summary message in #analytics — identical to
- * what the 5-minute cron does.  Only the invoking user sees the confirmation.
+ * posts or edits the analytics summary message — identical to what the
+ * 5-minute cron does.  Only the invoking user sees the confirmation.
  *
- * Useful when the automatic cron hasn't fired yet or the channel message needs
- * an immediate refresh without waiting for the next scheduled run.
+ * Optional "channel" argument:
+ *   When provided, the channel ID is persisted in KV so every future
+ *   5-minute automatic refresh also posts to that channel.  Once set, the
+ *   channel persists until changed again with another /update-analytics call.
  */
 async function handleUpdateAnalyticsCommand(interaction, env, ctx) {
   const { application_id: appId, token } = interaction;
 
   ctx.waitUntil((async () => {
     try {
-      if (!env.ANALYTICS_CHANNEL_ID) {
-        await editOriginalMessage(appId, token, {
-          content: '❌ `ANALYTICS_CHANNEL_ID` is not configured. Add it as a Worker secret and redeploy.',
+      // Extract optional channel option (Discord sends the channel ID as a string)
+      const channelOption = interaction.data?.options?.find(o => o.name === 'channel');
+      const channelId = channelOption?.value || null;
+
+      // Persist the chosen channel in KV so the 5-minute cron auto-update uses it
+      if (channelId && env.KV) {
+        await env.KV.put('analytics_channel_id', channelId);
+      }
+
+      // Resolve the effective channel that postWeeklyAnalytics will use so the
+      // confirmation message can show the actual channel rather than a vague label.
+      // KV lookup is skipped when channelId was already provided via the command option.
+      let effectiveChannelId = channelId;
+      if (!effectiveChannelId && env.KV) {
+        effectiveChannelId = await env.KV.get('analytics_channel_id').catch(err => {
+          console.warn('handleUpdateAnalyticsCommand: KV.get(analytics_channel_id) failed:', err?.message);
+          return null;
         });
-        return;
+      }
+      if (!effectiveChannelId) {
+        effectiveChannelId = env.ANALYTICS_CHANNEL_ID || null;
       }
 
       const jobRows = await fetchSheet(JOBS_SHEET);
@@ -597,17 +615,23 @@ async function handleUpdateAnalyticsCommand(interaction, env, ctx) {
       const ok = await postWeeklyAnalytics(env, summary);
 
       if (ok) {
+        const channelMention = effectiveChannelId ? `<#${effectiveChannelId}>` : 'the analytics channel';
+        const autoUpdateNote = channelId
+          ? '\n\n🔄 This channel is now the auto-update target — the 5-minute refresh will keep it updated.'
+          : '';
         await editOriginalMessage(appId, token, {
           content:
-            `✅ Analytics updated for the week ending **${fmtDate(summary.weekEndDate)}** — ` +
+            `✅ Analytics updated in ${channelMention} for the week ending **${fmtDate(summary.weekEndDate)}** — ` +
             `${summary.totalRepairs} repair${summary.totalRepairs !== 1 ? 's' : ''}, ` +
-            `${fmtMoney(summary.totalPayout)} total payout.`,
+            `${fmtMoney(summary.totalPayout)} total payout.` +
+            autoUpdateNote,
         });
       } else {
+        const channelHint = effectiveChannelId
+          ? `Could not post to <#${effectiveChannelId}> — check that the bot has **Send Messages** permission in that channel.`
+          : 'No analytics channel configured. Run `/update-analytics` and pick a channel from the dropdown, or add `ANALYTICS_CHANNEL_ID` as a GitHub secret and redeploy.';
         await editOriginalMessage(appId, token, {
-          content:
-            '❌ Failed to update the analytics message. ' +
-            'Check that `ANALYTICS_CHANNEL_ID` and `DISCORD_BOT_TOKEN` are set correctly.',
+          content: `❌ Failed to update analytics. ${channelHint}`,
         });
       }
     } catch (err) {
@@ -1409,12 +1433,21 @@ function buildAnalyticsPayload(summary) {
 /**
  * Post or edit the weekly analytics summary in the #analytics channel.
  * Uses KV to persist the analytics message ID so the same message is edited
- * each week rather than posting a new one.  If the stored message no longer
+ * each run rather than posting a new one.  If the stored message no longer
  * exists (deleted), a new message is posted and its ID stored.
- * Uses DISCORD_BOT_TOKEN, ANALYTICS_CHANNEL_ID, and the KV namespace from env.
+ *
+ * Channel resolution order (first match wins):
+ *   1. KV key "analytics_channel_id" — set by /update-analytics channel:<#X>
+ *   2. ANALYTICS_CHANNEL_ID environment secret
  */
 async function postWeeklyAnalytics(env, summary) {
-  if (!env.DISCORD_BOT_TOKEN || !env.ANALYTICS_CHANNEL_ID) return false;
+  // Resolve which channel to post to: KV override takes priority over the env secret
+  const kvChannelId = env.KV ? await env.KV.get('analytics_channel_id').catch(err => {
+    console.warn('postWeeklyAnalytics: KV.get(analytics_channel_id) failed:', err?.message);
+    return null;
+  }) : null;
+  const channelId = kvChannelId || env.ANALYTICS_CHANNEL_ID;
+  if (!env.DISCORD_BOT_TOKEN || !channelId) return false;
 
   const payload = buildAnalyticsPayload(summary);
 
@@ -1422,14 +1455,14 @@ async function postWeeklyAnalytics(env, summary) {
   if (env.KV) {
     const storedId = await env.KV.get('analytics_message_id');
     if (storedId) {
-      const edited = await botEdit(env.ANALYTICS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, storedId, payload);
+      const edited = await botEdit(channelId, env.DISCORD_BOT_TOKEN, storedId, payload);
       if (edited) return true;
-      // Message was deleted — fall through to post a new one
+      // Message was deleted or is in a different channel — fall through to post a new one
     }
   }
 
   // Post a new message and persist its ID
-  const messageId = await botPost(env.ANALYTICS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, payload);
+  const messageId = await botPost(channelId, env.DISCORD_BOT_TOKEN, payload);
   if (messageId && env.KV) {
     await env.KV.put('analytics_message_id', messageId);
   }
