@@ -206,7 +206,7 @@ function fmtDate(d) {
 }
 
 function fmtMoney(n) {
-  return '£' + Math.round(n || 0).toLocaleString('en-GB');
+  return '$' + Math.round(n || 0).toLocaleString('en-US');
 }
 
 // ===== Week filtering =====
