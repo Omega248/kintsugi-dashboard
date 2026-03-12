@@ -1270,16 +1270,14 @@ async function botEdit(channelId, botToken, messageId, payload) {
 }
 
 /**
- * Validate that all required channel/bot configuration is present in env.
+ * Validate that the minimum required bot configuration is present in env.
  * Returns an array of missing variable names (empty array means all good).
+ * Only DISCORD_BOT_TOKEN is truly required for the bot to function;
+ * individual posting functions (postWeeklyAnalytics, postJobsUpdate,
+ * postPaydayReminder) each guard their own optional channel IDs.
  */
 function validateConfig(env) {
-  const required = [
-    'DISCORD_BOT_TOKEN',
-    'ANALYTICS_CHANNEL_ID',
-    'JOBS_CHANNEL_ID',
-    'PAYOUTS_CHANNEL_ID',
-  ];
+  const required = ['DISCORD_BOT_TOKEN'];
   return required.filter(k => !env[k]);
 }
 
@@ -1545,12 +1543,13 @@ async function handleNotifyPayouts(request, env) {
 /**
  * Handle POST /api/trigger-weekly — triggered from the web dashboard button.
  *
- * Runs the same logic as the Sunday cron trigger:
+ * Runs the same logic as the 5-minute cron trigger:
  *   1. Reads live job data from Google Sheets.
  *   2. Posts/edits the weekly analytics summary in #analytics.
  *   3. Posts the job-activity list in #jobs.
  *   4. Sends the payday reminder ping in #payouts.
  *
+ * Steps 2–4 are skipped gracefully when their channel ID secret is not configured.
  * Protected by TRIGGER_TOKEN bearer authentication.
  * Useful for immediately populating channels after first deploy or for testing.
  */
@@ -1624,7 +1623,7 @@ export default {
     }
 
     // Dashboard API: POST /api/trigger-weekly
-    // Manually triggers the same posts as the Sunday cron (analytics, jobs,
+    // Manually triggers the same posts as the 5-minute cron (analytics, jobs,
     // payouts reminder). Useful for first-time setup and testing.
     if (request.method === 'POST' && url.pathname === '/api/trigger-weekly') {
       return handleTriggerWeekly(request, env);
@@ -1707,12 +1706,13 @@ export default {
 
   /**
    * Scheduled handler — runs on the Cron Trigger defined in wrangler.toml.
-   * Every Sunday at 18:00 UTC it:
-   *   1. Validates that all required channel configuration is present.
+   * Fires every 5 minutes to:
+   *   1. Validates that DISCORD_BOT_TOKEN is present.
    *   2. Reads live job data from the Google Sheet.
-   *   3. Posts/edits the week's analytics summary in #analytics.
-   *   4. Posts the weekly job-activity list in #jobs.
-   *   5. Sends a deduplicated payday reminder ping in #payouts.
+   *   3. Posts/edits the week's analytics summary in #analytics (requires ANALYTICS_CHANNEL_ID).
+   *   4. Posts the weekly job-activity list in #jobs (requires JOBS_CHANNEL_ID).
+   *   5. Sends a deduplicated payday reminder ping in #payouts (requires PAYOUTS_CHANNEL_ID).
+   * Steps 3–5 are skipped gracefully when their channel ID secret is not configured.
    */
   async scheduled(_event, env, _ctx) {
     if (!env.KV) {
