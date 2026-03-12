@@ -207,21 +207,15 @@ function filterByWeekEnding(jobs, weekEndDate) {
 // ===== Build payouts embed =====
 
 function buildPayload(weekEndDate, payouts) {
-  // Encode the week-end date in the button so the worker can filter to this
-  // exact week when a mechanic clicks "View My Payout".
-  const weekEndISO = weekEndDate.toISOString().slice(0, 10);
-
   const header =
     `Payouts for the week ending **${fmtDate(weekEndDate)}** have been processed.\n\n` +
-    'All mechanics listed below have been paid. Press **View My Payout** to see your individual breakdown.';
+    'All mechanics listed below have been paid.';
 
   const lines = payouts.map(m => {
     let line = `• **${m.name}**`;
     if (m.stateId) line += ` _(ID: ${m.stateId})_`;
     line += ` — ${m.repairs} repair${m.repairs !== 1 ? 's' : ''}`;
-    if (m.engineReplacements > 0) {
-      line += `, ${m.engineReplacements} engine${m.engineReplacements !== 1 ? 's' : ''}`;
-    }
+    line += `, ${m.engineReplacements} engine replacement${m.engineReplacements !== 1 ? 's' : ''}`;
     line += ` · **${fmtMoney(m.totalPayout)}**`;
     return line;
   });
@@ -244,16 +238,6 @@ function buildPayload(weekEndDate, payouts) {
       ],
       timestamp: new Date().toISOString(),
       footer:    { text: 'Kintsugi Motorworks · Payouts' },
-    }],
-    components: [{
-      type: 1, // ACTION_ROW
-      components: [{
-        type:      2,    // BUTTON
-        custom_id: `payouts_week_view:${weekEndISO}`,
-        label:     'View My Payout',
-        style:     1,    // PRIMARY (blurple)
-        emoji:     { name: '💸' },
-      }],
     }],
   };
 }

@@ -31,6 +31,12 @@ function getFilterDates(range) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   switch (range) {
+    case "thisWeek": {
+      // ISO week starts on Monday: offset = (getDay() + 6) % 7
+      const d = new Date(today);
+      d.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+      return d;
+    }
     case "last4w":
       return new Date(today.getTime() - 28 * 86400000);
     case "last3m": {
@@ -291,7 +297,10 @@ async function loadAnalytics() {
     kSetText("kpiTotalPayout", kFmtMoney(totalPayout));
     kSetText("kpiActiveMechanics", mechanics.size.toLocaleString());
     kSetText("kpiAvgPerWeek", avgPerPeriod);
-    kSetText("kpiTotalRepairsSub", timeRange === "all" ? "All-time" : "In selected period");
+    kSetText("kpiTotalRepairsSub",
+      timeRange === "all"      ? "All-time"
+      : timeRange === "thisWeek" ? "This week"
+      : "In selected period");
     kSetText("kpiTotalPayoutSub", "@ $700 / repair");
     kSetText("kpiActiveMechanicsSub", "Distinct mechanics");
     kSetText("kpiAvgPerWeekSub", groupBy === "month" ? "Per month" : "Per week");
