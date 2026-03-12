@@ -287,6 +287,10 @@ function buildLatestWeekSummary(allJobs) {
 
 // ===== Build analytics embed =====
 
+function plural(n, word) {
+  return `${n} ${word}${n !== 1 ? 's' : ''}`;
+}
+
 function buildAnalyticsPayload(summary) {
   const { weekEndDate, totalRepairs, totalEngines, totalPayout,
           mechanicCount, topMechanic, topRepairs, mechanics } = summary;
@@ -303,7 +307,7 @@ function buildAnalyticsPayload(summary) {
   if (topMechanic) {
     fields.push({
       name:   '🏆 Top Mechanic',
-      value:  `${topMechanic} (${topRepairs} repair${topRepairs !== 1 ? 's' : ''} · ${fmtMoney(topRepairs * PAY_PER_REPAIR)})`,
+      value:  `${topMechanic} (${plural(topRepairs, 'repair')} · ${fmtMoney(topRepairs * PAY_PER_REPAIR)})`,
       inline: false,
     });
   }
@@ -312,7 +316,7 @@ function buildAnalyticsPayload(summary) {
     const lines = mechanics.slice(0, DISCORD_MAX_MECHANICS).map((m, i) => {
       const pay    = m.repairs * PAY_PER_REPAIR;
       const prefix = medals[i] ?? `${i + 1}.`;
-      return `${prefix} **${m.name}** — ${m.repairs} repair${m.repairs !== 1 ? 's' : ''} · ${fmtMoney(pay)}`;
+      return `${prefix} **${m.name}** — ${plural(m.repairs, 'repair')} · ${fmtMoney(pay)}`;
     });
     if (mechanics.length > DISCORD_MAX_MECHANICS) {
       lines.push(`_+${mechanics.length - DISCORD_MAX_MECHANICS} more not shown_`);
