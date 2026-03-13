@@ -6,7 +6,7 @@
   // Single worker that serves the web dashboard (static assets) AND handles
   // all Discord bot interactions.  Point the Discord Developer Portal
   // Interactions Endpoint URL at this worker's URL:
-  //   https://kintsugi-discord-bot.<subdomain>.workers.dev
+  //   https://kintsugi.<subdomain>.workers.dev
   //
   // The KV namespace binding (env.KV) is injected automatically by the
   // GitHub Actions deploy workflow — no manual edits required.
@@ -18,7 +18,7 @@
   // Optional secrets:
   //   RIPTIDE_USER_ID, TRIGGER_TOKEN
   // =======================================
-  "name": "kintsugi-discord-bot",
+  "name": "kintsugi",
   "compatibility_date": "2026-03-10",
   "main": "worker.js",
   "assets": {
