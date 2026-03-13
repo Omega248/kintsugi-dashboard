@@ -11,7 +11,7 @@
 #   PAYOUTS_CHANNEL_ID — Discord channel ID for the #payouts channel
 #
 # Optional GitHub repository secrets:
-#   PAYOUT_CONTACT_USER_ID — Discord user ID to mention for payout issue queries
+#   RIPTIDE_USER_ID    — Discord user ID to mention for payout issue queries
 #
 # Optional workflow input:
 #   channel_id — Override the target channel ID at run time.
@@ -52,5 +52,5 @@ jobs:
           # back to the PAYOUTS_CHANNEL_ID secret.
           DISCORD_CHANNEL_ID: ${{ inputs.channel_id != '' && inputs.channel_id || secrets.PAYOUTS_CHANNEL_ID }}
           # Optional: Discord user ID to mention in the "issues" footer note.
-          PAYOUT_CONTACT_USER_ID: ${{ secrets.PAYOUT_CONTACT_USER_ID }}
+          RIPTIDE_USER_ID: ${{ secrets.RIPTIDE_USER_ID }}
         run: node post-payouts.js

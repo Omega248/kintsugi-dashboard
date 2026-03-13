@@ -16,14 +16,14 @@
 //   - DISCORD_CHANNEL_ID     — ID of the #payouts channel
 //
 // Optional:
-//   - PAYOUT_CONTACT_USER_ID — Discord user ID to mention at the bottom of the
-//                              post so mechanics know who to contact if they
-//                              have issues with their payout.
+//   - RIPTIDE_USER_ID — Discord user ID to mention at the bottom of the
+//                       post so mechanics know who to contact if they
+//                       have issues with their payout.
 // =======================================
 
 const BOT_TOKEN        = process.env.DISCORD_BOT_TOKEN;
 const CHANNEL_ID       = process.env.DISCORD_CHANNEL_ID;
-const CONTACT_USER_ID  = process.env.PAYOUT_CONTACT_USER_ID || '';
+const CONTACT_USER_ID  = process.env.RIPTIDE_USER_ID || '';
 
 if (!BOT_TOKEN || !CHANNEL_ID) {
   console.error(
