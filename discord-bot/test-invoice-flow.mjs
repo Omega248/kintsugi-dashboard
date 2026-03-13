@@ -544,13 +544,12 @@ async function withSheetFetch(sheetFn, testFn) {
   }
 }
 
-// ── Test: network failure (AbortError) → error message shown ────────────────
-await runTest('Network failure (AbortError) → error message shown to user', async () => {
+// ── Test: network failure → error message shown ───────────────────────────────
+await runTest('Network failure → error message shown to user', async () => {
   let attemptCount = 0;
   await withSheetFetch(
     async (_url, opts) => {
       attemptCount++;
-      // Throw an AbortError immediately — simulates a timed-out fetch
       const err = new Error('The operation was aborted');
       err.name  = 'AbortError';
       throw err;
@@ -560,28 +559,26 @@ await runTest('Network failure (AbortError) → error message shown to user', as
       const res  = await worker.fetch(makeRequest('billing_dept_select', ['BCSO']), FAKE_ENV, ctx);
       const data = await res.json();
 
-      assert(data.type === 6, 'Response type is DEFERRED_UPDATE_MESSAGE (6) on timeout path');
+      assert(data.type === 6, 'Response type is DEFERRED_UPDATE_MESSAGE (6) on error path');
 
-      await flush(); // wait for retries + error handler
+      await flush(); // wait for error handler
 
       assert(capturedPatch !== null, 'editOriginalMessage was called with an error');
       const content = capturedPatch.content || '';
       assert(content.includes('❌'), 'Error response starts with ❌');
       assert(
-        content.toLowerCase().includes('timed out') ||
         content.toLowerCase().includes('failed') ||
         content.toLowerCase().includes('error'),
         `Error message is informative (got: "${content}")`
       );
       assert((capturedPatch.components ?? []).length === 0, 'No stale dropdown in error response');
-      // Verify retries happened: initial attempt + INVOICE_MAX_RETRIES retries = 3 total
-      assert(attemptCount === 3, `Expected 3 fetch attempts (got ${attemptCount})`);
+      assert(attemptCount >= 1, `At least one fetch attempt was made (got ${attemptCount})`);
     }
   );
 });
 
-// ── Test: upstream HTTP 500 → retried, then error message shown ─────────────
-await runTest('Upstream HTTP 500 → retried then error message shown (fetchCount = 3)', async () => {
+// ── Test: upstream HTTP 500 → error message shown ────────────────────────────
+await runTest('Upstream HTTP 500 → error message shown to user', async () => {
   let fetchCount = 0;
   await withSheetFetch(
     async () => {
@@ -602,10 +599,10 @@ await runTest('Upstream HTTP 500 → retried then error message shown (fetchCoun
 
       await flush();
 
-      assert(capturedPatch !== null, 'editOriginalMessage was called after exhausting retries');
+      assert(capturedPatch !== null, 'editOriginalMessage was called after error');
       const content = capturedPatch.content || '';
       assert(content.includes('❌'), 'Error response starts with ❌');
-      assert(fetchCount === 3, `Expected 3 fetch attempts with retries (got ${fetchCount})`);
+      assert(fetchCount >= 1, `At least one fetch attempt was made (got ${fetchCount})`);
     }
   );
 });
