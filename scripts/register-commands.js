@@ -57,21 +57,6 @@ const commands = [
       },
     ],
   },
-  {
-    name:        'ask',
-    description: "Ask the Assistant Manager a question. He'll answer. Eventually. If he feels like it.",
-    dm_permission: false,
-    options: [
-      {
-        name:        'question',
-        description: "What do you want? Make it quick.",
-        type:        3,     // STRING
-        required:    true,
-        min_length:  1,
-        max_length:  500,
-      },
-    ],
-  },
 ];
 
 // ===== Register commands =====

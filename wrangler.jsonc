@@ -30,5 +30,16 @@
   },
   "ai": {
     "binding": "AI"
-  }
+  },
+  // DiscordGateway Durable Object — maintains a persistent WebSocket connection
+  // to Discord's Gateway so the bot can respond to @mentions in real time.
+  // Requires the Workers Paid plan (Durable Objects are not on the free tier).
+  "durable_objects": {
+    "bindings": [
+      { "name": "DISCORD_GATEWAY", "class_name": "DiscordGateway" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_classes": ["DiscordGateway"] }
+  ]
 }

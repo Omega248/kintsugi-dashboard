@@ -210,3 +210,26 @@ jobs:
             . "$GITHUB_WORKSPACE/.github/scripts/with_retry.sh"
             with_retry node scripts/register-commands.js
           fi
+
+      # ---- Start the Discord Gateway Durable Object ----
+      # Pings /api/gateway-start on the deployed Worker so the bot connects to
+      # Discord's Gateway immediately after deploy (no need to wait for the cron).
+      # The bot will not respond to @mentions until this step succeeds.
+      # Requires WORKER_URL to be set as a GitHub repository secret — set it to:
+      #   https://kintsugi-discord-bot.<subdomain>.workers.dev
+      - name: Start Discord Gateway
+        env:
+          WORKER_URL: ${{ secrets.WORKER_URL }}
+        run: |
+          if [ -z "${WORKER_URL:-}" ]; then
+            echo "WORKER_URL not set — skipping gateway start."
+            echo "Set WORKER_URL in GitHub Secrets to the deployed Worker URL so the gateway"
+            echo "starts automatically after each deploy. The cron will start it within 5 minutes anyway."
+          else
+            echo "Signalling gateway start at ${WORKER_URL}/api/gateway-start …"
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${WORKER_URL}/api/gateway-start" || echo "000")
+            echo "Response status: ${STATUS}"
+            if [ "${STATUS}" != "200" ]; then
+              echo "Warning: gateway start returned HTTP ${STATUS}. The cron will retry within 5 minutes."
+            fi
+          fi
