@@ -34,12 +34,16 @@
   // DiscordGateway Durable Object — maintains a persistent WebSocket connection
   // to Discord's Gateway so the bot can respond to @mentions in real time.
   // Requires the Workers Paid plan (Durable Objects are not on the free tier).
+  //
+  // NOTE: The "migrations" block is intentionally omitted here.
+  // The v1 migration (new_classes: ["DiscordGateway"]) was applied on the
+  // initial deploy via `wrangler deploy`. Cloudflare tracks applied migration
+  // tags server-side, so keeping the block here is not needed and causes
+  // Cloudflare Builds' `wrangler versions upload` to fail with error 10211
+  // (gradual deployments do not support DO migrations — only wrangler deploy does).
   "durable_objects": {
     "bindings": [
       { "name": "DISCORD_GATEWAY", "class_name": "DiscordGateway" }
     ]
-  },
-  "migrations": [
-    { "tag": "v1", "new_classes": ["DiscordGateway"] }
-  ]
+  }
 }
