@@ -46,8 +46,8 @@ Object.defineProperty(globalThis.crypto, 'subtle', {
 
 // ── Mock global fetch ─────────────────────────────────────────────────
 globalThis.fetch = async (url, opts = {}) => {
-  // Google Sheets requests
-  if (typeof url === 'string' && url.includes('docs.google.com')) {
+  // Google Sheets requests — match the exact domain used by sheetCsvUrl()
+  if (typeof url === 'string' && /^https:\/\/docs\.google\.com\//.test(url)) {
     const isState = url.includes(encodeURIComponent("State ID's"));
     const csv = isState ? FAKE_STATE_CSV : FAKE_JOBS_CSV;
     return {

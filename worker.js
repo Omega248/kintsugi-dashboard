@@ -731,6 +731,95 @@ async function handleUpdateAnalyticsCommand(interaction, env, ctx) {
   });
 }
 
+// ===== /ask slash-command — AI Assistant Manager persona =====
+
+/**
+ * System prompt that defines the Assistant Manager personality.
+ * Injected into every Cloudflare Workers AI call so the model stays in character.
+ */
+const ASSISTANT_MANAGER_SYSTEM_PROMPT = `\
+You are the Assistant Manager of Kintsugi Motorworks, a British mechanic shop. \
+Your name is "The Manager". You are witty, incredibly sarcastic, and slightly impolite. \
+You find every single question an absolute waste of your precious time. \
+Respond in character using British slang naturally: mate, rubbish, daft, innit, \
+absolute doughnut, bloody hell, blimey, sorted, dodgy, knackered, miffed, numpty, muppet, faff. \
+Use British spelling (colour, realise, favour, etc.).
+
+You have full knowledge of the shop's systems — do NOT pretend otherwise:
+- Job Logs Panel (in the #jobs channel): any member clicks the "📋 Request Job Logs" \
+button, picks a mechanic from the dropdown, picks a week, and gets a private job-log embed. \
+No terminal. No spreadsheet. The button. Use it.
+- Generate Monthly Invoice (in the #invoice channel): click "📋 Generate Monthly Invoice", \
+select the department (BCSO or LSPD), select the billing month. \
+A private invoice embed + CSV file is generated automatically. It's not witchcraft, it's a button.
+- Payouts system: weekly mechanic payouts are tracked from the Google Sheet. \
+The Payouts panel (in #payouts) lets mechanics view their own payout privately. \
+Managers can trigger a "Payouts Processed" announcement from the web dashboard or the /payouts command.
+
+Rules for responding:
+1. If someone asks HOW to do something covered by the systems above, \
+   tell them exactly which button/panel/channel to use — but do it with maximum sarcasm and attitude. \
+   Do not make them feel good about needing to ask.
+2. If someone asks a general or random question, answer it but make sure they feel mildly \
+   embarrassed for having wasted your time.
+3. Keep all responses under 180 words. No markdown headers. No bullet lists unless it helps. \
+   Do not break character. Do not apologise. Ever.`;
+
+/**
+ * Handle the /ask slash command — the sarcastic AI assistant manager.
+ *
+ * The response is public (everyone in the channel sees the answer and the roast).
+ * The acknowledgement is returned within milliseconds; AI generation runs in
+ * ctx.waitUntil so Discord's 3-second window is always satisfied.
+ *
+ * Requires the Cloudflare Workers AI binding (env.AI), declared in wrangler.jsonc
+ * under "ai": { "binding": "AI" }.  If env.AI is missing (e.g. local dev without
+ * --remote flag) a fallback error message is returned in-character.
+ */
+async function handleAskCommand(interaction, env, ctx) {
+  const { application_id: appId, token } = interaction;
+  const question = (interaction.data?.options?.find(o => o.name === 'question')?.value || '').trim();
+
+  ctx.waitUntil((async () => {
+    try {
+      if (!env.AI) {
+        await editOriginalMessage(appId, token, {
+          content:
+            "Oh, brilliant. Someone's gone and not configured the AI binding. " +
+            "Add `\"ai\": { \"binding\": \"AI\" }` to wrangler.jsonc and redeploy, you absolute doughnut.",
+        });
+        return;
+      }
+
+      const result = await env.AI.run('@cf/meta/llama-3-8b-instruct', {
+        messages: [
+          { role: 'system', content: ASSISTANT_MANAGER_SYSTEM_PROMPT },
+          { role: 'user',   content: question },
+        ],
+        max_tokens: 350,
+      });
+
+      const answer = (result?.response || '').trim() ||
+        "...Right. The AI's done a runner. Brilliant. Try again later, mate.";
+
+      await editOriginalMessage(appId, token, {
+        content: `> **${question}**\n\n${answer}`,
+      });
+    } catch (err) {
+      await editOriginalMessage(appId, token, {
+        content:
+          `Fantastic. The AI's having a complete strop. \`${err.message}\` — ` +
+          "sort it out and try again, will ya?",
+      }).catch(() => {});
+    }
+  })());
+
+  // Deferred public response — visible to everyone so the channel enjoys the roast.
+  return jsonResponse({
+    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+  });
+}
+
 // ===== Mechanic select-menu builder =====
 
 /**
@@ -2010,6 +2099,9 @@ async function handleDiscordInteraction(request, env, ctx) {
       }
       if (interaction.data?.name === 'update-analytics') {
         return handleUpdateAnalyticsCommand(interaction, env, ctx);
+      }
+      if (interaction.data?.name === 'ask') {
+        return handleAskCommand(interaction, env, ctx);
       }
       // Unknown slash command — return an ephemeral error instead of HTTP 400.
       return jsonResponse({
