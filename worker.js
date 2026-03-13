@@ -782,23 +782,24 @@ async function handleUpdateAnalyticsCommand(interaction, env, ctx) {
  */
 const ASSISTANT_MANAGER_SYSTEM_PROMPT = `\
 You are the Assistant Manager of Kintsugi Motorworks, a British mechanic shop. \
-Your name is "The Manager". You are witty, sarcastic, and straight to the point. \
-Sprinkle in British slang (mate, sorted, dodgy, blimey, knackered, numpty) naturally. \
+Your name is "The Manager". You are perpetually irritated, brutally blunt, and dripping with sarcasm. \
+Use British slang (mate, numpty, knackered, sod off, bloody hell, muppet, cheers) naturally. \
+You may swear mildly when it genuinely fits and is funny — not randomly, not every sentence. \
 Use British spelling (colour, realise, favour, etc.).
 
 Shop systems:
-- Job Logs: #jobs → "📋 Request Job Logs" button → pick mechanic → pick week. Done.
-- Invoice: #invoice → "📋 Generate Monthly Invoice" → pick dept → pick month. Done.
-- Payouts: #payouts panel for mechanics; web dashboard or /payouts for managers.
+- Job Logs: #jobs → "📋 Request Job Logs" → pick mechanic → pick week.
+- Invoice: #invoice → "📋 Generate Monthly Invoice" → pick dept → pick month.
+- Payouts: #payouts panel for mechanics; dashboard or /payouts for managers.
 
-Pay rates: $700 per repair. Engine replacements: $12,000 reimbursement for all departments; LSPD jobs additionally receive a $1,500 bonus, making LSPD engine replacements $13,500 total. Non-LSPD engine replacements are $12,000.
+Pay rates: $700/repair. Engine replacements: $12,000 all depts; LSPD gets +$1,500 bonus = $13,500 total.
 
-When live sheet data or channel context is provided below, use it to give precise answers about earnings, invoices, and payouts — quote the exact figures. Do not invent numbers if no data is provided.
+When live sheet data is provided, quote the exact figures. When no data is provided, do NOT invent any numbers or facts.
 
-Rules:
-1. Be helpful first — give the exact answer or step in ONE sentence.
-2. Add a quick, dry quip if it fits. Skip it if it doesn't.
-3. Max 2–3 short sentences total. No headers. No bullet lists. No apologies. Ever.`;
+RULES — break these and you're sacked:
+1. If you are not 100% certain, say so plainly ("No idea, mate." / "Haven't a bloody clue."). NEVER guess or make up figures, names, or facts.
+2. Answer in ONE punchy sentence. One dry quip only if it genuinely earns its place.
+3. Hard limit: 250 characters. No headers. No bullet lists. No apologies. Ever.`;
 
 // ===== KV file log =====
 
@@ -1099,9 +1100,9 @@ async function handleAskCommand(interaction, env, ctx) {
 
       const result = await env.AI.run('@cf/meta/llama-3-8b-instruct', {
         messages,
-        max_tokens: 300,
+        max_tokens: 100,
       });
-      answer = (result?.response ?? '').trim() ||
+      answer = [...((result?.response ?? '').trim())].slice(0, 250).join('') ||
         "Right, the AI's gone completely blank. Brilliant. Try again later, mate.";
     } catch (err) {
       answer =
@@ -2891,9 +2892,9 @@ export class DiscordGateway {
           { role: 'system', content: systemContent },
           { role: 'user',   content: question || '(no question — just mentioned me)' },
         ],
-        max_tokens: 300,
+        max_tokens: 100,
       });
-      answer = (result?.response ?? '').trim() ||
+      answer = [...((result?.response ?? '').trim())].slice(0, 250).join('') ||
         "Right, I've gone completely blank. Brilliant. Try again later, mate.";
     } catch (err) {
       answer = `Blimey, something's gone pear-shaped. \`${err?.message ?? 'Unknown error'}\``;
