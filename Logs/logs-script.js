@@ -1,6 +1,7 @@
 // ===== Logs Page Script =====
 // Fetches structured log entries from GET /api/logs (Bearer TRIGGER_TOKEN)
 // and displays them in a filterable, auto-refreshing table.
+// Also shows Discord Gateway connection status and provides a Start button.
 
 const AUTO_REFRESH_INTERVAL_MS = 30_000; // 30 seconds
 
@@ -212,6 +213,76 @@ function scheduleAutoRefresh() {
   }, AUTO_REFRESH_INTERVAL_MS);
 }
 
+// ===== Gateway status & start =====
+
+function setGatewayBadge(text, state) {
+  const badge = $('gatewayBadge');
+  if (!badge) return;
+  badge.textContent = text;
+  badge.className   = 'gateway-status-badge' + (state ? ` ${state}` : '');
+}
+
+async function fetchGatewayStatus() {
+  const cfg = window.KINTSUGI_BOT_CONFIG;
+  if (!cfg?.url || !cfg?.token) {
+    setGatewayBadge('Config missing', '');
+    return null;
+  }
+  try {
+    const res = await fetch(cfg.url.replace(/\/$/, '') + '/api/gateway-status', {
+      headers: { Authorization: `Bearer ${cfg.token}` },
+    });
+    if (!res.ok) {
+      setGatewayBadge('Auth error', 'disconnected');
+      return null;
+    }
+    const data = await res.json();
+    if (data.connected) {
+      setGatewayBadge('Connected', 'connected');
+    } else {
+      setGatewayBadge('Disconnected', 'disconnected');
+    }
+    return data;
+  } catch {
+    setGatewayBadge('Unreachable', 'disconnected');
+    return null;
+  }
+}
+
+async function startGateway() {
+  const cfg = window.KINTSUGI_BOT_CONFIG;
+  if (!cfg?.url || !cfg?.token) {
+    setStatus('⚠️ Bot config not loaded — cannot start gateway.');
+    return;
+  }
+  setGatewayBadge('Starting…', '');
+  const btn = $('gatewayStartBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(cfg.url.replace(/\/$/, '') + '/api/gateway-start', {
+      method:  'POST',
+      headers: { Authorization: `Bearer ${cfg.token}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      const status = data.status ?? 'ok';
+      setGatewayBadge(
+        status === 'already_connected' ? 'Already connected' : 'Started',
+        'connected',
+      );
+      setStatus('Gateway started — the bot will now reply to @mentions.');
+    } else {
+      setGatewayBadge('Start failed', 'disconnected');
+      setStatus(`⚠️ Gateway start failed (HTTP ${res.status}): ${data.error ?? ''}`);
+    }
+  } catch (err) {
+    setGatewayBadge('Start failed', 'disconnected');
+    setStatus(`⚠️ Gateway start error: ${err.message}`);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 // ===== Event listeners =====
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -231,6 +302,9 @@ document.addEventListener('DOMContentLoaded', () => {
     setRefreshLabel('Cleared', false);
   });
 
-  // Initial load + start auto-refresh
+  $('gatewayStartBtn')?.addEventListener('click', startGateway);
+
+  // Initial load + start auto-refresh + gateway status
   loadLogs().then(() => scheduleAutoRefresh());
+  fetchGatewayStatus();
 });
