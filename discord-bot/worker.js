@@ -471,15 +471,19 @@ function parseJobsSheet(rows) {
     if (!mech) continue;
 
     const across = parseInt(row[iAcross] || '0', 10) || 0;
-    if (!across) continue;
 
     let engineCount = 0;
     if (iEngine !== -1) {
       const raw = (row[iEngine] || '').trim();
       const n   = Number(raw);
-      if (!isNaN(n) && n > 0)           { engineCount = n; }
+      if (!isNaN(n) && n > 0)               { engineCount = n; }
       else if (/^(yes|y|true)$/i.test(raw)) { engineCount = 1; }
     }
+
+    // Skip rows with neither repairs nor engine replacements — they carry no
+    // billable work.  Rows with engine replacements but zero repairs are kept
+    // so engine-only jobs appear in invoices and payout calculations.
+    if (!across && !engineCount) continue;
 
     const tsDate  = iTime  !== -1 ? parseDateLike(row[iTime])  : null;
     const weekEnd = iWeek  !== -1 ? parseDateLike(row[iWeek])  : null;
@@ -2053,6 +2057,17 @@ export default {
       if (customId.startsWith('payouts_week_mech:')) {
         return handlePayoutsWeekMechSelect(interaction, ctx);
       }
+
+      // Unrecognized component — return a proper ephemeral error so Discord
+      // shows a user-friendly message instead of "This interaction failed".
+      // This handles stale panels whose custom_ids were renamed in old deploys.
+      return jsonResponse({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          content: '❌ This button or menu is no longer active. An admin may need to re-post the panel.',
+          flags: 64, // ephemeral — only the clicking user sees it
+        },
+      });
     }
 
     return new Response('Unknown interaction type', { status: 400 });

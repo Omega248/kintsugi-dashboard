@@ -374,6 +374,25 @@ await runTest('Backward compat — invoice_month_select:BCSO routes to invoice g
   assert(capturedPatch.content?.includes('BCSO'), 'Invoice content references "BCSO"');
 });
 
+// ── Test: unrecognized component → ephemeral error (NOT "This interaction failed") ────
+await runTest('Unrecognized component custom_id → ephemeral error message (type 4), not HTTP 400', async () => {
+  const { ctx, flush } = makeCtx();
+  const res  = await worker.fetch(makeRequest('some_old_unknown_button_id'), FAKE_ENV, ctx);
+  const data = await res.json();
+
+  // Must return HTTP 200 with a proper Discord response type so Discord does
+  // NOT show "This interaction failed" in the channel.
+  assert(res.status === 200, `Response status is 200 (not 400). Got ${res.status}`);
+  assert(data.type === 4, `Response type is CHANNEL_MESSAGE_WITH_SOURCE (4). Got ${data.type}`);
+  assert(data.data?.flags === 64, 'Response is ephemeral (flags=64)');
+  const content = data.data?.content || '';
+  assert(content.includes('❌'), 'Error message starts with ❌');
+  assert(content.toLowerCase().includes('panel'), 'Error message mentions "panel" for context');
+
+  // No background work should be triggered for unrecognized interactions
+  await flush();
+});
+
 // ── Summary ────────────────────────────────────────────────────────────
 console.log('');
 console.log('─────────────────────────────────────────────────────');
