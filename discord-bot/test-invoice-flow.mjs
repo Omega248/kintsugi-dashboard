@@ -318,6 +318,62 @@ await runTest('payouts_week_mech:2026-03-07 → individual payout embed', async 
   assert(components.length === 0, 'No components in final payout embed (no follow-up dropdowns)');
 });
 
+// ── Backward-compat tests: old custom_ids still work ──────────────────
+await runTest('Backward compat — payouts_panel_start routes to department select (old panel)', async () => {
+  const { ctx, flush } = makeCtx();
+  const res  = await worker.fetch(makeRequest('payouts_panel_start'), FAKE_ENV, ctx);
+  const data = await res.json();
+
+  // Must defer as an ephemeral (same as billing_generate_invoice)
+  assert(data.type === 5, 'payouts_panel_start responds with DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE (5)');
+  assert(data.data?.flags === 64, 'payouts_panel_start response is ephemeral (flags=64)');
+
+  await flush();
+
+  assert(capturedPatch !== null, 'editOriginalMessage was called');
+  const selects = (capturedPatch.components ?? [])
+    .flatMap(row => row.components ?? [])
+    .filter(c => c.type === 3);
+  const deptSelect = selects.find(s => s.custom_id === 'billing_dept_select');
+  assert(deptSelect !== undefined, 'Response contains billing_dept_select (NOT a mechanic list)');
+  assert(!capturedPatch.content?.toLowerCase().includes('mechanic'), 'Response does NOT mention "mechanic"');
+});
+
+await runTest('Backward compat — invoice_dept_select routes to month-ending select', async () => {
+  const { ctx, flush } = makeCtx();
+  const res  = await worker.fetch(makeRequest('invoice_dept_select', ['BCSO']), FAKE_ENV, ctx);
+  const data = await res.json();
+
+  assert(data.type === 6, 'invoice_dept_select responds with DEFERRED_UPDATE_MESSAGE (6)');
+
+  await flush();
+
+  assert(capturedPatch !== null, 'editOriginalMessage was called');
+  const selects = (capturedPatch.components ?? [])
+    .flatMap(row => row.components ?? [])
+    .filter(c => c.type === 3);
+  assert(selects.length > 0, 'A month-ending select is present');
+});
+
+await runTest('Backward compat — invoice_month_select:BCSO routes to invoice generation', async () => {
+  const monthValue = globalThis._testMonthValue ?? '2026-03-31';
+  const { ctx, flush } = makeCtx();
+  const res  = await worker.fetch(
+    makeRequest(`invoice_month_select:BCSO`, [monthValue]),
+    FAKE_ENV,
+    ctx
+  );
+  const data = await res.json();
+
+  assert(data.type === 6, 'invoice_month_select:BCSO responds with DEFERRED_UPDATE_MESSAGE (6)');
+
+  await flush();
+
+  assert(capturedPatch !== null, 'editOriginalMessageWithFile was called');
+  assert(capturedPatchIsFile, 'Response is a multipart file upload (CSV attached)');
+  assert(capturedPatch.content?.includes('BCSO'), 'Invoice content references "BCSO"');
+});
+
 // ── Summary ────────────────────────────────────────────────────────────
 console.log('');
 console.log('─────────────────────────────────────────────────────');

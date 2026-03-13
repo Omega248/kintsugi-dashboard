@@ -2,9 +2,10 @@
 // =======================================
 // Kintsugi Discord Bot — Invoice Panel Setup
 //
-// Posts the permanent "Generate Monthly Invoice" panel to a Discord channel.
-// Run this ONCE.  The message will stay there forever; the bot handles
-// all interactions without ever editing the panel itself.
+// Posts (or edits) the permanent "Generate Monthly Invoice" panel in a Discord
+// channel.  If PANEL_MESSAGE_ID is supplied the existing message is edited
+// instead of posting a new one — this prevents stale duplicate panels from
+// accumulating when re-run.
 //
 // Requirements:
 //   - Node.js 18+ (built-in fetch)
@@ -12,14 +13,21 @@
 //   - DISCORD_CHANNEL_ID — ID of the #payouts channel to post the panel in
 //     (right-click the channel in Discord → Copy Channel ID)
 //
+// Optional:
+//   - PANEL_MESSAGE_ID   — Discord message ID of an existing panel to edit
+//     instead of posting a new one.  Recommended for re-deploys so the
+//     pinned message stays in place.
+//
 // Usage:
 //   DISCORD_BOT_TOKEN=... DISCORD_CHANNEL_ID=... node setup-payouts-panel.js
+//   DISCORD_BOT_TOKEN=... DISCORD_CHANNEL_ID=... PANEL_MESSAGE_ID=12345 node setup-payouts-panel.js
 //
 // Tip: After running, pin the message so it stays at the top of the channel.
 // =======================================
 
-const BOT_TOKEN  = process.env.DISCORD_BOT_TOKEN;
-const CHANNEL_ID = process.env.DISCORD_CHANNEL_ID;
+const BOT_TOKEN       = process.env.DISCORD_BOT_TOKEN;
+const CHANNEL_ID      = process.env.DISCORD_CHANNEL_ID;
+const PANEL_MESSAGE_ID = process.env.PANEL_MESSAGE_ID || '';
 
 if (!BOT_TOKEN || !CHANNEL_ID) {
   console.error(
@@ -65,17 +73,40 @@ const panelPayload = {
   ],
 };
 
-// ===== Post to channel =====
-async function postPanel() {
-  const url = `https://discord.com/api/v10/channels/${CHANNEL_ID}/messages`;
+// ===== Post or edit the panel =====
+async function upsertPanel() {
+  const headers = {
+    'Authorization': `Bot ${BOT_TOKEN}`,
+    'Content-Type':  'application/json',
+  };
 
-  const res = await fetch(url, {
+  if (PANEL_MESSAGE_ID) {
+    // Edit the existing panel message instead of posting a new one.
+    const url = `https://discord.com/api/v10/channels/${CHANNEL_ID}/messages/${PANEL_MESSAGE_ID}`;
+    const res  = await fetch(url, {
+      method:  'PATCH',
+      headers,
+      body:    JSON.stringify(panelPayload),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      console.error('Failed to edit invoice panel:', JSON.stringify(data, null, 2));
+      process.exit(1);
+    }
+
+    console.log('✅ Invoice panel updated!');
+    console.log(`   Channel : ${CHANNEL_ID}`);
+    console.log(`   Message : ${PANEL_MESSAGE_ID}`);
+    return;
+  }
+
+  // Post a brand-new panel message.
+  const url = `https://discord.com/api/v10/channels/${CHANNEL_ID}/messages`;
+  const res  = await fetch(url, {
     method:  'POST',
-    headers: {
-      'Authorization': `Bot ${BOT_TOKEN}`,
-      'Content-Type':  'application/json',
-    },
-    body: JSON.stringify(panelPayload),
+    headers,
+    body:    JSON.stringify(panelPayload),
   });
 
   const data = await res.json();
@@ -91,10 +122,14 @@ async function postPanel() {
   console.log('');
   console.log('Tip: Right-click the message in Discord and select "Pin Message"');
   console.log('     so it stays visible at the top of the channel.');
+  console.log('');
+  console.log(`To update the panel in future without posting a new message, set:`);
+  console.log(`  PANEL_MESSAGE_ID=${data.id}`);
 }
 
-postPanel().catch(err => {
+upsertPanel().catch(err => {
   console.error('Unexpected error:', err);
   process.exit(1);
 });
+
 

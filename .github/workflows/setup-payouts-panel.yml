@@ -1,5 +1,5 @@
 # =======================================
-# Post the permanent Payouts Panel to a Discord channel
+# Post (or update) the permanent Payouts Panel in a Discord channel
 #
 # Runs `discord-bot/setup-payouts-panel.js` using secrets stored in GitHub
 # so you never need to paste a bot token into a terminal.
@@ -10,9 +10,13 @@
 #   DISCORD_BOT_TOKEN  — Bot token from the Discord Developer Portal
 #   PAYOUTS_CHANNEL_ID — Default channel to post the panel in (#payouts)
 #
-# Optional workflow input:
-#   channel_id — Override the target channel ID at run time.
-#                Leave blank to use the PAYOUTS_CHANNEL_ID secret.
+# Optional workflow inputs:
+#   channel_id        — Override the target channel ID at run time.
+#                       Leave blank to use the PAYOUTS_CHANNEL_ID secret.
+#   panel_message_id  — Discord message ID of the existing panel to edit.
+#                       When provided the script PATCHes the existing message
+#                       instead of POSTing a new one, keeping the pinned
+#                       message in place and avoiding stale duplicate panels.
 # =======================================
 name: Post Payouts Panel
 
@@ -23,6 +27,12 @@ on:
         description: >
           Discord channel ID to post the panel in.
           Leave blank to use the PAYOUTS_CHANNEL_ID secret (your #payouts channel).
+        required: false
+        default: ''
+      panel_message_id:
+        description: >
+          Discord message ID of the existing panel to edit instead of posting a new one.
+          Leave blank to post a fresh panel (get the ID from the first run's output).
         required: false
         default: ''
 
@@ -48,4 +58,8 @@ jobs:
           # Use the manually-supplied channel_id if provided, otherwise fall
           # back to the PAYOUTS_CHANNEL_ID secret.
           DISCORD_CHANNEL_ID: ${{ inputs.channel_id != '' && inputs.channel_id || secrets.PAYOUTS_CHANNEL_ID }}
+          # When panel_message_id is supplied the script edits the existing
+          # message instead of posting a new one.
+          PANEL_MESSAGE_ID: ${{ inputs.panel_message_id }}
         run: node setup-payouts-panel.js
+
