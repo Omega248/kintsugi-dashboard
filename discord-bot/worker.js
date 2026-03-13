@@ -1179,6 +1179,27 @@ async function handleInvoiceMonthSelect(interaction, env, ctx) {
         return true;
       });
 
+      // Guard: no jobs found for the selected department / billing month.
+      if (deptJobs.length === 0) {
+        await editOriginalMessage(appId, token, {
+          content:    `❌ No jobs found for **${dept}** in the month ending **${monthLabel}**. Check that the sheet has a "Month Ending" column and that jobs are assigned to this department.`,
+          components: [],
+        });
+        return;
+      }
+
+      // Guard: negative repair counts indicate insufficient stock (e.g. a
+      // corrective entry with a negative "across" value).  Block invoice
+      // generation so managers don't receive a misleading total.
+      const negativeEntries = deptJobs.filter(j => (j.across || 0) < 0);
+      if (negativeEntries.length > 0) {
+        await editOriginalMessage(appId, token, {
+          content:    `❌ Error: Insufficient stock to generate invoice. ${negativeEntries.length === 1 ? '1 job entry has' : `${negativeEntries.length} job entries have`} a negative repair count. Please correct the sheet data and try again.`,
+          components: [],
+        });
+        return;
+      }
+
       const safeDept   = dept.replace(/[^a-zA-Z0-9_-]/g, '_') || 'invoice';
       const csvContent = buildInvoiceCsv(deptJobs);
       const filename   = `${safeDept}-${monthValue}.csv`;
