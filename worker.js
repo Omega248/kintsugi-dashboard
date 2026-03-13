@@ -2663,7 +2663,10 @@ export class DiscordGateway {
     const { url: gwUrl } = await gwApiRes.json();
 
     // Step 2: upgrade the connection to a WebSocket.
-    const upgradeRes = await fetch(`${gwUrl}?v=10&encoding=json`, {
+    // Cloudflare Workers' fetch() does not accept wss:// / ws:// URLs;
+    // convert them to https:// / http:// so the Upgrade mechanism works.
+    const wsHttpUrl = gwUrl.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://');
+    const upgradeRes = await fetch(`${wsHttpUrl}?v=10&encoding=json`, {
       headers: { Upgrade: 'websocket' },
     });
     if (upgradeRes.status !== 101) {
@@ -2783,7 +2786,21 @@ export class DiscordGateway {
         if (t === 'READY') {
           await this.state.storage.put('session_id', d.session_id).catch(() => {});
           this._pendingSession = d.session_id;
-          kLog(this.env, 'info', 'gateway_ready', { username: d.user?.username }).catch(() => {});
+          // GATEWAY_MESSAGE_CONTENT flag (1 << 18) is set when the bot has the
+          // privileged "Message Content Intent" approved in the Developer Portal.
+          // Without it, message.content is empty and @mention replies won't work.
+          const appFlags = d.application?.flags ?? 0;
+          const hasMessageContentIntent = (appFlags & (1 << 18)) !== 0;
+          kLog(this.env, 'info', 'gateway_ready', {
+            username: d.user?.username,
+            messageContentIntent: hasMessageContentIntent,
+          }).catch(() => {});
+          if (!hasMessageContentIntent) {
+            kLog(this.env, 'warn', 'gateway_missing_message_content_intent', {
+              detail: 'Enable "Message Content Intent" in the Discord Developer Portal ' +
+                      '(Bot → Privileged Gateway Intents) so @mention replies receive message text.',
+            }).catch(() => {});
+          }
         } else if (t === 'RESUMED') {
           kLog(this.env, 'info', 'gateway_resumed').catch(() => {});
         } else if (t === 'MESSAGE_CREATE') {
@@ -2845,6 +2862,15 @@ export class DiscordGateway {
     const channelId = message.channel_id;
     const messageId = message.id;
     const username  = message.author.username ?? 'unknown';
+
+    // Warn when content is null/empty — the most common cause is the bot
+    // not having the "Message Content Intent" enabled in the Developer Portal.
+    if (message.content == null) {
+      kLog(this.env, 'warn', 'gateway_mention_empty_content', {
+        channelId, messageId, username,
+        detail: 'message.content is null; ensure "Message Content Intent" is enabled in the Discord Developer Portal.',
+      }).catch(() => {});
+    }
 
     kLog(this.env, 'info', 'gateway_mention_received', {
       channelId, messageId, username, question: question.slice(0, 100),
