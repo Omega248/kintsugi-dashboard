@@ -1,0 +1,199 @@
+/* =============================================
+   Logs Page - Specific Styles
+   Common styles are in ../shared-styles.css
+   ============================================= */
+
+/* ===== Refresh status (top-right of summary) ===== */
+
+.logs-refresh-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.refresh-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.refresh-dot--active {
+  background: var(--color-success);
+  box-shadow: 0 0 6px var(--color-success);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.45; }
+}
+
+/* ===== Controls row ===== */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+  margin-bottom: var(--space-sm);
+  font-size: var(--font-size-base);
+}
+
+.search-input {
+  min-width: 220px;
+}
+
+/* ===== KPI cards ===== */
+
+.logs-kpi-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.logs-kpi-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  min-width: 110px;
+  flex: 1;
+}
+
+.logs-kpi-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.logs-kpi-value {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.logs-kpi-card--info  { border-color: var(--color-info); }
+.logs-kpi-card--warn  { border-color: var(--color-warning); }
+.logs-kpi-card--error { border-color: var(--color-error); }
+
+.logs-kpi-card--info  .logs-kpi-value { color: var(--color-info); }
+.logs-kpi-card--warn  .logs-kpi-value { color: var(--color-warning); }
+.logs-kpi-card--error .logs-kpi-value { color: var(--color-error); }
+
+/* ===== Table ===== */
+
+.table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.logs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-base);
+}
+
+.logs-table thead th {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-align: left;
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border-default);
+  white-space: nowrap;
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.logs-table tbody tr:hover {
+  background: var(--accent-hover);
+}
+
+.logs-table tbody tr + tr {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.logs-table td {
+  padding: var(--space-xs) var(--space-md);
+  vertical-align: top;
+  color: var(--text-primary);
+}
+
+.col-ts {
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  min-width: 160px;
+}
+
+.col-level {
+  white-space: nowrap;
+  min-width: 70px;
+}
+
+.col-event {
+  font-family: monospace;
+  font-size: var(--font-size-base);
+  white-space: nowrap;
+}
+
+.col-details {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+/* Row tinting by level */
+.log-row.level-error { background: rgba(239, 68, 68, 0.06); }
+.log-row.level-warn  { background: rgba(250, 204, 21, 0.05); }
+
+/* ===== Level badges ===== */
+
+.level-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.level-badge.level-info  { background: rgba(56, 189, 248, 0.15); color: var(--color-info); }
+.level-badge.level-warn  { background: rgba(250, 204, 21, 0.15); color: var(--color-warning); }
+.level-badge.level-error { background: rgba(239, 68, 68, 0.15);  color: var(--color-error); }
+
+/* ===== Detail cell formatting ===== */
+
+.detail-key {
+  color: var(--text-tertiary);
+  font-family: monospace;
+}
+
+.detail-val {
+  color: var(--text-secondary);
+  font-family: monospace;
+}
+
+.detail-empty {
+  color: var(--text-tertiary);
+}
+
+/* ===== Empty / status cells ===== */
+
+.empty-cell {
+  text-align: center;
+  color: var(--text-tertiary);
+  padding: var(--space-xl) !important;
+  font-size: var(--font-size-md);
+}

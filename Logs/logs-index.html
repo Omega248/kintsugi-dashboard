@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Kintsugi Motorworks · Bot Logs</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Kintsugi Motorworks bot logs — real-time activity log from the Discord bot." />
+  <meta name="theme-color" content="#020817" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>" />
+  <link rel="stylesheet" href="../shared-styles.css" />
+  <link rel="stylesheet" href="logs-style.css" />
+  <script src="../constants.js"></script>
+  <script src="../utils.js"></script>
+  <script src="../ui-enhancements.js"></script>
+  <script src="../kintsugi-core.js"></script>
+</head>
+<body>
+  <div class="app">
+    <!-- Top Navigation -->
+    <header class="top-bar">
+      <div>
+        <div class="brand-title">Kintsugi Motorworks</div>
+        <div class="brand-sub">Bot activity logs</div>
+      </div>
+      <nav class="nav-tabs" aria-label="Primary navigation">
+        <a href="../index.html" class="nav-pill">Dashboard</a>
+        <a href="../Payouts/payouts-index.html" class="nav-pill">Payouts</a>
+        <a href="../Mechanics/mechanics-index.html" class="nav-pill">Mechanics</a>
+        <a href="../Bank_Record/bank-index.html" class="nav-pill">Bank</a>
+        <a href="../Analytics/analytics-index.html" class="nav-pill">Analytics</a>
+        <a href="logs-index.html" class="nav-pill active">Logs</a>
+      </nav>
+    </header>
+
+    <main class="page-shell">
+      <!-- Summary intro -->
+      <section class="summary">
+        <div class="summary-main">
+          <div class="summary-title">Bot Logs</div>
+          <p class="summary-sub">
+            Live activity log from the Discord bot — commands, invoices, payouts, errors, and scheduled runs.
+            Entries are retained for 7 days.
+          </p>
+        </div>
+        <div class="logs-refresh-status" id="refreshStatus">
+          <span class="refresh-dot" id="refreshDot"></span>
+          <span id="refreshLabel">Loading…</span>
+        </div>
+      </section>
+
+      <!-- Controls -->
+      <div class="controls" aria-label="Log filters">
+        <span class="label-soft">Level:</span>
+        <span class="select-wrap">
+          <select id="levelFilter" class="select-pill">
+            <option value="all">All levels</option>
+            <option value="info">Info</option>
+            <option value="warn">Warn</option>
+            <option value="error">Error</option>
+          </select>
+        </span>
+
+        <input
+          id="searchInput"
+          class="search-input"
+          type="text"
+          placeholder="Search event or details…"
+          aria-label="Search logs"
+        />
+
+        <button id="refreshBtn" class="btn">↻ Refresh</button>
+        <button id="clearBtn" class="btn">Clear display</button>
+      </div>
+
+      <!-- KPI row -->
+      <section class="logs-kpi-row" aria-label="Log summary">
+        <div class="logs-kpi-card">
+          <div class="logs-kpi-label">Total Entries</div>
+          <div id="kpiTotal" class="logs-kpi-value">–</div>
+        </div>
+        <div class="logs-kpi-card logs-kpi-card--info">
+          <div class="logs-kpi-label">Info</div>
+          <div id="kpiInfo" class="logs-kpi-value">–</div>
+        </div>
+        <div class="logs-kpi-card logs-kpi-card--warn">
+          <div class="logs-kpi-label">Warnings</div>
+          <div id="kpiWarn" class="logs-kpi-value">–</div>
+        </div>
+        <div class="logs-kpi-card logs-kpi-card--error">
+          <div class="logs-kpi-label">Errors</div>
+          <div id="kpiError" class="logs-kpi-value">–</div>
+        </div>
+      </section>
+
+      <!-- Log table -->
+      <div class="table-wrap" role="region" aria-label="Log entries">
+        <table class="logs-table" aria-live="polite">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Level</th>
+              <th>Event</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody id="logsBody">
+            <tr>
+              <td colspan="4" class="empty-cell">Loading logs…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+    </main>
+  </div>
+
+  <script src="/bot-config.js"></script>
+  <script src="logs-script.js"></script>
+</body>
+</html>
