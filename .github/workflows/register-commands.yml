@@ -44,9 +44,8 @@ jobs:
           node-version: '20'
 
       - name: Register slash commands
-        working-directory: discord-bot
         env:
           DISCORD_APP_ID:    ${{ secrets.DISCORD_APP_ID }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           DISCORD_GUILD_ID:  ${{ inputs.guild_id }}
-        run: node register-commands.js
+        run: node scripts/register-commands.js

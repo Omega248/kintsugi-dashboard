@@ -45,7 +45,6 @@ jobs:
           node-version: '20'
 
       - name: Post Payouts Processed notification
-        working-directory: discord-bot
         env:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           # Use the manually-supplied channel_id if provided, otherwise fall
@@ -53,4 +52,4 @@ jobs:
           DISCORD_CHANNEL_ID: ${{ inputs.channel_id != '' && inputs.channel_id || secrets.PAYOUTS_CHANNEL_ID }}
           # Optional: Discord user ID to mention in the "issues" footer note.
           RIPTIDE_USER_ID: ${{ secrets.RIPTIDE_USER_ID }}
-        run: node post-payouts.js
+        run: node scripts/post-payouts.js

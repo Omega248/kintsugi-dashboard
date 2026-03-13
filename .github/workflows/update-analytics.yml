@@ -50,10 +50,9 @@ jobs:
           node-version: '20'
 
       - name: Update analytics message
-        working-directory: discord-bot
         env:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           # Use the manually-supplied channel_id if provided, otherwise fall
           # back to the ANALYTICS_CHANNEL_ID secret.
           DISCORD_CHANNEL_ID: ${{ inputs.channel_id != '' && inputs.channel_id || secrets.ANALYTICS_CHANNEL_ID }}
-        run: node update-analytics.js
+        run: node scripts/update-analytics.js

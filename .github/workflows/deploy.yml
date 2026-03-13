@@ -1,49 +1,37 @@
 # =======================================
-# Deploy Kintsugi Discord Bot to Cloudflare Workers
+# Deploy Kintsugi — Unified Cloudflare Worker
+#
+# Deploys the single root worker.js that serves both the web dashboard
+# (static assets) and the Discord bot (interactions + cron).
 #
 # Triggers:
-#   - Any push to `main` that changes files inside discord-bot/
+#   - Any push to `main` (all source files are now in one worker)
 #   - Manual dispatch from the Actions tab
 #
 # Required GitHub repository secrets:
-#   CLOUDFLARE_API_TOKEN   — Cloudflare API token with Workers Scripts:Edit AND Workers KV Storage:Edit permissions
+#   CLOUDFLARE_API_TOKEN   — API token with Workers Scripts:Edit AND Workers KV Storage:Edit
 #   CLOUDFLARE_ACCOUNT_ID  — Your Cloudflare account ID
 #
 # Optional GitHub repository secrets (pushed to the Worker when set):
 #   DISCORD_PUBLIC_KEY     — From Discord Developer Portal → "Public Key"
 #   DISCORD_BOT_TOKEN      — From Discord Developer Portal → Bot → "Reset Token"
-#   DISCORD_APP_ID         — From Discord Developer Portal → "Application ID" (used to register slash commands)
+#   DISCORD_APP_ID         — From Discord Developer Portal → "Application ID"
 #   ANALYTICS_CHANNEL_ID   — Discord channel ID for the #analytics channel
 #   JOBS_CHANNEL_ID        — Discord channel ID for the #jobs channel
 #   PAYOUTS_CHANNEL_ID     — Discord channel ID for the #payouts channel
 #   RIPTIDE_USER_ID        — Numeric Discord user ID to @mention on payday
-#   TRIGGER_TOKEN          — Secret token for the "Post Payouts Processed" GitHub Actions workflow
+#   TRIGGER_TOKEN          — Secret token for dashboard "Notify Discord" button
 #
-# Missing optional secrets are skipped gracefully — the Worker will still
-# deploy; it just won't be able to post to Discord until the secrets are added.
-#
-# The worker is deployed as "kintsugi-discord-bot" — a dedicated Cloudflare Worker
-# separate from the static-assets worker ("kintsugi").  After deployment,
-# copy the worker URL (e.g. https://kintsugi-discord-bot.<subdomain>.workers.dev)
-# and paste it into Discord Developer Portal → General Information →
-# Interactions Endpoint URL.
-#
-# KV provisioning is fully automatic: this workflow ensures a KV namespace
-# named "KINTSUGI_BOT" exists in your Cloudflare account (creating it if it
-# doesn't), then binds it to the Worker as "KV" — no manual steps required.
-#
-# Retry policy: every step that calls an external API retries up to 5 times
-# with exponential back-off (15 s → 30 s → 60 s → 120 s → give up).
+# After deployment, copy the worker URL
+#   (e.g. https://kintsugi-discord-bot.<subdomain>.workers.dev)
+# and paste it into:
+#   Discord Developer Portal → General Information → Interactions Endpoint URL
 # =======================================
-name: Deploy Discord Bot
+name: Deploy
 
 on:
   push:
     branches: [main]
-    paths:
-      - 'discord-bot/**'
-      - '.github/workflows/deploy-bot.yml'
-      - '.github/scripts/with_retry.sh'
   workflow_dispatch:
 
 jobs:
@@ -60,13 +48,10 @@ jobs:
         run: npm install -g wrangler@4.72.0
 
       # ---- Automatically provision the Workers KV namespace ----
-      # NOTE: CLOUDFLARE_API_TOKEN must have "Workers KV Storage:Edit" permission
-      #       in addition to "Workers Scripts:Edit" for this step to succeed.
-      # Uses the Cloudflare REST API to look up (or create) a namespace named
-      # "KINTSUGI_BOT", then writes its id into wrangler.toml for the deploy step.
-      # The namespace id is NOT a credential — it is safe to embed in config files,
-      # but we avoid committing it to the repo so deploys always use the live id.
-      # Retries up to 5 times with exponential back-off on transient API failures.
+      # NOTE: CLOUDFLARE_API_TOKEN must have "Workers KV Storage:Edit" permission.
+      # Creates a KV namespace named "KINTSUGI_BOT" if it doesn't exist, then
+      # injects its ID into wrangler.jsonc for the deploy step.
+      # Retries up to 5 times with exponential back-off on transient failures.
       - name: Provision KV namespace (KINTSUGI_BOT)
         id: kv
         env:
@@ -75,11 +60,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Retry helper: up to 5 attempts, doubling the wait each time.
           # shellcheck source=.github/scripts/with_retry.sh
           . "$GITHUB_WORKSPACE/.github/scripts/with_retry.sh"
 
-          # Fetch the list of KV namespaces (retrying on transient failures).
           fetch_namespaces() {
             NAMESPACES=$(curl -sf \
               "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces?per_page=100" \
@@ -87,7 +70,6 @@ jobs:
           }
           with_retry fetch_namespaces
 
-          # ---- List existing KV namespaces (up to 100) ----
           KV_ID=$(echo "${NAMESPACES}" | python3 -c '
           import json, sys
           raw = sys.stdin.read()
@@ -140,37 +122,36 @@ jobs:
 
           echo "kv_namespace_id=${KV_ID}" >> "${GITHUB_OUTPUT}"
 
-      # ---- Append the KV binding to wrangler.toml for this run only ----
+      # ---- Append the KV binding to wrangler.jsonc for this run only ----
       # This modifies the checked-out copy; it is never committed to the repo.
-      - name: Inject KV binding into wrangler.toml
+      - name: Inject KV binding into wrangler.jsonc
         run: |
-          printf '\n[[kv_namespaces]]\nbinding = "KV"\nid      = "%s"\n' \
-            "${{ steps.kv.outputs.kv_namespace_id }}" \
-            >> discord-bot/wrangler.toml
+          # Read the current wrangler.jsonc, strip the closing brace, and append
+          # the kv_namespaces block before closing.  Using node for JSON-safe editing.
+          node - "${{ steps.kv.outputs.kv_namespace_id }}" << 'EOF'
+          const fs   = require('fs');
+          const kvId = process.argv[1];
+          const raw  = fs.readFileSync('wrangler.jsonc', 'utf8');
+          // Strip single-line // comments so JSON.parse works
+          const stripped = raw.replace(/\/\/[^\n]*/g, '');
+          const cfg = JSON.parse(stripped);
+          cfg.kv_namespaces = [{ binding: 'KV', id: kvId }];
+          // Write back as standard JSON (wrangler accepts both jsonc and json)
+          fs.writeFileSync('wrangler.jsonc', JSON.stringify(cfg, null, 2));
+          console.log('KV binding injected into wrangler.jsonc');
+          EOF
 
-      # ---- Deploy the Worker script with retry ----
-      # Uses the Wrangler CLI directly (installed globally above) so we can
-      # wrap the deploy in our own retry loop.  Retries up to 5 times with
-      # exponential back-off on transient Cloudflare API or network errors.
+      # ---- Deploy the unified Worker ----
       - name: Deploy Worker
         env:
           CLOUDFLARE_API_TOKEN:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        working-directory: discord-bot
         run: |
           set -euo pipefail
-
-          # shellcheck source=.github/scripts/with_retry.sh
           . "$GITHUB_WORKSPACE/.github/scripts/with_retry.sh"
+          with_retry wrangler deploy --config wrangler.jsonc
 
-          with_retry wrangler deploy
-
-      # ---- Push all secrets only when they are configured ----
-      # wrangler secret put rejects empty-string values, so we skip any secret
-      # whose corresponding GitHub Secret is not set.  This makes the workflow
-      # resilient to first-time deploys where Discord secrets have not yet been
-      # added to the GitHub repository.
-      # Each secret push is retried up to 5 times on failure.
+      # ---- Push secrets ----
       - name: Push secrets
         env:
           CLOUDFLARE_API_TOKEN:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -182,18 +163,16 @@ jobs:
           PAYOUTS_CHANNEL_ID:    ${{ secrets.PAYOUTS_CHANNEL_ID }}
           RIPTIDE_USER_ID:       ${{ secrets.RIPTIDE_USER_ID }}
           TRIGGER_TOKEN:         ${{ secrets.TRIGGER_TOKEN }}
-        working-directory: discord-bot
         run: |
           set -euo pipefail
 
-          # push_secret retries the wrangler secret put call on failure.
           push_secret() {
             local name="$1"
             local value="${2:-}"
             if [ -n "${value}" ]; then
               echo "Pushing ${name}..."
               local max=5 attempt=1 delay=15
-              until printf '%s' "${value}" | wrangler secret put "${name}"; do
+              until printf '%s' "${value}" | wrangler secret put "${name}" --config wrangler.jsonc; do
                 if [ "$attempt" -ge "$max" ]; then
                   echo "All $max attempts to push ${name} failed." >&2
                   return 1
@@ -207,6 +186,7 @@ jobs:
               echo "${name} not set — skipping."
             fi
           }
+
           push_secret DISCORD_PUBLIC_KEY    "${DISCORD_PUBLIC_KEY:-}"
           push_secret DISCORD_BOT_TOKEN     "${DISCORD_BOT_TOKEN:-}"
           push_secret ANALYTICS_CHANNEL_ID  "${ANALYTICS_CHANNEL_ID:-}"
@@ -216,16 +196,10 @@ jobs:
           push_secret TRIGGER_TOKEN         "${TRIGGER_TOKEN:-}"
 
       # ---- Register slash commands ----
-      # Registers /payouts and /update-analytics globally with Discord.
-      # Requires DISCORD_APP_ID and DISCORD_BOT_TOKEN.
-      # Skipped gracefully if DISCORD_APP_ID is not configured (commands can
-      # be registered later by running the Register Slash Commands workflow).
-      # Retried up to 5 times on failure.
       - name: Register slash commands
         env:
           DISCORD_APP_ID:    ${{ secrets.DISCORD_APP_ID }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-        working-directory: discord-bot
         run: |
           set -euo pipefail
 
@@ -233,8 +207,6 @@ jobs:
             echo "DISCORD_APP_ID not set — skipping slash command registration."
             echo "Add DISCORD_APP_ID to GitHub Secrets and redeploy, or run the 'Register Slash Commands' workflow manually."
           else
-            # shellcheck source=.github/scripts/with_retry.sh
             . "$GITHUB_WORKSPACE/.github/scripts/with_retry.sh"
-            with_retry node register-commands.js
+            with_retry node scripts/register-commands.js
           fi
-

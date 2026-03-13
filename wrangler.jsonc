@@ -1,20 +1,31 @@
 {
   // =======================================
-  // Kintsugi Dashboard — Cloudflare Workers static assets config
+  // Kintsugi — Unified Cloudflare Worker config
   // https://developers.cloudflare.com/workers/wrangler/configuration/
   //
-  // This worker ("kintsugi") serves the web dashboard as static assets and
-  // provides CORS support for /api/* preflight requests.
+  // Single worker that serves the web dashboard (static assets) AND handles
+  // all Discord bot interactions.  Point the Discord Developer Portal
+  // Interactions Endpoint URL at this worker's URL:
+  //   https://kintsugi-discord-bot.<subdomain>.workers.dev
   //
-  // The Discord bot is deployed as a SEPARATE worker named "kintsugi-bot"
-  // (see discord-bot/wrangler.toml).  Do NOT set Discord-related secrets on
-  // this worker — they belong on the bot worker only.
+  // The KV namespace binding (env.KV) is injected automatically by the
+  // GitHub Actions deploy workflow — no manual edits required.
+  //
+  // Required secrets (set via `wrangler secret put` or synced by CI):
+  //   DISCORD_PUBLIC_KEY, DISCORD_BOT_TOKEN,
+  //   ANALYTICS_CHANNEL_ID, JOBS_CHANNEL_ID, PAYOUTS_CHANNEL_ID
+  //
+  // Optional secrets:
+  //   RIPTIDE_USER_ID, TRIGGER_TOKEN
   // =======================================
-  "name": "kintsugi",
+  "name": "kintsugi-discord-bot",
   "compatibility_date": "2026-03-10",
   "main": "worker.js",
   "assets": {
     "directory": "./",
     "binding": "ASSETS"
+  },
+  "triggers": {
+    "crons": ["*/5 * * * *"]
   }
 }
