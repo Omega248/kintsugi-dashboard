@@ -119,6 +119,7 @@ The **Interactions Endpoint URL** in the Discord Developer Portal must point to 
 | `ANALYTICS_CHANNEL_ID` | Discord channel ID for your **#analytics** channel |
 | `JOBS_CHANNEL_ID` | Discord channel ID for your **#jobs** channel |
 | `PAYOUTS_CHANNEL_ID` | Discord channel ID for your **#payouts** channel |
+| `INVOICE_CHANNEL_ID` | Discord channel ID for your **#invoice** channel |
 
 **Optional secrets:**
 
@@ -165,9 +166,9 @@ Post all three panels using GitHub Actions (no terminal required):
 1. **Actions → Post Analytics Panel → Run workflow**
 2. Leave channel ID blank to use `ANALYTICS_CHANNEL_ID`, or enter a different ID.
 
-**Payouts panel** (in #payouts):
-1. **Actions → Post Payouts Panel → Run workflow**
-2. Leave channel ID blank to use `PAYOUTS_CHANNEL_ID`, or enter a different ID.
+**Invoice panel** (in #invoice):
+1. **Actions → Post Invoice Panel → Run workflow**
+2. Leave channel ID blank to use `INVOICE_CHANNEL_ID`, or enter a different ID.
 
 After posting each panel, **pin the message** in Discord (right-click → Pin) so it stays at the top.
 
@@ -183,8 +184,8 @@ DISCORD_BOT_TOKEN=<token> DISCORD_CHANNEL_ID=<jobs-channel-id> node discord-bot/
 # Analytics panel
 DISCORD_BOT_TOKEN=<token> DISCORD_CHANNEL_ID=<analytics-channel-id> node discord-bot/setup-analytics-panel.js
 
-# Payouts panel
-DISCORD_BOT_TOKEN=<token> DISCORD_CHANNEL_ID=<payouts-channel-id> node discord-bot/setup-payouts-panel.js
+# Invoice panel
+DISCORD_BOT_TOKEN=<token> DISCORD_CHANNEL_ID=<invoice-channel-id> node discord-bot/setup-invoice-panel.js
 ```
 
 > To get a channel ID: right-click the channel in Discord → **Copy Channel ID**  
@@ -270,7 +271,7 @@ discord-bot/
 ├── worker.js                  Cloudflare Worker — all bot logic (interactions + cron)
 ├── setup-panel.js             Post the Job Logs panel (run once)
 ├── setup-analytics-panel.js   Post the Analytics panel (run once)
-├── setup-payouts-panel.js     Post the Payouts panel (run once)
+├── setup-invoice-panel.js     Post the Invoice panel (run once)
 ├── register-commands.js       Register /analytics, /update-analytics, and /payouts slash commands
 ├── wrangler.toml              Cloudflare Workers deployment config (worker: kintsugi-bot)
 └── README.md                  This file
@@ -279,7 +280,7 @@ discord-bot/
 ├── deploy-bot.yml             Auto-deploy bot on push to discord-bot/**
 ├── setup-panel.yml            Post the Job Logs panel on demand
 ├── setup-analytics-panel.yml  Post the Analytics panel on demand
-├── setup-payouts-panel.yml    Post the Payouts panel on demand
+├── setup-invoice-panel.yml    Post the Invoice panel on demand
 └── register-commands.yml      Register slash commands on demand
 ```
 

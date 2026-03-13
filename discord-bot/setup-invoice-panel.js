@@ -10,7 +10,7 @@
 // Requirements:
 //   - Node.js 18+ (built-in fetch)
 //   - DISCORD_BOT_TOKEN  — Bot token from the Discord Developer Portal
-//   - DISCORD_CHANNEL_ID — ID of the #payouts channel to post the panel in
+//   - DISCORD_CHANNEL_ID — ID of the #invoice channel to post the panel in
 //     (right-click the channel in Discord → Copy Channel ID)
 //
 // Optional:
@@ -19,8 +19,8 @@
 //     pinned message stays in place.
 //
 // Usage:
-//   DISCORD_BOT_TOKEN=... DISCORD_CHANNEL_ID=... node setup-payouts-panel.js
-//   DISCORD_BOT_TOKEN=... DISCORD_CHANNEL_ID=... PANEL_MESSAGE_ID=12345 node setup-payouts-panel.js
+//   DISCORD_BOT_TOKEN=... DISCORD_CHANNEL_ID=... node setup-invoice-panel.js
+//   DISCORD_BOT_TOKEN=... DISCORD_CHANNEL_ID=... PANEL_MESSAGE_ID=12345 node setup-invoice-panel.js
 //
 // Tip: After running, pin the message so it stays at the top of the channel.
 // =======================================
@@ -33,7 +33,7 @@ if (!BOT_TOKEN || !CHANNEL_ID) {
   console.error(
     'Error: DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID environment variables are required.\n\n' +
     'Example:\n' +
-    '  DISCORD_BOT_TOKEN=Bot.xxxxx DISCORD_CHANNEL_ID=1234567890 node setup-payouts-panel.js'
+    '  DISCORD_BOT_TOKEN=Bot.xxxxx DISCORD_CHANNEL_ID=1234567890 node setup-invoice-panel.js'
   );
   process.exit(1);
 }
@@ -131,5 +131,4 @@ upsertPanel().catch(err => {
   console.error('Unexpected error:', err);
   process.exit(1);
 });
-
 
