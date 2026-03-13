@@ -645,11 +645,11 @@ async function handlePayoutsCommand(interaction, ctx) {
  * Handle the /update-analytics slash command.
  * Defers privately (ephemeral), fetches live data from Google Sheets, then
  * posts or edits the analytics summary message — identical to what the
- * 5-minute cron does.  Only the invoking user sees the confirmation.
+ * hourly cron does.  Only the invoking user sees the confirmation.
  *
  * Optional "channel" argument:
  *   When provided, the channel ID is persisted in KV so every future
- *   5-minute automatic refresh also posts to that channel.  Once set, the
+ *   hourly automatic refresh also posts to that channel.  Once set, the
  *   channel persists until changed again with another /update-analytics call.
  */
 async function handleUpdateAnalyticsCommand(interaction, env, ctx) {
@@ -661,7 +661,7 @@ async function handleUpdateAnalyticsCommand(interaction, env, ctx) {
       const channelOption = interaction.data?.options?.find(o => o.name === 'channel');
       const channelId = channelOption?.value || null;
 
-      // Persist the chosen channel in KV so the 5-minute cron auto-update uses it
+      // Persist the chosen channel in KV so the hourly cron auto-update uses it
       if (channelId && env.KV) {
         await env.KV.put('analytics_channel_id', channelId);
       }
@@ -703,7 +703,7 @@ async function handleUpdateAnalyticsCommand(interaction, env, ctx) {
       if (ok) {
         const channelMention = effectiveChannelId ? `<#${effectiveChannelId}>` : 'the analytics channel';
         const autoUpdateNote = channelId
-          ? '\n\n🔄 This channel is now the auto-update target — the 5-minute refresh will keep it updated.'
+          ? '\n\n🔄 This channel is now the auto-update target — the hourly refresh will keep it updated.'
           : '';
         await editOriginalMessage(appId, token, {
           content:
@@ -1903,22 +1903,32 @@ async function postJobsUpdate(env, summary) {
 
 /**
  * Send the payday reminder ping to the #payouts channel.
- * Sends at most once per week-ending date, tracked in KV so the cron never
- * double-pings even if the Worker retries on failure.
+ * Only fires on Sunday (the week-ending day, evaluated in UTC) so the reminder
+ * is never sent mid-week leading up to payday.  Sends at most once per Sunday,
+ * tracked in KV so the hourly cron never double-pings.
  * Uses DISCORD_BOT_TOKEN, PAYOUTS_CHANNEL_ID, RIPTIDE_USER_ID, and the KV namespace from env.
  *
  * @param {object} env
- * @param {Date}   weekEndDate  - The week-ending date.
+ * @param {Date}   weekEndDate  - The week-ending date (used in the message text).
  * @param {number} [totalPayout=0] - Total mechanic payout for the week (shown in the reminder).
  */
 async function postPaydayReminder(env, weekEndDate, totalPayout = 0) {
   if (!env.DISCORD_BOT_TOKEN || !env.PAYOUTS_CHANNEL_ID) return false;
+  if (!weekEndDate) return false;
 
-  // Deduplicate: skip if we already sent the reminder for this week
-  const weekKey = weekEndDate.toISOString().slice(0, 10);
+  // Only send the reminder on the actual week-ending day (Sunday in UTC).
+  // Any other day of the week returns early so the channel is never spammed
+  // with early reminders.
+  const today = new Date();
+  if (today.getUTCDay() !== 0) return false; // 0 = Sunday
+
+  // Use today's date (the Sunday) as the deduplication key.
+  // weekEndDate may reference the previous completed week when the current
+  // week has no data yet, so keying off today guarantees one send per Sunday.
+  const todayKey = today.toISOString().slice(0, 10);
   if (env.KV) {
     const lastKey = await env.KV.get('last_reminder_week');
-    if (lastKey === weekKey) return true; // already sent for this week-ending date
+    if (lastKey === todayKey) return true; // already sent this Sunday
   }
 
   const mention    = env.RIPTIDE_USER_ID ? `<@${env.RIPTIDE_USER_ID}>` : '**@riptide248**';
@@ -1929,7 +1939,7 @@ async function postPaydayReminder(env, weekEndDate, totalPayout = 0) {
   });
 
   if (messageId !== null && env.KV) {
-    await env.KV.put('last_reminder_week', weekKey);
+    await env.KV.put('last_reminder_week', todayKey);
   }
   return messageId !== null;
 }
@@ -2054,7 +2064,7 @@ async function handleNotifyPayouts(request, env) {
 /**
  * Handle POST /api/trigger-weekly — triggered from the web dashboard button.
  *
- * Runs the same logic as the 5-minute cron trigger:
+ * Runs the same logic as the hourly cron trigger:
  *   1. Reads live job data from Google Sheets.
  *   2. Posts/edits the weekly analytics summary in #analytics.
  *   3. Posts the job-activity list in #jobs.
@@ -2356,15 +2366,24 @@ export default {
 
   /**
    * Scheduled handler — runs on the Cron Trigger defined in wrangler.jsonc.
-   * Fires every 5 minutes to:
+   * Fires once per hour to:
    *   1. Validates that DISCORD_BOT_TOKEN is present.
    *   2. Reads live job data from the Google Sheet.
    *   3. Posts/edits the week's analytics summary in #analytics (requires ANALYTICS_CHANNEL_ID).
    *   4. Posts the weekly job-activity list in #jobs (requires JOBS_CHANNEL_ID).
    *   5. Sends a deduplicated payday reminder ping in #payouts (requires PAYOUTS_CHANNEL_ID).
    * Steps 3–5 are skipped gracefully when their channel ID secret is not configured.
+   * Steps 3 and 4 edit the same pinned message each run (via KV-stored message ID) rather
+   * than posting new messages, so the channel is never spammed.
    */
-  async scheduled(_event, env, _ctx) {
+  async scheduled(event, env, ctx) {
+    // Send a debug heartbeat so the cron run is always visible in the debug channel
+    ctx.waitUntil(sendDebugMessage(env, '⏰ Scheduled Run Started', 0x6366f1, {
+      cron: event.cron ?? 'unknown',
+      time: new Date().toISOString(),
+      kv:   !!env.KV,
+    }).catch(() => {}));
+
     if (!env.KV) {
       console.warn(
         'scheduled: env.KV is not bound — analytics message editing and ' +
@@ -2381,6 +2400,9 @@ export default {
         'scheduled: missing required configuration — set these secrets:\n' +
         missing.map(k => `  wrangler secret put ${k}`).join('\n')
       );
+      ctx.waitUntil(sendDebugMessage(env, '❌ Scheduled Run — Missing Config', 0xef4444, {
+        missing,
+      }).catch(() => {}));
       return;
     }
 
@@ -2397,13 +2419,27 @@ export default {
       }
 
       const prevSummary = buildPrevWeekSummary(allJobs);
-      await Promise.all([
+      const [analyticsOk, jobsOk, reminderOk] = await Promise.all([
         postWeeklyAnalytics(env, summary, prevSummary),
         postJobsUpdate(env, summary),
         postPaydayReminder(env, summary.weekEndDate, summary.totalPayout),
       ]);
+
+      console.log(`scheduled: run complete — analytics=${analyticsOk} jobs=${jobsOk} reminder=${reminderOk}`);
+      ctx.waitUntil(sendDebugMessage(env, '✅ Scheduled Run Complete', 0x22c55e, {
+        weekEnd:   summary.weekEndDate.toISOString().slice(0, 10),
+        analytics: analyticsOk,
+        jobs:      jobsOk,
+        reminder:  reminderOk,
+        repairs:   summary.totalRepairs,
+        payout:    summary.totalPayout,
+      }).catch(() => {}));
     } catch (err) {
       console.error('scheduled: error posting to Discord:', err.message);
+      ctx.waitUntil(sendDebugMessage(env, '❌ Scheduled Run Failed', 0xef4444, {
+        error: err.message,
+        stack: err.stack?.slice(0, 500),
+      }).catch(() => {}));
     }
   },
 };
