@@ -223,11 +223,11 @@ await runTest('Step 2 — billing_dept_select (BCSO) → month ending select', a
   console.log(`     ℹ️  Month value for step 3: ${globalThis._testMonthValue}`);
 });
 
-// ── Test 3: Month selected → invoice embed (PATCH) + CSV follow-up (POST) ─────
-// The new flow mirrors handleWeekSelect: editOriginalMessage (plain JSON PATCH)
-// updates the ephemeral message with the embed; postFollowupWithFile (POST) sends
-// the CSV as a separate ephemeral follow-up — no complex multipart PATCH.
-await runTest('Step 3 — billing_month_select:BCSO → invoice embed via PATCH + CSV via follow-up POST', async () => {
+// ── Test 3: Month selected → invoice embed (PATCH) with copy-pasteable table ─
+// The handler now delivers everything in a single plain-JSON PATCH:
+// the embed description contains a copy-pasteable tab-separated code block
+// so users can paste the job list directly into a spreadsheet — no file needed.
+await runTest('Step 3 — billing_month_select:BCSO → invoice embed with copy-pasteable table (no file)', async () => {
   const monthValue = globalThis._testMonthValue ?? '2026-03-31';
 
   const { ctx, flush } = makeCtx();
@@ -242,22 +242,23 @@ await runTest('Step 3 — billing_month_select:BCSO → invoice embed via PATCH 
 
   await flush();
 
-  // Primary response: editOriginalMessage (plain JSON PATCH) with the invoice embed
+  // Single plain-JSON PATCH — no multipart upload, no follow-up file
   assert(capturedPatch !== null, 'editOriginalMessage (PATCH) was called with the invoice embed');
-  assert(!capturedPatchIsFile, 'Primary response is a plain JSON PATCH — NOT a multipart upload');
+  assert(!capturedPatchIsFile, 'Response is a plain JSON PATCH — NOT a multipart upload');
+  assert(capturedFollowup === null, 'No follow-up file message — everything is in the embed');
 
   const content = capturedPatch.content || '';
   assert(content.includes('BCSO'), 'Invoice content references "BCSO"');
   assert(content.includes('Invoice') || content.includes('invoice'), 'Content labels result as an invoice');
 
   const embeds = capturedPatch.embeds ?? [];
-  assert(embeds.length > 0, 'At least one embed is included in the primary response');
+  assert(embeds.length > 0, 'At least one embed is included in the response');
 
-  // CSV follow-up: postFollowupWithFile (POST) sends the file separately
-  assert(capturedFollowup !== null, 'postFollowupWithFile (POST) was called with the CSV');
-  assert(capturedFollowupIsFile, 'CSV is delivered as a multipart follow-up POST');
-  const csvFilename = (capturedFollowup.attachments ?? [])[0]?.filename ?? '';
-  assert(csvFilename.endsWith('.csv'), `CSV follow-up has a .csv filename (got: "${csvFilename}")`);
+  // Embed description must contain a code block with copy-pasteable tab-separated data
+  const description = embeds[0].description ?? '';
+  assert(description.includes('```'), 'Embed description contains a code block for copy-paste');
+  assert(description.includes('Mechanic'), 'Code block includes "Mechanic" column header');
+  assert(description.includes('\t'), 'Code block uses tabs (paste-friendly for spreadsheets)');
 
   // Confirm there is NO mechanic-select component in the final response
   const components = capturedPatch.components ?? [];
@@ -382,7 +383,7 @@ await runTest('Backward compat — invoice_dept_select routes to month-ending se
   assert(selects.length > 0, 'A month-ending select is present');
 });
 
-await runTest('Backward compat — invoice_month_select:BCSO routes to invoice generation (embed+followup)', async () => {
+await runTest('Backward compat — invoice_month_select:BCSO routes to invoice generation (embed with copy-paste table)', async () => {
   const monthValue = globalThis._testMonthValue ?? '2026-03-31';
   const { ctx, flush } = makeCtx();
   const res  = await worker.fetch(
@@ -396,13 +397,13 @@ await runTest('Backward compat — invoice_month_select:BCSO routes to invoice g
 
   await flush();
 
-  // Primary: plain JSON PATCH with embed
+  // Single plain-JSON PATCH with embed containing copy-pasteable table; no file follow-up
   assert(capturedPatch !== null, 'editOriginalMessage (PATCH) was called');
   assert(!capturedPatchIsFile, 'Primary PATCH is plain JSON (not multipart)');
   assert(capturedPatch.content?.includes('BCSO'), 'Invoice content references "BCSO"');
-  // CSV follow-up
-  assert(capturedFollowup !== null, 'postFollowupWithFile (POST) was called');
-  assert(capturedFollowupIsFile, 'CSV delivered as follow-up POST');
+  assert(capturedFollowup === null, 'No follow-up file — everything in the embed');
+  const desc = (capturedPatch.embeds?.[0]?.description ?? '');
+  assert(desc.includes('```'), 'Embed description contains a code block');
 });
 
 // ── Test: unrecognized component → ephemeral error (NOT "This interaction failed") ────
@@ -655,9 +656,10 @@ await runTest('Month with 0 matching jobs → valid 0-row invoice (no crash)', a
 
   await flush();
 
-  // Primary: plain JSON PATCH with the invoice embed
+  // Single plain-JSON PATCH — no file, no follow-up
   assert(capturedPatch !== null, 'editOriginalMessage (PATCH) was called');
   assert(!capturedPatchIsFile, 'Primary PATCH is plain JSON (not multipart) even for 0-job month');
+  assert(capturedFollowup === null, 'No follow-up file for 0-job month');
   const embeds = capturedPatch.embeds ?? [];
   assert(embeds.length > 0, 'At least one embed in the 0-job invoice');
   const description = (embeds[0].description ?? '').toLowerCase();
@@ -665,9 +667,6 @@ await runTest('Month with 0 matching jobs → valid 0-row invoice (no crash)', a
     description.includes('no jobs') || description.includes('_no jobs'),
     `Embed description notes no jobs recorded (got: "${embeds[0].description}")`
   );
-  // CSV follow-up still sent (empty CSV with just headers)
-  assert(capturedFollowup !== null, 'postFollowupWithFile (POST) was called for 0-job month');
-  assert(capturedFollowupIsFile, 'CSV follow-up is a multipart POST');
 });
 
 // ── Test: INVOICE_DEBUG=true → does not crash and invoice still delivered ────
@@ -686,13 +685,13 @@ await runTest('INVOICE_DEBUG=true → invoice delivered normally (no crash from 
 
   await flush();
 
-  // Plain JSON PATCH with embed
+  // Plain JSON PATCH with embed; no file follow-up
   assert(capturedPatch !== null, 'editOriginalMessage (PATCH) was called in debug mode');
   assert(!capturedPatchIsFile, 'Primary PATCH is plain JSON in debug mode');
   assert(capturedPatch.content?.includes('BCSO'), 'Invoice content references BCSO');
-  // CSV follow-up
-  assert(capturedFollowup !== null, 'postFollowupWithFile (POST) was called in debug mode');
-  assert(capturedFollowupIsFile, 'CSV follow-up is multipart in debug mode');
+  assert(capturedFollowup === null, 'No follow-up file in debug mode');
+  const desc = (capturedPatch.embeds?.[0]?.description ?? '');
+  assert(desc.includes('```'), 'Embed description contains a code block in debug mode');
 });
 
 // ── Test: invalid dept value → early validation error, no sheet fetch ────────

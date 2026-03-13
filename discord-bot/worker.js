@@ -74,9 +74,10 @@ const WORKER_VERSION            = '2.0.0';  // Bumped with the reliability updat
 // Used in two places: step-1 filtering and step-3 input validation.
 const DEPT_NAME_PATTERN = /^[A-Za-z]{2,10}$/;
 
-// Discord's max attachment size is 25 MB; we warn in logs when approaching it
-// so admins can act before uploads silently fail.
-const MAX_CSV_BYTES = 24 * 1024 * 1024; // 24 MB — leave 1 MB headroom
+// Max chars for copy-pasteable text block inside an embed description.
+// Discord embed descriptions cap at 4096 chars; leave room for code-block
+// markers, a truncation notice, and any prefix text.
+const COPY_TEXT_LIMIT = 3800;
 
 // ===== Utility helpers =====
 
@@ -410,36 +411,26 @@ function filterByMonth(jobs, year, month) {
 // ===== Invoice helpers =====
 
 /**
- * Escape a single cell value for RFC-4180 CSV output.
- * Fields that contain commas, double-quotes, or newlines are wrapped in
- * double-quotes and internal double-quotes are doubled.
+ * Build a copy-pasteable tab-separated table for one department's monthly invoice.
+ *
+ * The result is wrapped in a Discord code block (``` … ```) so users can
+ * select-all and paste it directly into Google Sheets, Excel, or any document.
+ * Tabs act as column separators when pasted into a spreadsheet.
+ *
+ * If the data would exceed COPY_TEXT_LIMIT characters the table is trimmed and
+ * a truncation notice is appended; totals always reflect all jobs.
+ *
+ * @param {string} dept       - Department name (e.g. "BCSO").
+ * @param {string} monthLabel - Human-readable month label.
+ * @param {Array}  jobs       - Filtered job rows for this dept + month.
+ * @returns {{ text: string, truncated: boolean }}
  */
-function toCsvCell(v) {
-  const s = String(v == null ? '' : v);
-  if (/[,"\n\r]/.test(s)) {
-    return `"${s.replace(/"/g, '""')}"`;
-  }
-  return s;
-}
+function buildInvoiceCopyText(dept, monthLabel, jobs) {
+  const header = 'Date\tMechanic\tOfficer\tLicense Plate\tRepairs\tEngine Replacements\tJob Total ($)';
 
-function toCsvRow(cells) {
-  return cells.map(toCsvCell).join(',');
-}
-
-/**
- * Build a CSV invoice string for one department and one calendar month.
- * The file includes a header, per-job rows, and a TOTALS footer row.
- */
-function buildInvoiceCsv(dept, monthLabel, jobs) {
-  const lines = [
-    toCsvRow([`Kintsugi Motorworks — ${dept} Invoice — Month Ending: ${monthLabel}`]),
-    '',
-    toCsvRow(['Date', 'Mechanic', 'Officer', 'License Plate', 'Repairs', 'Engine Replacements', 'Job Total ($)']),
-  ];
-
-  for (const j of jobs) {
+  const rows = jobs.map(j => {
     const jobTotal = (j.across || 0) * PAY_PER_REPAIR + (j.engineReplacements || 0) * ENGINE_REIMBURSEMENT;
-    lines.push(toCsvRow([
+    return [
       fmtDate(j.bestDate),
       j.mechanic,
       j.cop || '',
@@ -447,22 +438,45 @@ function buildInvoiceCsv(dept, monthLabel, jobs) {
       j.across || 0,
       j.engineReplacements || 0,
       jobTotal,
-    ]));
-  }
+    ].join('\t');
+  });
 
+  let totalLine = '';
   if (jobs.length > 0) {
     const totalRepairs = jobs.reduce((s, j) => s + (j.across || 0), 0);
     const totalEngines = jobs.reduce((s, j) => s + (j.engineReplacements || 0), 0);
     const grandTotal   = totalRepairs * PAY_PER_REPAIR + totalEngines * ENGINE_REIMBURSEMENT;
-    lines.push('');
-    lines.push(toCsvRow(['TOTALS', '', '', '', totalRepairs, totalEngines, grandTotal]));
+    totalLine = ['', 'TOTALS', '', '', totalRepairs, totalEngines, grandTotal].join('\t');
   }
 
-  return lines.join('\r\n');
+  // Fit as many job rows as possible within the character limit.
+  // The overhead constant (50) covers: two newlines + code-block markers (8 chars)
+  // + a worst-case truncation notice (~40 chars).
+  const OVERHEAD = 50;
+  let body = header;
+  let visibleCount = 0;
+  for (const row of rows) {
+    const needed = 1 + row.length + (totalLine ? 1 + totalLine.length : 0) + OVERHEAD;
+    if (body.length + needed > COPY_TEXT_LIMIT) break;
+    body += '\n' + row;
+    visibleCount++;
+  }
+
+  const truncated = visibleCount < rows.length;
+  if (truncated) {
+    const hidden = rows.length - visibleCount;
+    body += `\n… (${hidden} more job${hidden !== 1 ? 's' : ''} — totals cover all ${jobs.length})`;
+  } else if (totalLine) {
+    body += '\n' + totalLine;
+  }
+
+  return { text: '```\n' + body + '\n```', truncated };
 }
 
 /**
  * Build a Discord embed summarising the monthly invoice for one department.
+ * The embed description contains a copy-pasteable tab-separated table so
+ * users can paste the full job list directly into a spreadsheet or document.
  */
 function buildDeptInvoiceEmbed(dept, monthLabel, jobs) {
   const totalRepairs = jobs.reduce((s, j) => s + (j.across || 0), 0);
@@ -484,9 +498,15 @@ function buildDeptInvoiceEmbed(dept, monthLabel, jobs) {
     { name: '💵 Total Owed',          value: fmtMoney(grandTotal),  inline: false },
   ];
 
-  const description = jobs.length === 0
-    ? `_No jobs recorded for **${dept}** in ${monthLabel}._`
-    : `Full job breakdown is attached as a CSV file.`;
+  let description;
+  if (jobs.length === 0) {
+    description = `_No jobs recorded for **${dept}** in ${monthLabel}._`;
+  } else {
+    const { text, truncated } = buildInvoiceCopyText(dept, monthLabel, jobs);
+    description = (truncated
+      ? `_Showing first rows — totals above cover all ${jobs.length} jobs._\n\n`
+      : '') + text;
+  }
 
   return {
     title:       `📋 ${dept} — Monthly Invoice`,
@@ -1527,30 +1547,16 @@ async function handleInvoiceMonthSelect(interaction, env, ctx) {
         durMs:     timings.transformMs,
       });
 
-      // Build CSV content
-      const tCsv = Date.now();
-      const csvContent = buildInvoiceCsv(dept, monthLabel, deptJobs);
-      const csvFilename = `kintsugi-invoice-${dept.toLowerCase()}-${monthValue}.csv`;
-      const csvBytes   = new TextEncoder().encode(csvContent).length;
-      timings.csvMs    = Date.now() - tCsv;
-
-      if (csvBytes > MAX_CSV_BYTES) {
-        invoiceLog('warn', { correlationId, event: 'invoice_csv_oversized', csvBytes, dept, monthValue });
-      }
-
-      // Update the original deferred message with the invoice embed and attach the
-      // CSV file directly — a single multipart PATCH replaces the two-step approach
-      // (plain JSON PATCH for the embed + a separate follow-up POST for the file)
-      // that was causing "This interaction failed" when the follow-up was rejected.
-      const tFile = Date.now();
-      await editOriginalMessageWithFile(
-        appId, token,
-        `📋 **${dept} Invoice — Month Ending: ${monthLabel}**\n${deptJobs.length} job${deptJobs.length !== 1 ? 's' : ''} · CSV file attached`,
-        [buildDeptInvoiceEmbed(dept, monthLabel, deptJobs)],
-        csvFilename,
-        csvContent
-      );
-      timings.fileMs  = Date.now() - tFile;
+      // Build and deliver the invoice embed with copy-pasteable job table.
+      // A single plain-JSON PATCH is the simplest and most reliable approach —
+      // it mirrors handleWeekSelect and avoids any file-upload complexity.
+      const tEmbed = Date.now();
+      await editOriginalMessage(appId, token, {
+        content:    `📋 **${dept} Invoice — Month Ending: ${monthLabel}**\n${deptJobs.length} job${deptJobs.length !== 1 ? 's' : ''} · Select the table below to copy it.`,
+        embeds:     [buildDeptInvoiceEmbed(dept, monthLabel, deptJobs)],
+        components: [],
+      });
+      timings.embedMs = Date.now() - tEmbed;
       timings.totalMs = Date.now() - t0Total;
 
       invoiceLog('info', {
@@ -1560,7 +1566,6 @@ async function handleInvoiceMonthSelect(interaction, env, ctx) {
         dept,
         monthValue,
         deptJobs:  deptJobs.length,
-        csvBytes,
         timings,
       });
 
@@ -1570,7 +1575,6 @@ async function handleInvoiceMonthSelect(interaction, env, ctx) {
           event:       'invoice_debug_info',
           timings,
           memoryUsage: typeof process !== 'undefined' ? process.memoryUsage() : null,
-          csvBytes,
         });
       }
     } catch (err) {
