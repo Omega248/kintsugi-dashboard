@@ -119,35 +119,66 @@ jobs:
 
           echo "kv_namespace_id=${KV_ID}" >> "${GITHUB_OUTPUT}"
 
-      # ---- Append the KV binding to wrangler.jsonc for this run only ----
-      # This modifies the checked-out copy; it is never committed to the repo.
-      - name: Inject KV binding into wrangler.jsonc
+      # ---- Append the KV binding to wrangler.jsonc and wrangler-bot.jsonc ----
+      # This modifies the checked-out copies; they are never committed to the repo.
+      - name: Inject KV binding into wrangler configs
         run: |
-          # Read the current wrangler.jsonc, strip the closing brace, and append
-          # the kv_namespaces block before closing.  Using node for JSON-safe editing.
+          # Uses node for JSON-safe editing.  Both configs share the same KV namespace.
           node - "${{ steps.kv.outputs.kv_namespace_id }}" << 'EOF'
           const fs   = require('fs');
           const kvId = process.argv[1];
-          const raw  = fs.readFileSync('wrangler.jsonc', 'utf8');
-          // Strip single-line // comments so JSON.parse works
-          const stripped = raw.replace(/\/\/[^\n]*/g, '');
-          const cfg = JSON.parse(stripped);
-          cfg.kv_namespaces = [{ binding: 'KV', id: kvId }];
-          // Write back as standard JSON (wrangler accepts both jsonc and json)
-          fs.writeFileSync('wrangler.jsonc', JSON.stringify(cfg, null, 2));
-          console.log('KV binding injected into wrangler.jsonc');
+          for (const file of ['wrangler.jsonc', 'wrangler-bot.jsonc']) {
+            const raw      = fs.readFileSync(file, 'utf8');
+            // Strip single-line // comments so JSON.parse works
+            const stripped = raw.replace(/\/\/[^\n]*/g, '');
+            const cfg      = JSON.parse(stripped);
+            cfg.kv_namespaces = [{ binding: 'KV', id: kvId }];
+            // Write back as standard JSON (wrangler accepts both jsonc and json)
+            fs.writeFileSync(file, JSON.stringify(cfg, null, 2));
+            console.log(`KV binding injected into ${file}`);
+          }
           EOF
 
-      # ---- Deploy the unified Worker + push secrets ----
+      # ---- Deploy the primary "kintsugi" Worker + push secrets ----
       # Uses the official Cloudflare Wrangler Action which handles installing
       # Wrangler, deploying the worker, and bulk-pushing secrets in one step.
-      - name: Deploy Worker
+      - name: Deploy Worker (kintsugi)
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: '4.72.0'
           command: deploy --config wrangler.jsonc
+          secrets: |
+            DISCORD_PUBLIC_KEY
+            DISCORD_BOT_TOKEN
+            ANALYTICS_CHANNEL_ID
+            JOBS_CHANNEL_ID
+            PAYOUTS_CHANNEL_ID
+            RIPTIDE_USER_ID
+            TRIGGER_TOKEN
+        env:
+          DISCORD_PUBLIC_KEY:    ${{ secrets.DISCORD_PUBLIC_KEY }}
+          DISCORD_BOT_TOKEN:     ${{ secrets.DISCORD_BOT_TOKEN }}
+          ANALYTICS_CHANNEL_ID:  ${{ secrets.ANALYTICS_CHANNEL_ID }}
+          JOBS_CHANNEL_ID:       ${{ secrets.JOBS_CHANNEL_ID }}
+          PAYOUTS_CHANNEL_ID:    ${{ secrets.PAYOUTS_CHANNEL_ID }}
+          RIPTIDE_USER_ID:       ${{ secrets.RIPTIDE_USER_ID }}
+          TRIGGER_TOKEN:         ${{ secrets.TRIGGER_TOKEN }}
+
+      # ---- Deploy the alias "kintsugi-discord-bot" Worker + push secrets ----
+      # Deploys the same worker.js under the legacy name so that existing Discord
+      # Developer Portal Interactions Endpoint URLs pointing to kintsugi-discord-bot
+      # continue to work alongside the primary kintsugi worker.
+      # The DiscordGateway Durable Object is referenced as a foreign namespace from
+      # the primary worker, so both URLs share the same gateway connection.
+      - name: Deploy Worker (kintsugi-discord-bot)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.72.0'
+          command: deploy --config wrangler-bot.jsonc
           secrets: |
             DISCORD_PUBLIC_KEY
             DISCORD_BOT_TOKEN
