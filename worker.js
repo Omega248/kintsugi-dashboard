@@ -762,6 +762,10 @@ Shop systems:
 - Invoice: #invoice → "📋 Generate Monthly Invoice" → pick dept → pick month. Done.
 - Payouts: #payouts panel for mechanics; web dashboard or /payouts for managers.
 
+Pay rates: $700 per repair. Engine replacements: $12,000 reimbursement + $1,500 LSPD bonus = $13,500 total for LSPD jobs, $13,500 for all other departments as well (default rate).
+
+When live sheet data or channel context is provided below, use it to give precise answers about earnings, invoices, and payouts — quote the exact figures. Do not invent numbers if no data is provided.
+
 Rules:
 1. Be helpful first — give the exact answer or step in ONE sentence.
 2. Add a quick, dry quip if it fits. Skip it if it doesn't.
@@ -868,13 +872,157 @@ async function handleViewLogs(request, env) {
   }
 }
 
+// ===== /ask slash-command helpers =====
+
+// Regex patterns used by buildSheetDataContext to decide whether to hit the
+// Google Sheets API.  Extracted as constants for clarity and easy maintenance.
+const DATA_QUESTION_REGEX    = /\b(earn|made|make|paid|pay(?:out)?s?|owe|invoice|bill|how much|this week|last week|last month|this month|mechanic|total)\b/;
+const INVOICE_QUESTION_REGEX = /\b(owe|invoice|bill|department|dept|lspd|bcso|sasp|sheriff|police)\b/;
+
+// Maximum characters of the original question shown in the public reply prefix.
+const MAX_QUESTION_PREVIEW_LENGTH = 120;
+
+/**
+ * Fetch the most recent messages from a Discord channel using the bot token.
+ * Returns messages in chronological order (oldest first).  Never throws.
+ *
+ * @param {string|null} channelId - Discord channel ID from the interaction.
+ * @param {object}      env       - Worker environment (needs DISCORD_BOT_TOKEN).
+ * @param {number}      [limit=10] - Number of messages to fetch (max 100).
+ * @returns {Promise<Array>} Array of Discord message objects, oldest first.
+ */
+async function fetchChannelMessages(channelId, env, limit = 10) {
+  if (!env.DISCORD_BOT_TOKEN || !channelId) return [];
+  try {
+    const res = await fetch(
+      `https://discord.com/api/v10/channels/${channelId}/messages?limit=${limit}`,
+      { headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` } }
+    );
+    if (!res.ok) return [];
+    const msgs = await res.json();
+    if (!Array.isArray(msgs)) return [];
+    // Discord returns newest-first; reverse for chronological order.
+    return msgs.reverse();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetch live Google Sheets data and format it as a short context string for
+ * the AI prompt.  Only runs when the question appears to be data-related
+ * (mentions earnings, payouts, invoices, mechanics, etc.).  Never throws.
+ *
+ * Returns null when the question is not data-related or the sheet is
+ * unavailable, so the AI falls back to its built-in knowledge.
+ *
+ * @param {string} question - The user's question (plain text).
+ * @returns {Promise<string|null>}
+ */
+async function buildSheetDataContext(question) {
+  try {
+    const q = question.toLowerCase();
+    // Only hit the sheet for questions that plausibly need real data.
+    if (!DATA_QUESTION_REGEX.test(q)) {
+      return null;
+    }
+
+    const [jobRows, stateRows] = await Promise.all([
+      fetchSheet(JOBS_SHEET),
+      fetchSheet(STATE_IDS_SHEET).catch(() => []),
+    ]);
+    const allJobs  = parseJobsSheet(jobRows);
+    const stateMap = parseStateIds(stateRows);
+
+    if (!allJobs.length) return null;
+
+    let context = '';
+
+    // --- Latest-week payouts (always include when data-related) ---
+    const { weekEndDate, payouts } = getLatestWeekPayouts(allJobs, stateMap);
+    if (weekEndDate && payouts.length) {
+      context += `Live data — week ending ${fmtDate(weekEndDate)}:\n`;
+      for (const m of payouts) {
+        context += `  ${m.name}: ${m.repairs} repair${m.repairs !== 1 ? 's' : ''}`;
+        if (m.engineReplacements) {
+          context += `, ${m.engineReplacements} engine replacement${m.engineReplacements !== 1 ? 's' : ''}`;
+        }
+        context += ` → ${fmtMoney(m.totalPayout)}\n`;
+      }
+      const grandTotal = payouts.reduce((s, m) => s + m.totalPayout, 0);
+      context += `  Shop total: ${fmtMoney(grandTotal)}\n`;
+    }
+
+    // --- Department invoice data (include when question is invoice/dept-related) ---
+    if (INVOICE_QUESTION_REGEX.test(q)) {
+      const now   = new Date();
+      // Determine which month the user is asking about.
+      const monthNames = [
+        'january','february','march','april','may','june',
+        'july','august','september','october','november','december',
+      ];
+      const namedMonth = monthNames.findIndex(m => q.includes(m));
+
+      let targetYear, targetMonth;
+      if (namedMonth !== -1) {
+        targetMonth = namedMonth;
+        targetYear  = now.getFullYear();
+        // If the named month hasn't started yet this year, assume last year.
+        if (targetMonth > now.getMonth()) targetYear--;
+      } else if (q.includes('this month')) {
+        targetMonth = now.getMonth();
+        targetYear  = now.getFullYear();
+      } else {
+        // Default: last calendar month.
+        const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        targetMonth = d.getMonth();
+        targetYear  = d.getFullYear();
+      }
+
+      const monthLabel = new Date(targetYear, targetMonth, 1)
+        .toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+      const monthJobs  = filterByMonth(allJobs, targetYear, targetMonth);
+
+      if (monthJobs.length > 0) {
+        // Group by department.
+        const deptMap = new Map();
+        for (const j of monthJobs) {
+          const dept = (j.department || 'Unknown').trim() || 'Unknown';
+          let rec = deptMap.get(dept);
+          if (!rec) { rec = { repairs: 0, engines: 0 }; deptMap.set(dept, rec); }
+          rec.repairs += j.across || 0;
+          rec.engines += j.engineReplacements || 0;
+        }
+
+        context += `\nInvoice data — ${monthLabel}:\n`;
+        for (const [dept, rec] of deptMap) {
+          const total = rec.repairs * PAY_PER_REPAIR + rec.engines * ENGINE_REIMBURSEMENT;
+          context += `  ${dept}: ${rec.repairs} repair${rec.repairs !== 1 ? 's' : ''}`;
+          if (rec.engines) {
+            context += `, ${rec.engines} engine${rec.engines !== 1 ? 's' : ''}`;
+          }
+          context += ` → ${fmtMoney(total)} owed\n`;
+        }
+      }
+    }
+
+    return context || null;
+  } catch {
+    return null;
+  }
+}
+
 // ===== /ask slash-command handler =====
 
 /**
  * Handle the /ask slash command.
- * Calls Workers AI with the Assistant Manager persona and replies ephemerally.
- * This is the free-tier replacement for @mention responses, which required the
- * DiscordGateway Durable Object (paid plan only).
+ * Posts a public reply (visible to everyone) using Workers AI with the
+ * Assistant Manager persona.  Reads the last 10 channel messages for
+ * conversational context and fetches live Google Sheets data when the
+ * question is about earnings, payouts, or department invoices.
+ *
+ * All processing is deferred via ctx.waitUntil so Discord's 3-second
+ * acknowledgement deadline is always met.
  *
  * @param {object} interaction - Discord interaction object.
  * @param {object} env         - Worker environment bindings.
@@ -882,18 +1030,46 @@ async function handleViewLogs(request, env) {
  */
 async function handleAskCommand(interaction, env, ctx) {
   const { application_id: appId, token } = interaction;
-  const question = (interaction.data?.options?.find(o => o.name === 'question')?.value ?? '').trim();
+  const question  = (interaction.data?.options?.find(o => o.name === 'question')?.value ?? '').trim();
+  const channelId = interaction.channel_id ?? null;
+  const asker     = (interaction.member?.user ?? interaction.user)?.username ?? null;
 
   ctx.waitUntil((async () => {
     let answer;
     try {
       if (!env.AI) throw new Error('Workers AI binding (env.AI) is not configured.');
+
+      // Fetch recent channel messages and relevant sheet data in parallel.
+      const [channelMsgs, sheetContext] = await Promise.all([
+        fetchChannelMessages(channelId, env, 10),
+        buildSheetDataContext(question),
+      ]);
+
+      // Build the system prompt, appending live sheet data when available.
+      const systemContent = sheetContext
+        ? `${ASSISTANT_MANAGER_SYSTEM_PROMPT}\n\nLive sheet data:\n${sheetContext}`
+        : ASSISTANT_MANAGER_SYSTEM_PROMPT;
+
+      // Build message list, optionally injecting channel context.
+      const messages = [{ role: 'system', content: systemContent }];
+
+      // Include recent non-bot messages as conversation context.
+      const contextLines = channelMsgs
+        .filter(m => !m.author?.bot)
+        .slice(-8)
+        .map(m => `${m.author?.username ?? 'User'}: ${m.content}`)
+        .join('\n');
+
+      if (contextLines) {
+        messages.push({ role: 'user',      content: `Recent channel context:\n${contextLines}` });
+        messages.push({ role: 'assistant', content: 'Noted. What do you need?' });
+      }
+
+      messages.push({ role: 'user', content: question || '(no question provided)' });
+
       const result = await env.AI.run('@cf/meta/llama-3-8b-instruct', {
-        messages: [
-          { role: 'system', content: ASSISTANT_MANAGER_SYSTEM_PROMPT },
-          { role: 'user',   content: question || '(user asked with no text)' },
-        ],
-        max_tokens: 180,
+        messages,
+        max_tokens: 300,
       });
       answer = (result?.response ?? '').trim() ||
         "Right, the AI's gone completely blank. Brilliant. Try again later, mate.";
@@ -907,16 +1083,20 @@ async function handleAskCommand(interaction, env, ctx) {
         error:          err?.message ?? 'Unknown error',
       });
     }
+
+    // Prefix shows who asked and what they asked so the public reply has context.
+    const prefix = asker
+      ? `**${asker}** asked: *${(question || '…').slice(0, MAX_QUESTION_PREVIEW_LENGTH)}*\n\n`
+      : '';
     await editOriginalMessage(appId, token, {
-      content:    answer.slice(0, 2000),
+      content:    (prefix + answer).slice(0, 2000),
       components: [],
     }).catch((e) => console.error('handleAskCommand: editOriginalMessage failed:', e?.message));
   })());
 
-  // Ephemeral deferred — only the invoker sees the answer
+  // Public deferred response — visible to everyone in the channel.
   return jsonResponse({
     type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
-    data: { flags: 64 },
   });
 }
 

@@ -59,12 +59,12 @@ const commands = [
   },
   {
     name:         'ask',
-    description:  'Ask the Assistant Manager a question (free-tier replacement for @mention responses).',
+    description:  'Ask the Assistant Manager a question — replies publicly with live payout/invoice data when relevant.',
     dm_permission: false,
     options: [
       {
         name:        'question',
-        description: 'Your question for the Assistant Manager.',
+        description: 'Your question (e.g. "How much did Alex make this week?" or "What does LSPD owe us?").',
         type:         3,    // APPLICATION_COMMAND_OPTION_TYPE: STRING
         required:     true,
       },
