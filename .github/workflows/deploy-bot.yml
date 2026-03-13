@@ -216,7 +216,7 @@ jobs:
           push_secret TRIGGER_TOKEN         "${TRIGGER_TOKEN:-}"
 
       # ---- Register slash commands ----
-      # Registers /payouts and /analytics globally with Discord.
+      # Registers /payouts and /update-analytics globally with Discord.
       # Requires DISCORD_APP_ID and DISCORD_BOT_TOKEN.
       # Skipped gracefully if DISCORD_APP_ID is not configured (commands can
       # be registered later by running the Register Slash Commands workflow).

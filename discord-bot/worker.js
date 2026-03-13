@@ -6,7 +6,7 @@
 //   • Job Logs panel    — request any mechanic's repair history by week
 //   • Payouts panel     — view the current week's payout breakdown
 //
-// Also handles /analytics and /payouts slash commands, and the weekly cron
+// Also handles /payouts and /update-analytics slash commands, and the weekly cron
 // trigger that posts/edits summaries to #analytics, #jobs, and #payouts
 // channels every 5 minutes (defined in wrangler.toml).
 //
@@ -373,7 +373,7 @@ async function editOriginalMessage(appId, token, payload) {
   }
 }
 
-// ===== /payouts and /analytics slash-command helpers =====
+// ===== /payouts slash-command helpers =====
 
 /**
  * Find the most recent week from all job data and return per-mechanic payout
@@ -508,51 +508,6 @@ async function handlePayoutsCommand(interaction, ctx) {
   })());
 
   // Deferred public response — visible to everyone in the channel
-  return jsonResponse({
-    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
-  });
-}
-
-// ===== /analytics slash-command handler =====
-
-/**
- * Handle the /analytics slash command.
- * Defers publicly, reads live sheet data, and edits the deferred response
- * with the current week's analytics summary including per-mechanic breakdown.
- */
-async function handleAnalyticsCommand(interaction, ctx) {
-  const { application_id: appId, token } = interaction;
-
-  ctx.waitUntil((async () => {
-    try {
-      const jobRows = await fetchSheet(JOBS_SHEET);
-      const allJobs = parseJobsSheet(jobRows);
-
-      // Try current week first; fall back to the most recent week with data
-      let summary = buildCurrentWeekSummary(allJobs);
-      if (summary.totalRepairs === 0) {
-        const latest = buildLatestWeekSummary(allJobs);
-        if (latest && latest.totalRepairs > 0) summary = latest;
-      }
-
-      if (summary.totalRepairs === 0) {
-        await editOriginalMessage(appId, token, {
-          content:    '📊 No repairs found in any recent week.',
-          components: [],
-        });
-        return;
-      }
-
-      const prevSummary = buildPrevWeekSummary(allJobs);
-      await editOriginalMessage(appId, token, buildAnalyticsPayload(summary, prevSummary));
-    } catch (err) {
-      await editOriginalMessage(appId, token, {
-        content:    `❌ Failed to load analytics data.\n\`${err.message}\``,
-        components: [],
-      }).catch(() => {});
-    }
-  })());
-
   return jsonResponse({
     type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
   });
@@ -1926,9 +1881,6 @@ export default {
     if (interaction.type === InteractionType.APPLICATION_COMMAND) {
       if (interaction.data?.name === 'payouts') {
         return handlePayoutsCommand(interaction, ctx);
-      }
-      if (interaction.data?.name === 'analytics') {
-        return handleAnalyticsCommand(interaction, ctx);
       }
       if (interaction.data?.name === 'update-analytics') {
         return handleUpdateAnalyticsCommand(interaction, env, ctx);
