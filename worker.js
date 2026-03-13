@@ -768,16 +768,18 @@ Rules for responding:
 3. Keep all responses under 180 words. No markdown headers. No bullet lists unless it helps. \
    Do not break character. Do not apologise. Ever.`;
 
-// ===== Debug channel error reporter =====
+// ===== Debug channel reporter =====
 
 /**
- * Send a structured error report to the private DEBUG_CHANNEL_ID channel.
+ * Post a message to the private DEBUG_CHANNEL_ID channel.
  * Never throws — debug reporting must never crash the Worker.
  *
  * @param {object} env
- * @param {object} details - Arbitrary key/value pairs to include in the report.
+ * @param {string} title  - Embed title shown in Discord.
+ * @param {number} color  - Embed left-border colour as a decimal integer.
+ * @param {object} details - Arbitrary key/value pairs serialised as a JSON code block.
  */
-async function sendDebugError(env, details) {
+async function sendDebugMessage(env, title, color, details) {
   const channelId = env.DEBUG_CHANNEL_ID;
   const token     = env.DISCORD_BOT_TOKEN;
   if (!channelId || !token) return;
@@ -793,8 +795,8 @@ async function sendDebugError(env, details) {
       },
       body: JSON.stringify({
         embeds: [{
-          title:       '🐛 Interaction Error',
-          color:       0xef4444,
+          title,
+          color,
           description: `\`\`\`json\n${body}\n\`\`\``,
           timestamp:   new Date().toISOString(),
           footer:      { text: 'Kintsugi Bot · Debug' },
@@ -802,6 +804,30 @@ async function sendDebugError(env, details) {
       }),
     });
   } catch { /* never let debug reporting crash the worker */ }
+}
+
+/**
+ * Send a structured error report to the private DEBUG_CHANNEL_ID channel.
+ * Never throws — debug reporting must never crash the Worker.
+ *
+ * @param {object} env
+ * @param {object} details - Arbitrary key/value pairs to include in the report.
+ */
+function sendDebugError(env, details) {
+  return sendDebugMessage(env, '🐛 Interaction Error', 0xef4444, details);
+}
+
+/**
+ * Send a structured activity log to the private DEBUG_CHANNEL_ID channel.
+ * Called for every successfully-routed interaction so the debug channel shows
+ * a live feed of bot usage without needing Cloudflare Log Explorer.
+ * Never throws — debug reporting must never crash the Worker.
+ *
+ * @param {object} env
+ * @param {object} details - Arbitrary key/value pairs to include in the report.
+ */
+function sendDebugLog(env, details) {
+  return sendDebugMessage(env, '📋 Interaction', 0x3b82f6, details);
 }
 
 // ===== /ask slash-command handler =====
@@ -2128,6 +2154,19 @@ async function handleDiscordInteraction(request, env, ctx) {
   // unexpected exception produces a user-friendly ephemeral error in Discord
   // rather than an HTTP 500 that Discord surfaces as "This interaction failed".
   try {
+    // Log every routed interaction to the debug channel so the owner can see
+    // live bot usage without needing Cloudflare Log Explorer.
+    const interactionUser = interaction.member?.user ?? interaction.user;
+    ctx.waitUntil(sendDebugLog(env, {
+      type:       interaction.type === InteractionType.APPLICATION_COMMAND ? 'slash_command' : 'component',
+      name:       interaction.data?.name ?? null,
+      custom_id:  interaction.data?.custom_id ?? null,
+      user:       interactionUser?.username ?? null,
+      user_id:    interactionUser?.id ?? null,
+      channel_id: interaction.channel_id ?? null,
+      guild_id:   interaction.guild_id ?? null,
+    }).catch(() => {}));
+
     // Slash commands
     if (interaction.type === InteractionType.APPLICATION_COMMAND) {
       if (interaction.data?.name === 'payouts') {
