@@ -543,7 +543,8 @@ async function handleAnalyticsCommand(interaction, ctx) {
         return;
       }
 
-      await editOriginalMessage(appId, token, buildAnalyticsPayload(summary));
+      const prevSummary = buildPrevWeekSummary(allJobs);
+      await editOriginalMessage(appId, token, buildAnalyticsPayload(summary, prevSummary));
     } catch (err) {
       await editOriginalMessage(appId, token, {
         content:    `❌ Failed to load analytics data.\n\`${err.message}\``,
@@ -615,7 +616,8 @@ async function handleUpdateAnalyticsCommand(interaction, env, ctx) {
         if (latest && latest.totalRepairs > 0) summary = latest;
       }
 
-      const ok = await postWeeklyAnalytics(env, summary);
+      const prevSummary = buildPrevWeekSummary(allJobs);
+      const ok = await postWeeklyAnalytics(env, summary, prevSummary);
 
       if (ok) {
         const channelMention = effectiveChannelId ? `<#${effectiveChannelId}>` : 'the analytics channel';
@@ -1375,6 +1377,34 @@ function buildLatestWeekSummary(allJobs) {
 }
 
 /**
+ * Build a lightweight summary for the week immediately before the most recent
+ * week that contains data.  Used to display week-over-week trend in the
+ * analytics embed.  Returns null when there are fewer than two weeks of data.
+ */
+function buildPrevWeekSummary(allJobs) {
+  const allWeeks = buildWeeklyStats(allJobs); // sorted newest first
+  if (allWeeks.length < 2) return null;
+
+  const prevWeek    = allWeeks[1];
+  const weekEndDate = prevWeek.weekEndDate
+    || new Date(prevWeek.weekKey + 'T00:00:00Z');
+  const weekJobs    = filterByWeekEnding(allJobs, weekEndDate);
+
+  const mechMap = new Map();
+  for (const j of weekJobs) {
+    mechMap.set(j.mechanic, (mechMap.get(j.mechanic) || 0) + (j.across || 0));
+  }
+
+  return {
+    weekEndDate,
+    totalRepairs:  prevWeek.totalRepairs,
+    totalEngines:  prevWeek.engineReplacements,
+    totalPayout:   prevWeek.totalPayout,
+    mechanicCount: mechMap.size,
+  };
+}
+
+/**
  * Build a summary of the current week's jobs across all mechanics.
  * Reuses filterByWeekEnding + buildWeeklyStats, then adds a per-mechanic
  * breakdown for top-mechanic detection.
@@ -1480,8 +1510,11 @@ function validateConfig(env) {
  * Build the weekly analytics embed payload so it can be reused for both
  * posting and editing.  Now includes a per-mechanic breakdown so the analytics
  * channel shows who worked and how much they earned, not just aggregate totals.
+ *
+ * @param {object} summary     - Current week summary from buildCurrentWeekSummary/buildLatestWeekSummary.
+ * @param {object} [prevSummary] - Optional previous week summary for week-over-week trend.
  */
-function buildAnalyticsPayload(summary) {
+function buildAnalyticsPayload(summary, prevSummary = null) {
   const { weekEndDate, totalRepairs, totalEngines, totalPayout,
           mechanicCount, topMechanic, topRepairs, mechanics } = summary;
 
@@ -1494,6 +1527,20 @@ function buildAnalyticsPayload(summary) {
   if (totalEngines > 0) {
     fields.push({ name: '🔩 Engine Replacements', value: String(totalEngines), inline: true });
   }
+
+  // Week-over-week repair trend when previous week data is available
+  if (prevSummary && prevSummary.totalRepairs > 0) {
+    const delta   = totalRepairs - prevSummary.totalRepairs;
+    const pct     = ((delta / prevSummary.totalRepairs) * 100).toFixed(1);
+    const arrow   = delta >= 0 ? '📈' : '📉';
+    const sign    = delta >= 0 ? '+' : '';
+    fields.push({
+      name:   `${arrow} vs Last Week`,
+      value:  `${sign}${delta} repairs (${sign}${pct}%) · prev ${fmtMoney(prevSummary.totalPayout)}`,
+      inline: false,
+    });
+  }
+
   if (topMechanic) {
     fields.push({
       name:   '🏆 Top Mechanic',
@@ -1540,8 +1587,12 @@ function buildAnalyticsPayload(summary) {
  * Channel resolution order (first match wins):
  *   1. KV key "analytics_channel_id" — set by /update-analytics channel:<#X>
  *   2. ANALYTICS_CHANNEL_ID environment secret
+ *
+ * @param {object} env
+ * @param {object} summary     - Current week summary.
+ * @param {object} [prevSummary] - Previous week summary for trend display.
  */
-async function postWeeklyAnalytics(env, summary) {
+async function postWeeklyAnalytics(env, summary, prevSummary = null) {
   // Resolve which channel to post to: KV override takes priority over the env secret
   const kvChannelId = env.KV ? await env.KV.get('analytics_channel_id').catch(err => {
     console.warn('postWeeklyAnalytics: KV.get(analytics_channel_id) failed:', err?.message);
@@ -1550,7 +1601,7 @@ async function postWeeklyAnalytics(env, summary) {
   const channelId = kvChannelId || env.ANALYTICS_CHANNEL_ID;
   if (!env.DISCORD_BOT_TOKEN || !channelId) return false;
 
-  const payload = buildAnalyticsPayload(summary);
+  const payload = buildAnalyticsPayload(summary, prevSummary);
 
   // Try to edit the existing analytics message
   if (env.KV) {
@@ -1632,8 +1683,12 @@ async function postJobsUpdate(env, summary) {
  * Sends at most once per week-ending date, tracked in KV so the cron never
  * double-pings even if the Worker retries on failure.
  * Uses DISCORD_BOT_TOKEN, PAYOUTS_CHANNEL_ID, RIPTIDE_USER_ID, and the KV namespace from env.
+ *
+ * @param {object} env
+ * @param {Date}   weekEndDate  - The week-ending date.
+ * @param {number} [totalPayout=0] - Total mechanic payout for the week (shown in the reminder).
  */
-async function postPaydayReminder(env, weekEndDate) {
+async function postPaydayReminder(env, weekEndDate, totalPayout = 0) {
   if (!env.DISCORD_BOT_TOKEN || !env.PAYOUTS_CHANNEL_ID) return false;
 
   // Deduplicate: skip if we already sent the reminder for this week
@@ -1643,12 +1698,11 @@ async function postPaydayReminder(env, weekEndDate) {
     if (lastKey === weekKey) return true; // already sent for this week-ending date
   }
 
-  const mention = env.RIPTIDE_USER_ID
-    ? `<@${env.RIPTIDE_USER_ID}>`
-    : '**@riptide248**';
+  const mention    = env.RIPTIDE_USER_ID ? `<@${env.RIPTIDE_USER_ID}>` : '**@riptide248**';
+  const payoutNote = totalPayout > 0 ? ` Total due: **${fmtMoney(totalPayout)}**.` : '';
 
   const messageId = await botPost(env.PAYOUTS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, {
-    content: `${mention} 💰 **Payday reminder!** Payouts are due to be processed for the week ending **${fmtDate(weekEndDate)}**. Please review and mark them as processed in the dashboard when done.`,
+    content: `${mention} 💰 **Payday reminder!** Payouts are due to be processed for the week ending **${fmtDate(weekEndDate)}**.${payoutNote} Please review and mark them as processed in the dashboard when done.`,
   });
 
   if (messageId !== null && env.KV) {
@@ -1787,10 +1841,11 @@ async function handleTriggerWeekly(request, env) {
       if (latest && latest.totalRepairs > 0) summary = latest;
     }
 
+    const prevSummary = buildPrevWeekSummary(allJobs);
     const [analyticsOk, jobsOk, payoutsOk] = await Promise.all([
-      postWeeklyAnalytics(env, summary),
+      postWeeklyAnalytics(env, summary, prevSummary),
       postJobsUpdate(env, summary),
-      postPaydayReminder(env, summary.weekEndDate),
+      postPaydayReminder(env, summary.weekEndDate, summary.totalPayout),
     ]);
 
     return apiJson({

@@ -178,7 +178,7 @@ async function loadOverview() {
     kSetText("tileSub-manualRedBins", "");
     kSetText(
       "tileSub-latestWeek",
-      lastActivity ? "Last job: " + kFmtDate(lastActivity) : ""
+      lastActivity ? "Last job: " + kFmtRelativeDate(lastActivity) : ""
     );
 
     // ---- This Week Live Panel ----

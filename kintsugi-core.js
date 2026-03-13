@@ -212,8 +212,7 @@ const kFetchCsvPapa = kFetchCSV;
 /**
  * Robust date parser for sheet strings.
  * Supports:
- *  - dd/mm/yyyy
- *  - dd-mm-yyyy
+ *  - dd/mm/yyyy  (or dd-mm-yyyy, with optional 2-digit year)
  *  - yyyy-mm-dd
  *  - falls back to new Date(s) but returns null on invalid
  */
@@ -222,23 +221,28 @@ function kParseDateLike(raw) {
   const s = String(raw).trim();
   if (!s) return null;
 
-  // dd/mm/yyyy or dd-mm-yyyy
-  let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  // dd/mm/yyyy or dd-mm-yyyy (2- or 4-digit year supported)
+  let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
   if (m) {
-    const dd = parseInt(m[1], 10);
-    const mm = parseInt(m[2], 10);
-    const yyyy = parseInt(m[3], 10);
-    const d = new Date(yyyy, mm - 1, dd);
-    return isNaN(d.getTime()) ? null : d;
+    const dd   = parseInt(m[1], 10);
+    const mm   = parseInt(m[2], 10);
+    const yy   = m[3];
+    const yyyy = yy.length === 2 ? 2000 + parseInt(yy, 10) : parseInt(yy, 10);
+    // Validate ranges before constructing a Date to avoid silent month-wrap
+    if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+      const d = new Date(yyyy, mm - 1, dd);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    return null;
   }
 
-  // yyyy-mm-dd
+  // yyyy-mm-dd (ISO date, possibly with a time component)
   m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (m) {
     const yyyy = parseInt(m[1], 10);
-    const mm = parseInt(m[2], 10);
-    const dd = parseInt(m[3], 10);
-    const d = new Date(yyyy, mm - 1, dd);
+    const mm   = parseInt(m[2], 10);
+    const dd   = parseInt(m[3], 10);
+    const d    = new Date(yyyy, mm - 1, dd);
     return isNaN(d.getTime()) ? null : d;
   }
 
@@ -255,6 +259,30 @@ function kFmtDate(d) {
   const dd = String(d.getDate()).padStart(2, "0");
   const yyyy = d.getFullYear();
   return `${mm}/${dd}/${yyyy}`;
+}
+
+/**
+ * Format a Date as a human-friendly relative time string.
+ * Examples: "Today", "Yesterday", "3 days ago", "2 weeks ago", "Last month", "6 months ago".
+ * Falls back to kFmtDate for dates more than a year in the past.
+ * @param {Date} d
+ * @returns {string}
+ */
+function kFmtRelativeDate(d) {
+  if (!d || !(d instanceof Date) || isNaN(d.getTime())) return "";
+  const now       = new Date();
+  const todayMid  = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dateMid   = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays  = Math.round((todayMid - dateMid) / 86400000);
+
+  if (diffDays === 0)  return "Today";
+  if (diffDays === 1)  return "Yesterday";
+  if (diffDays < 7)    return `${diffDays} days ago`;
+  if (diffDays < 14)   return "Last week";
+  if (diffDays < 30)   return `${Math.floor(diffDays / 7)} weeks ago`;
+  if (diffDays < 60)   return "Last month";
+  if (diffDays < 365)  return `${Math.floor(diffDays / 30)} months ago`;
+  return kFmtDate(d);
 }
 
 /**

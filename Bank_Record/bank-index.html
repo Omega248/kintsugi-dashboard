@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <title>Kintsugi Motorworks · Bank Records</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Kintsugi Motorworks bank records — transaction viewer with filters, BET tracking, and red bin metrics." />
+  <meta name="theme-color" content="#020817" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏦</text></svg>" />
   <link rel="stylesheet" href="../shared-styles.css" />
   <link rel="stylesheet" href="bank-style.css" />
   <script src="../constants.js"></script>
@@ -15,19 +18,19 @@
 <body>
   <div class="app">
     <!-- Top nav shared across pages -->
-    <div class="top-bar">
+    <header class="top-bar">
       <div>
         <div class="brand-title">Kintsugi Motorworks</div>
+        <div class="brand-sub">Bank records &amp; ledger</div>
       </div>
-      <div class="nav-tabs">
-        <!-- adjust paths if your structure differs -->
+      <nav class="nav-tabs" aria-label="Primary navigation">
         <a href="../index.html" class="nav-pill">Dashboard</a>
         <a href="../Payouts/payouts-index.html" class="nav-pill">Payouts</a>
         <a href="../Mechanics/mechanics-index.html" class="nav-pill">Mechanics</a>
         <a href="./bank-index.html" class="nav-pill active">Bank</a>
         <a href="../Analytics/analytics-index.html" class="nav-pill">Analytics</a>
-      </div>
-    </div>
+      </nav>
+    </header>
 
     <!-- Ledger title -->
     <div class="ledger-header">
