@@ -29,9 +29,13 @@
 //   TRIGGER_TOKEN         — Bearer token for the dashboard "Notify Discord" and
 //                           "Trigger Weekly" buttons. Falls back to the hardcoded
 //                           FALLBACK_TRIGGER_TOKEN constant if not set.
-//   DEBUG_CHANNEL_ID      — Private Discord channel ID. When set, unexpected
-//                           interaction errors are posted there as embeds, providing
-//                           free-tier debugging without Cloudflare Log Explorer.
+//
+// Logging (KV file log — no Discord interactions required):
+//   Every action, response, and error is written to the KV namespace as a
+//   plain-text log entry (key = log:<ISO-timestamp>:<random>, TTL = 7 days).
+//   Entries are also mirrored to console.log/error/warn for Cloudflare real-time
+//   logs (visible via `wrangler tail` or the Cloudflare dashboard).
+//   View the log at any time:  GET /api/logs  (Bearer TRIGGER_TOKEN)
 // =======================================
 
 // ===== Sheet config (mirrors kintsugi-core.js) =====
@@ -768,77 +772,109 @@ Rules for responding:
 3. Keep all responses under 180 words. No markdown headers. No bullet lists unless it helps. \
    Do not break character. Do not apologise. Ever.`;
 
-// ===== Debug channel reporter =====
+// ===== KV file log =====
+
+// KV key prefix for log entries.  Each entry gets its own key so concurrent
+// writes never clobber each other.  Entries expire after 7 days automatically.
+const LOG_KV_PREFIX  = 'log:';
+const LOG_KV_TTL_SEC = 7 * 24 * 60 * 60; // 7 days
 
 /**
- * Post a message to the private DEBUG_CHANNEL_ID channel.
- * Never throws — debug reporting must never crash the Worker.
+ * Write a structured log entry to the KV file log AND to the Cloudflare
+ * console (visible via `wrangler tail` and the Cloudflare real-time logs UI).
  *
- * @param {object} env
- * @param {string} title  - Embed title shown in Discord.
- * @param {number} color  - Embed left-border colour as a decimal integer.
- * @param {object} details - Arbitrary key/value pairs serialised as a JSON code block.
+ * Never throws — logging must never crash the Worker.
+ *
+ * @param {object}      env     - Worker environment bindings.
+ * @param {'info'|'warn'|'error'} level  - Severity level.
+ * @param {string}      event   - Short snake_case event name.
+ * @param {object}      [details={}] - Arbitrary extra key/value pairs.
  */
-async function sendDebugMessage(env, title, color, details) {
-  const channelId = env.DEBUG_CHANNEL_ID;
-  const token     = env.DISCORD_BOT_TOKEN;
-  if (!channelId || !token) return;
-  try {
-    // Cap at 3900 chars: Discord embed descriptions allow up to 4096 characters;
-    // the ```json\n...\n``` code block wrapper adds ~10 chars of overhead.
-    const body = JSON.stringify(details, null, 2).slice(0, 3900);
-    const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
-      method:  'POST',
-      headers: {
-        'Authorization': `Bot ${token}`,
-        'Content-Type':  'application/json',
-      },
-      body: JSON.stringify({
-        embeds: [{
-          title,
-          color,
-          description: `\`\`\`json\n${body}\n\`\`\``,
-          timestamp:   new Date().toISOString(),
-          footer:      { text: 'Kintsugi Bot · Debug' },
-        }],
-      }),
-    });
-    // Always consume the response body to free the connection.
-    // Log Discord API errors so they are visible in Cloudflare real-time logs.
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '(unreadable)');
-      console.error(`sendDebugMessage: Discord API error ${res.status} for channel ${channelId}: ${errText.slice(0, 300)}`);
-    } else {
-      await res.body?.cancel();
+async function kLog(env, level, event, details = {}) {
+  const ts    = new Date().toISOString();
+  const entry = { ts, level, event, ...details };
+  const line  = JSON.stringify(entry);
+
+  // Mirror to Cloudflare console so logs are also visible in `wrangler tail`.
+  if (level === 'error') {
+    console.error('[klog]', line);
+  } else if (level === 'warn') {
+    console.warn('[klog]', line);
+  } else {
+    console.log('[klog]', line);
+  }
+
+  // Persist to KV (best-effort — never throws).
+  if (env.KV) {
+    try {
+      // Unique key per entry: no read-modify-write, no race conditions.
+      const rand = Math.random().toString(36).slice(2, 7);
+      const key  = `${LOG_KV_PREFIX}${ts}:${rand}`;
+      await env.KV.put(key, line, { expirationTtl: LOG_KV_TTL_SEC });
+    } catch (err) {
+      console.error('[klog] KV write failed:', err?.message);
     }
-  } catch (err) {
-    // Never let debug reporting crash the worker, but log the failure.
-    console.error('sendDebugMessage: fetch failed:', err?.message);
   }
 }
 
 /**
- * Send a structured error report to the private DEBUG_CHANNEL_ID channel.
- * Never throws — debug reporting must never crash the Worker.
- *
- * @param {object} env
- * @param {object} details - Arbitrary key/value pairs to include in the report.
+ * GET /api/logs — returns the KV file log as plain text (oldest entries first).
+ * Protected by the same TRIGGER_TOKEN as the other dashboard API endpoints.
  */
-function sendDebugError(env, details) {
-  return sendDebugMessage(env, '🐛 Interaction Error', 0xef4444, details);
-}
+async function handleViewLogs(request, env) {
+  const auth     = request.headers.get('Authorization') ?? '';
+  const expected = `Bearer ${env.TRIGGER_TOKEN || FALLBACK_TRIGGER_TOKEN}`;
+  if (auth !== expected) {
+    return new Response('Unauthorized', { status: 401 });
+  }
 
-/**
- * Send a structured activity log to the private DEBUG_CHANNEL_ID channel.
- * Called for every successfully-routed interaction so the debug channel shows
- * a live feed of bot usage without needing Cloudflare Log Explorer.
- * Never throws — debug reporting must never crash the Worker.
- *
- * @param {object} env
- * @param {object} details - Arbitrary key/value pairs to include in the report.
- */
-function sendDebugLog(env, details) {
-  return sendDebugMessage(env, '📋 Interaction', 0x3b82f6, details);
+  if (!env.KV) {
+    return new Response(
+      'KV namespace is not bound — logs are only available in the console.\n' +
+      'Check that the KINTSUGI_BOT KV namespace is provisioned and the deploy workflow ran successfully.',
+      { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
+    );
+  }
+
+  try {
+    // List up to 1000 entries, sorted by key (which starts with ISO timestamp).
+    const list = await env.KV.list({ prefix: LOG_KV_PREFIX, limit: 1000 });
+    const keys = list.keys.map(k => k.name).sort();
+
+    if (keys.length === 0) {
+      return new Response('(no log entries yet)\n', {
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      });
+    }
+
+    // Fetch all values in parallel.
+    const values = await Promise.all(keys.map(k => env.KV.get(k).catch(() => null)));
+
+    const lines = values
+      .filter(Boolean)
+      .map(raw => {
+        try {
+          const e = JSON.parse(raw);
+          const level  = (e.level ?? 'info').toUpperCase().padEnd(5);
+          const extras = Object.entries(e)
+            .filter(([k]) => k !== 'ts' && k !== 'level' && k !== 'event')
+            .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+            .join(' ');
+          return `[${e.ts}] ${level} ${e.event}${extras ? '  ' + extras : ''}`;
+        } catch {
+          return raw;
+        }
+      });
+
+    return new Response(lines.join('\n') + '\n', {
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
+  } catch (err) {
+    return new Response(`Error reading logs: ${err.message}\n`, {
+      status: 500,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
+  }
 }
 
 // ===== /ask slash-command handler =====
@@ -874,11 +910,11 @@ async function handleAskCommand(interaction, env, ctx) {
       answer =
         `Fantastic, the AI's having a complete strop. \`${err?.message ?? 'Unknown error'}\` ` +
         '— sort it out and try again, will ya?';
-      await sendDebugError(env, {
+      await kLog(env, 'error', 'ask_command_error', {
         command:        '/ask',
         interaction_id: interaction.id,
         error:          err?.message ?? 'Unknown error',
-      }).catch((e) => console.error('sendDebugError failed:', e?.message));
+      });
     }
     await editOriginalMessage(appId, token, {
       content:    answer.slice(0, 2000),
@@ -2012,7 +2048,7 @@ function apiJson(data, status = 200) {
  *
  * First-run safe: posts a fresh message every time — no KV state required.
  */
-async function handleNotifyPayouts(request, env) {
+async function handleNotifyPayouts(request, env, ctx) {
   // Use the configured secret or fall back to the hardcoded token
   const expectedToken = env.TRIGGER_TOKEN || FALLBACK_TRIGGER_TOKEN;
 
@@ -2065,7 +2101,7 @@ async function handleNotifyPayouts(request, env) {
       messageId,
     });
   } catch (err) {
-    console.error('handleNotifyPayouts error:', err.message);
+    ctx.waitUntil(kLog(env, 'error', 'notify_payouts_error', { error: err.message }));
     return apiJson({ ok: false, error: err.message }, 500);
   }
 }
@@ -2085,7 +2121,7 @@ async function handleNotifyPayouts(request, env) {
  * Protected by TRIGGER_TOKEN bearer authentication.
  * Useful for immediately populating channels after first deploy or for testing.
  */
-async function handleTriggerWeekly(request, env) {
+async function handleTriggerWeekly(request, env, ctx) {
   // Use the configured secret or fall back to the hardcoded token
   const expectedToken = env.TRIGGER_TOKEN || FALLBACK_TRIGGER_TOKEN;
 
@@ -2131,7 +2167,7 @@ async function handleTriggerWeekly(request, env) {
       payouts:     payoutsOk,
     });
   } catch (err) {
-    console.error('handleTriggerWeekly error:', err.message);
+    ctx.waitUntil(kLog(env, 'error', 'trigger_weekly_error', { error: err.message }));
     return apiJson({ ok: false, error: err.message }, 500);
   }
 }
@@ -2175,18 +2211,17 @@ async function handleDiscordInteraction(request, env, ctx) {
   // unexpected exception produces a user-friendly ephemeral error in Discord
   // rather than an HTTP 500 that Discord surfaces as "This interaction failed".
   try {
-    // Log every routed interaction to the debug channel so the owner can see
-    // live bot usage without needing Cloudflare Log Explorer.
+    // Log every routed interaction to the KV file log.
     const interactionUser = interaction.member?.user ?? interaction.user;
-    ctx.waitUntil(sendDebugLog(env, {
-      type:       interaction.type === InteractionType.APPLICATION_COMMAND ? 'slash_command' : 'component',
+    ctx.waitUntil(kLog(env, 'info', 'interaction', {
+      kind:       interaction.type === InteractionType.APPLICATION_COMMAND ? 'slash_command' : 'component',
       name:       interaction.data?.name ?? null,
       custom_id:  interaction.data?.custom_id ?? null,
       user:       interactionUser?.username ?? null,
       user_id:    interactionUser?.id ?? null,
       channel_id: interaction.channel_id ?? null,
       guild_id:   interaction.guild_id ?? null,
-    }).catch(() => {}));
+    }));
 
     // Slash commands
     if (interaction.type === InteractionType.APPLICATION_COMMAND) {
@@ -2274,16 +2309,13 @@ async function handleDiscordInteraction(request, env, ctx) {
     // Last-resort catch: any unexpected exception in the routing or handler
     // code is converted to a proper ephemeral Discord error so the user sees
     // a helpful message rather than Discord's generic "This interaction failed".
-    // Also fires a debug report to DEBUG_CHANNEL_ID if configured.
-    console.error('Unhandled error in interaction handler:', err);
-    ctx.waitUntil(sendDebugError(env, {
-      event:          'unhandled_interaction_error',
-      interaction_id: interaction.id,
+    ctx.waitUntil(kLog(env, 'error', 'unhandled_interaction_error', {
+      interaction_id:   interaction.id,
       interaction_type: interaction.type,
-      custom_id:      interaction.data?.custom_id ?? null,
-      command_name:   interaction.data?.name ?? null,
-      error:          err?.message ?? 'Unknown error',
-    }).catch(() => {}));
+      custom_id:        interaction.data?.custom_id ?? null,
+      command_name:     interaction.data?.name ?? null,
+      error:            err?.message ?? 'Unknown error',
+    }));
     return jsonResponse({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
       data: {
@@ -2301,7 +2333,8 @@ export default {
    * Unified fetch handler — routes in priority order:
    *
    *   1. CORS preflight (OPTIONS *)
-   *   2. Dashboard API — POST /api/notify-payouts and /api/trigger-weekly
+   *   2. Dashboard API — POST /api/notify-payouts, /api/trigger-weekly,
+   *      GET /api/logs (KV file log viewer)
    *   3. Discord interactions — detected by Ed25519 signature headers;
    *      always acknowledges immediately (≪ 3 s) via a deferred response
    *   4. /bot-config.js — served from assets or a safe JS fallback
@@ -2317,10 +2350,15 @@ export default {
 
     // 2. Dashboard API routes (TRIGGER_TOKEN-authenticated)
     if (request.method === 'POST' && url.pathname === '/api/notify-payouts') {
-      return handleNotifyPayouts(request, env);
+      return handleNotifyPayouts(request, env, ctx);
     }
     if (request.method === 'POST' && url.pathname === '/api/trigger-weekly') {
-      return handleTriggerWeekly(request, env);
+      return handleTriggerWeekly(request, env, ctx);
+    }
+    // View the KV file log as plain text (newest entries last).
+    // Authenticated with the same TRIGGER_TOKEN as the other API endpoints.
+    if (request.method === 'GET' && url.pathname === '/api/logs') {
+      return handleViewLogs(request, env);
     }
 
     // 2b. Legacy gateway-start endpoint — the DiscordGateway Durable Object was
@@ -2388,32 +2426,21 @@ export default {
    * than posting new messages, so the channel is never spammed.
    */
   async scheduled(event, env, ctx) {
-    // Send a debug heartbeat so the cron run is always visible in the debug channel
-    ctx.waitUntil(sendDebugMessage(env, '⏰ Scheduled Run Started', 0x6366f1, {
+    // Log every cron run so it is always visible in the KV file log.
+    ctx.waitUntil(kLog(env, 'info', 'scheduled_run_started', {
       cron: event.cron ?? 'unknown',
-      time: new Date().toISOString(),
       kv:   !!env.KV,
-    }).catch(() => {}));
+    }));
 
     if (!env.KV) {
-      console.warn(
-        'scheduled: env.KV is not bound — analytics message editing and ' +
-        'payday deduplication are disabled. The deploy workflow should bind ' +
-        'the KINTSUGI_BOT KV namespace automatically; check that ' +
-        'CLOUDFLARE_API_TOKEN has Workers KV Storage:Edit permission and ' +
-        'that the deploy workflow ran successfully.'
-      );
+      ctx.waitUntil(kLog(env, 'warn', 'scheduled_no_kv',
+        { detail: 'env.KV not bound — KV log and analytics message editing disabled' }
+      ));
     }
 
     const missing = validateConfig(env);
     if (missing.length > 0) {
-      console.error(
-        'scheduled: missing required configuration — set these secrets:\n' +
-        missing.map(k => `  wrangler secret put ${k}`).join('\n')
-      );
-      ctx.waitUntil(sendDebugMessage(env, '❌ Scheduled Run — Missing Config', 0xef4444, {
-        missing,
-      }).catch(() => {}));
+      ctx.waitUntil(kLog(env, 'error', 'scheduled_missing_config', { missing }));
       return;
     }
 
@@ -2436,21 +2463,19 @@ export default {
         postPaydayReminder(env, summary.weekEndDate, summary.totalPayout),
       ]);
 
-      console.log(`scheduled: run complete — analytics=${analyticsOk} jobs=${jobsOk} reminder=${reminderOk}`);
-      ctx.waitUntil(sendDebugMessage(env, '✅ Scheduled Run Complete', 0x22c55e, {
+      ctx.waitUntil(kLog(env, 'info', 'scheduled_run_complete', {
         weekEnd:   summary.weekEndDate.toISOString().slice(0, 10),
         analytics: analyticsOk,
         jobs:      jobsOk,
         reminder:  reminderOk,
         repairs:   summary.totalRepairs,
         payout:    summary.totalPayout,
-      }).catch(() => {}));
+      }));
     } catch (err) {
-      console.error('scheduled: error posting to Discord:', err.message);
-      ctx.waitUntil(sendDebugMessage(env, '❌ Scheduled Run Failed', 0xef4444, {
+      ctx.waitUntil(kLog(env, 'error', 'scheduled_run_failed', {
         error: err.message,
         stack: err.stack?.slice(0, 500),
-      }).catch(() => {}));
+      }));
     }
   },
 };
