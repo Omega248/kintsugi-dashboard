@@ -274,6 +274,12 @@
   }
 }
 
+@media (max-width: 480px) {
+  .stat-boxes {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (min-width: 1440px) {
   .stat-boxes {
     grid-template-columns: repeat(3, 1fr);

@@ -231,7 +231,9 @@ function kParseDateLike(raw) {
     // Validate ranges before constructing a Date to avoid silent month-wrap
     if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
       const d = new Date(yyyy, mm - 1, dd);
-      return isNaN(d.getTime()) ? null : d;
+      // Guard against rollover: Feb 31 → Mar 3, etc.
+      if (isNaN(d.getTime()) || d.getMonth() !== mm - 1 || d.getDate() !== dd) return null;
+      return d;
     }
     return null;
   }

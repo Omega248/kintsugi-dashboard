@@ -1528,15 +1528,18 @@ function buildAnalyticsPayload(summary, prevSummary = null) {
     fields.push({ name: '🔩 Engine Replacements', value: String(totalEngines), inline: true });
   }
 
-  // Week-over-week repair trend when previous week data is available
+  // Week-over-week repair + payout trend when previous week data is available
   if (prevSummary && prevSummary.totalRepairs > 0) {
-    const delta   = totalRepairs - prevSummary.totalRepairs;
-    const pct     = ((delta / prevSummary.totalRepairs) * 100).toFixed(1);
-    const arrow   = delta >= 0 ? '📈' : '📉';
-    const sign    = delta >= 0 ? '+' : '';
+    const repairDelta  = totalRepairs - prevSummary.totalRepairs;
+    const repairPct    = ((repairDelta / prevSummary.totalRepairs) * 100).toFixed(1);
+    const payoutDelta  = totalPayout - prevSummary.totalPayout;
+    const payoutPct    = ((payoutDelta / prevSummary.totalPayout) * 100).toFixed(1);
+    const arrow        = repairDelta >= 0 ? '📈' : '📉';
+    const repairSign   = repairDelta >= 0 ? '+' : '';
+    const payoutSign   = payoutDelta >= 0 ? '+' : '';
     fields.push({
       name:   `${arrow} vs Last Week`,
-      value:  `${sign}${delta} repairs (${sign}${pct}%) · prev ${fmtMoney(prevSummary.totalPayout)}`,
+      value:  `Repairs: ${repairSign}${repairDelta} (${repairSign}${repairPct}%) · Payout: ${payoutSign}${fmtMoney(payoutDelta)} (${payoutSign}${payoutPct}%)`,
       inline: false,
     });
   }
@@ -2011,10 +2014,11 @@ export default {
         if (latest && latest.totalRepairs > 0) summary = latest;
       }
 
+      const prevSummary = buildPrevWeekSummary(allJobs);
       await Promise.all([
-        postWeeklyAnalytics(env, summary),
+        postWeeklyAnalytics(env, summary, prevSummary),
         postJobsUpdate(env, summary),
-        postPaydayReminder(env, summary.weekEndDate),
+        postPaydayReminder(env, summary.weekEndDate, summary.totalPayout),
       ]);
     } catch (err) {
       console.error('scheduled: error posting to Discord:', err.message);

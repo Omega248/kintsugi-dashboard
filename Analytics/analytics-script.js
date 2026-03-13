@@ -23,10 +23,6 @@ async function ensureChartJs() {
 
 // ===== Helpers =====
 
-function parseDateLike(raw) {
-  return kParseDateLike(raw);
-}
-
 function getFilterDates(range) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -269,8 +265,8 @@ async function loadAnalytics() {
 
       // Determine date
       let jobDate = null;
-      if (tsKey && r[tsKey]) jobDate = parseDateLike(r[tsKey]);
-      if (!jobDate && weekKey && r[weekKey]) jobDate = parseDateLike(r[weekKey]);
+      if (tsKey && r[tsKey]) jobDate = kParseDateLike(r[tsKey]);
+      if (!jobDate && weekKey && r[weekKey]) jobDate = kParseDateLike(r[weekKey]);
 
       if (cutoff && jobDate && jobDate < cutoff) return;
       if (selectedMech !== "all" && mech !== selectedMech) return;

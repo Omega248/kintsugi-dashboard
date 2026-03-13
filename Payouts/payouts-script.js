@@ -46,23 +46,6 @@ let advancedToggleBtn;
 // URL params on first load
 let initialParams = null;
 
-// ===== CSV fetch (using kintsugi-core.js) =====
-async function fetchCSV(sheet) {
-  return await kFetchCSV(sheet, { header: false });
-}
-
-// ===== Date helpers (using kintsugi-core.js) =====
-function parseDateLike(raw) {
-  return kParseDateLike(raw);
-}
-
-function fmtDate(d) {
-  return kFmtDate(d);
-}
-
-function fmtMoney(n) {
-  return kFmtMoney(n);
-}
 
 function monthKey(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -70,13 +53,13 @@ function monthKey(d) {
 
 // Weekly payout comment helper
 function commentForWeek(weekEndDate) {
-  return `Payout for week ending ${fmtDate(weekEndDate)}`;
+  return `Payout for week ending ${kFmtDate(weekEndDate)}`;
 }
 
 // Generate copy summary for a weekly payout entry
 function generateWeeklyCopySummary(mechanic, weekEndDate, repairs, engineReplacementsByDept, totalPayout) {
   const stateId = stateIdByMechanic.get(mechanic) || "N/A";
-  const weekEndStr = fmtDate(weekEndDate);
+  const weekEndStr = kFmtDate(weekEndDate);
   const engineReplacements = Object.values(engineReplacementsByDept).reduce((sum, count) => sum + count, 0);
   const enginePay = calculateEnginePayment(engineReplacementsByDept);
   
@@ -90,10 +73,10 @@ function generateWeeklyCopySummary(mechanic, weekEndDate, repairs, engineReplace
   
   if (engineReplacements > 0) {
     summary += `Engine Replacements: ${engineReplacements}\n`;
-    summary += `Engine Reimbursement: ${fmtMoney(enginePay)}\n`;
+    summary += `Engine Reimbursement: ${kFmtMoney(enginePay)}\n`;
   }
   
-  summary += `Total Payout: ${fmtMoney(totalPayout)}\n`;
+  summary += `Total Payout: ${kFmtMoney(totalPayout)}\n`;
   summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
   
   return summary;
@@ -171,14 +154,6 @@ function calculateEnginePayment(engineReplacementsByDept) {
   return enginePay;
 }
 
-// ===== CSV export helpers (using kintsugi-core.js) =====
-function toCsv(cols, rows) {
-  return kToCsv(cols, rows);
-}
-
-function downloadCsv(filename, csv) {
-  kDownloadCsv(filename, csv);
-}
 
 // ===== State ID helpers =====
 function buildStateIdMap(stateRows) {
@@ -218,8 +193,8 @@ async function loadPayouts() {
 
     // Load State IDs and payouts in parallel
     const [stateRows, data] = await Promise.all([
-      fetchCSV(STATE_ID_SHEET),
-      fetchCSV(PAYOUTS_SHEET),
+      kFetchCSV(STATE_ID_SHEET),
+      kFetchCSV(PAYOUTS_SHEET),
     ]);
 
     buildStateIdMap(stateRows);
@@ -285,12 +260,12 @@ async function loadPayouts() {
         }
       }
 
-      const weekEnd = parseDateLike(row[iWeek]);
-      const monthEnd = parseDateLike(row[iMonth]);
+      const weekEnd = kParseDateLike(row[iWeek]);
+      const monthEnd = kParseDateLike(row[iMonth]);
       if (!weekEnd || !monthEnd) continue;
 
       const tsRaw = iTime !== -1 ? (row[iTime] || "").trim() : "";
-      const tsDate = tsRaw ? parseDateLike(tsRaw) || new Date(tsRaw) : null;
+      const tsDate = tsRaw ? kParseDateLike(tsRaw) || new Date(tsRaw) : null;
       const owner = iOwner !== -1 ? (row[iOwner] || "").trim() : "";
       const plate = iPlate !== -1 ? (row[iPlate] || "").trim() : "";
       const dept = iDept !== -1 ? (row[iDept] || "").trim() : "";
@@ -417,7 +392,7 @@ function populateFilters() {
         const d = new Date(iso);
         const opt = document.createElement("option");
         opt.value = iso;
-        opt.textContent = fmtDate(d);
+        opt.textContent = kFmtDate(d);
         weekSel.appendChild(opt);
       });
   }
@@ -432,7 +407,7 @@ function populateFilters() {
         const d = monthKeyToDate.get(key);
         const opt = document.createElement("option");
         opt.value = key;
-        opt.textContent = fmtDate(d);
+        opt.textContent = kFmtDate(d);
         monthSel.appendChild(opt);
       });
   }
@@ -552,12 +527,12 @@ function renderWeekly() {
 
     const labelSpan = document.createElement("span");
     labelSpan.className = "week-group-label";
-    labelSpan.textContent = `Week ending ${fmtDate(weekEnd)}`;
+    labelSpan.textContent = `Week ending ${kFmtDate(weekEnd)}`;
     headerTd.appendChild(labelSpan);
 
     const metaSpan = document.createElement("span");
     metaSpan.className = "week-group-meta";
-    metaSpan.textContent = `${entries.length} mechanic${entries.length !== 1 ? "s" : ""} · ${fmtMoney(weekTotal)}`;
+    metaSpan.textContent = `${entries.length} mechanic${entries.length !== 1 ? "s" : ""} · ${kFmtMoney(weekTotal)}`;
     headerTd.appendChild(metaSpan);
 
     headerRow.appendChild(headerTd);
@@ -577,12 +552,12 @@ function renderWeekly() {
       tr.dataset.groupId = groupId;
       tr.innerHTML = `
         <td><button class="mech-link" data-mech="${r.mechanic}">${mechLabel}</button></td>
-        <td>${fmtDate(r.weekEnd)}</td>
+        <td>${kFmtDate(r.weekEnd)}</td>
         <td class="col-count">${r.jobCount || 0}</td>
         <td class="col-count">${r.repairs}</td>
         <td class="col-count">${engineReps > 0 ? engineReps : 0}</td>
         <td class="col-amount amount-in">
-          ${fmtMoney(pay)}
+          ${kFmtMoney(pay)}
           <div class="payout-comment">${comment}</div>
         </td>
         <td class="col-actions">
@@ -716,7 +691,7 @@ function renderMonthly() {
 
     const metaSpan = document.createElement("span");
     metaSpan.className = "week-group-meta";
-    metaSpan.textContent = `${yearRows.length} month${yearRows.length !== 1 ? "s" : ""} · ${yearRepairs} repairs · ${fmtMoney(yearTotal)}`;
+    metaSpan.textContent = `${yearRows.length} month${yearRows.length !== 1 ? "s" : ""} · ${yearRepairs} repairs · ${kFmtMoney(yearTotal)}`;
     headerTd.appendChild(metaSpan);
 
     headerRow.appendChild(headerTd);
@@ -732,10 +707,10 @@ function renderMonthly() {
       tr.className = "week-group-row";
       tr.dataset.groupId = groupId;
       tr.innerHTML = `
-        <td>${fmtDate(r.monthEnd)}</td>
+        <td>${kFmtDate(r.monthEnd)}</td>
         <td class="col-count">${r.repairs}</td>
         <td class="col-count">${engineReps}</td>
-        <td class="col-amount amount-in">${fmtMoney(totalValue)}</td>
+        <td class="col-amount amount-in">${kFmtMoney(totalValue)}</td>
       `;
       fragment.appendChild(tr);
     });
@@ -746,7 +721,7 @@ function renderMonthly() {
   if (headerCell) {
     headerCell.innerHTML = `
       <div>Total Repair Value</div>
-      <div class="th-total-amount">${fmtMoney(grandTotalValue)}</div>
+      <div class="th-total-amount">${kFmtMoney(grandTotalValue)}</div>
     `;
   }
 }
@@ -848,12 +823,12 @@ function renderJobs() {
 
     const labelSpan = document.createElement("span");
     labelSpan.className = "week-group-label";
-    labelSpan.textContent = `Month ending ${fmtDate(monthEnd)}`;
+    labelSpan.textContent = `Month ending ${kFmtDate(monthEnd)}`;
     headerTd.appendChild(labelSpan);
 
     const metaSpan = document.createElement("span");
     metaSpan.className = "week-group-meta";
-    metaSpan.textContent = `${monthJobs.length} job${monthJobs.length !== 1 ? "s" : ""} · ${fmtMoney(monthTotal)}`;
+    metaSpan.textContent = `${monthJobs.length} job${monthJobs.length !== 1 ? "s" : ""} · ${kFmtMoney(monthTotal)}`;
     headerTd.appendChild(metaSpan);
 
     headerRow.appendChild(headerTd);
@@ -875,15 +850,15 @@ function renderJobs() {
       tr.className = "week-group-row";
       tr.dataset.groupId = groupId;
       tr.innerHTML = `
-        <td>${j.tsDate ? fmtDate(j.tsDate) : ""}</td>
+        <td>${j.tsDate ? kFmtDate(j.tsDate) : ""}</td>
         <td><button class="mech-link link-btn" data-mech="${j.mechanic}">${mechLabel}</button></td>
         <td><button class="owner-link link-btn" data-owner="${j.owner}">${j.owner}</button></td>
         <td><button class="plate-link link-btn" data-plate="${j.plate}">${j.plate}</button></td>
         <td class="col-count">${j.across}</td>
         <td class="col-count">${engineLabel}</td>
-        <td>${fmtDate(j.weekEnd)}</td>
-        <td>${fmtDate(j.monthEnd)}</td>
-        <td class="col-amount amount-in">${fmtMoney(totalValue)}</td>
+        <td>${kFmtDate(j.weekEnd)}</td>
+        <td>${kFmtDate(j.monthEnd)}</td>
+        <td class="col-amount amount-in">${kFmtMoney(totalValue)}</td>
       `;
       fragment.appendChild(tr);
     });
@@ -971,8 +946,8 @@ function updateMechanicSummary() {
   if (totalRepairsEl) totalRepairsEl.textContent = totalRepairs.toLocaleString();
   if (weeksWorkedEl) weeksWorkedEl.textContent = String(weeksWorked);
   if (avgPerWeekEl) avgPerWeekEl.textContent = avgPerWeek.toFixed(1);
-  if (totalPayoutEl) totalPayoutEl.textContent = fmtMoney(totalPayout);
-  if (lastJobEl) lastJobEl.textContent = lastJob ? fmtDate(lastJob) : "—";
+  if (totalPayoutEl) totalPayoutEl.textContent = kFmtMoney(totalPayout);
+  if (lastJobEl) lastJobEl.textContent = lastJob ? kFmtDate(lastJob) : "—";
 
   summaryBox.classList.remove("hidden");
 }
@@ -1091,7 +1066,7 @@ function exportCurrentViewCsv() {
       const comment = commentForWeek(r.weekEnd);
       return {
         Mechanic: mechLabel,
-        "Week Ending": fmtDate(r.weekEnd),
+        "Week Ending": kFmtDate(r.weekEnd),
         "# Repairs": r.repairs,
         [`Pay ($${PAY_PER_REPAIR}/repair + engines)`]: pay,
         Comment: comment,
@@ -1105,7 +1080,7 @@ function exportCurrentViewCsv() {
       `Pay ($${PAY_PER_REPAIR}/repair + engines)`,
       "Comment",
     ];
-    downloadCsv("payouts_weekly_filtered.csv", toCsv(cols, rows));
+    kDownloadCsv("payouts_weekly_filtered.csv", kToCsv(cols, rows));
   } else if (currentView === "monthly") {
     // Filter jobs by department and month
     let filteredJobs = jobs;
@@ -1143,7 +1118,7 @@ function exportCurrentViewCsv() {
       const engineValue = calculateEngineValue(r.engineReplacementsByDept || {});
       const totalValue = r.repairs * REPAIR_RATE + engineValue;
       return {
-        "Month Ending": fmtDate(r.monthEnd),
+        "Month Ending": kFmtDate(r.monthEnd),
         "Total Repairs (Across)": r.repairs,
         "Engine Replacements": engineReps,
         "Total Repair Value": totalValue,
@@ -1156,7 +1131,7 @@ function exportCurrentViewCsv() {
       "Engine Replacements",
       "Total Repair Value",
     ];
-    downloadCsv("payouts_monthly_filtered.csv", toCsv(cols, mapped));
+    kDownloadCsv("payouts_monthly_filtered.csv", kToCsv(cols, mapped));
   } else {
     const q =
       (jobsSearchInput && jobsSearchInput.value.trim().toLowerCase()) || "";
@@ -1211,14 +1186,14 @@ function exportCurrentViewCsv() {
                          ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
       const totalValue = j.across * REPAIR_RATE + engineReps * engineRate;
       return {
-        Timestamp: j.tsDate ? fmtDate(j.tsDate) : "",
+        Timestamp: j.tsDate ? kFmtDate(j.tsDate) : "",
         Mechanic: j.mechanic,
         Owner: j.owner,
         Plate: j.plate,
         Across: j.across,
         "Engine Replacements": engineLabel,
-        "Week Ending": fmtDate(j.weekEnd),
-        "Month Ending": fmtDate(j.monthEnd),
+        "Week Ending": kFmtDate(j.weekEnd),
+        "Month Ending": kFmtDate(j.monthEnd),
         "Total Value": totalValue,
       };
     });
@@ -1234,7 +1209,7 @@ function exportCurrentViewCsv() {
       "Month Ending",
       "Total Value",
     ];
-    downloadCsv("payouts_jobs_filtered.csv", toCsv(cols, mapped));
+    kDownloadCsv("payouts_jobs_filtered.csv", kToCsv(cols, mapped));
   }
 }
 
@@ -1273,7 +1248,7 @@ function generateBill() {
     const totalValue = repairValue + engineValue;
 
     return {
-      "Date": j.tsDate ? fmtDate(j.tsDate) : "",
+      "Date": j.tsDate ? kFmtDate(j.tsDate) : "",
       "Mechanic": j.mechanic,
       "Owner": j.owner,
       "Plate": j.plate,
@@ -1328,16 +1303,12 @@ function generateBill() {
   ];
 
   const monthDate = monthKeyToDate.get(month);
-  const monthStr = monthDate ? fmtDate(monthDate).replace(/\//g, "-") : month;
+  const monthStr = monthDate ? kFmtDate(monthDate).replace(/\//g, "-") : month;
   const filename = `bill_${dept}_${monthStr}.csv`;
   
-  downloadCsv(filename, toCsv(cols, billRows));
+  kDownloadCsv(filename, kToCsv(cols, billRows));
 }
 
-// ===== Nav sync (using kintsugi-core.js) =====
-function syncNavLinksWithCurrentSearch() {
-  kSyncNavLinksWithCurrentSearch();
-}
 
 function updateUrlFromState() {
   try {
@@ -1375,7 +1346,7 @@ function updateUrlFromState() {
     window.history.replaceState(null, "", newUrl);
 
     // keep nav tabs in sync with the latest query
-    syncNavLinksWithCurrentSearch();
+    kSyncNavLinksWithCurrentSearch();
   } catch (e) {
     console.warn("updateUrlFromState failed:", e);
   }
@@ -1496,7 +1467,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initialParams = new URLSearchParams(window.location.search);
 
   // make sure nav tabs use whatever query we started with
-  syncNavLinksWithCurrentSearch();
+  kSyncNavLinksWithCurrentSearch();
 
   weeklyBody = document.getElementById("weeklyBody");
   monthlyBody = document.getElementById("monthlyBody");

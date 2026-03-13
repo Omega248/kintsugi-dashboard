@@ -36,10 +36,6 @@ let mechanicsTableSubEl;
 let weeklySummarySubtitleEl;
 let weeklySummaryContentEl;
 
-// ===== CSV fetch (using kintsugi-core.js) =====
-async function mechFetchCSV(sheetName) {
-  return await kFetchCSV(sheetName, { header: false });
-}
 
 // ===== State ID helpers =====
 function mechBuildStateIdMap(stateRows) {
@@ -75,17 +71,8 @@ function mechCalculateEngineValue(engineCount) {
 }
 
 // ===== Date helpers =====
-// ===== Date/Money helpers (using kintsugi-core.js) =====
-function mechIsValidDate(d) {
-  return d instanceof Date && !isNaN(d.getTime());
-}
-
-function mechParseDateLike(raw) {
-  return kParseDateLike(raw);
-}
-
 function mechFmtDate(d) {
-  if (!mechIsValidDate(d)) return "–";
+  if (!kIsValidDate(d)) return "–";
   // Using UK format (DD/MM/YY) for this page
   return d.toLocaleDateString("en-GB", {
     day: "2-digit",
@@ -102,14 +89,14 @@ function mechFmtMoney(amount) {
 function mechGetBestDate(job) {
   const candidates = [job.tsDate, job.weekEnd, job.monthEnd];
   for (const d of candidates) {
-    if (mechIsValidDate(d)) return d;
+    if (kIsValidDate(d)) return d;
   }
   return null;
 }
 
 // derive ISO week key (year-week) from a date
 function mechWeekKeyFromDate(d) {
-  if (!mechIsValidDate(d)) return null;
+  if (!kIsValidDate(d)) return null;
   const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   const dayNum = date.getUTCDay() || 7;
   date.setUTCDate(date.getUTCDate() + 4 - dayNum);
@@ -119,7 +106,7 @@ function mechWeekKeyFromDate(d) {
 }
 
 function mechMonthKeyFromDate(d) {
-  if (!mechIsValidDate(d)) return null;
+  if (!kIsValidDate(d)) return null;
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
@@ -176,13 +163,13 @@ function mechBuildWeeklyStats(mechanicName, sourceJobs) {
   
   for (const j of mechanicJobs) {
     const d = j.bestDate;
-    if (!mechIsValidDate(d)) continue;
+    if (!kIsValidDate(d)) continue;
     
     // Use week ending date if available, otherwise calculate week key
     let weekKey;
     let weekEndDate;
     
-    if (j.weekEnd && mechIsValidDate(j.weekEnd)) {
+    if (j.weekEnd && kIsValidDate(j.weekEnd)) {
       // Use the week ending date from the data (preferred)
       weekKey = j.weekEnd.toISOString().slice(0, 10);
       weekEndDate = j.weekEnd;
@@ -264,15 +251,15 @@ function mechBuildStats(sourceJobs) {
 
     // choose best valid date for this job
     const d = j.bestDate;
-    if (mechIsValidDate(d)) {
+    if (kIsValidDate(d)) {
       const weekKey =
-        j.weekEnd && mechIsValidDate(j.weekEnd)
+        j.weekEnd && kIsValidDate(j.weekEnd)
           ? j.weekEnd.toISOString().slice(0, 10)
           : mechWeekKeyFromDate(d);
       if (weekKey) rec.weeksWorkedSet.add(weekKey);
 
       const monthKey =
-        j.monthEnd && mechIsValidDate(j.monthEnd)
+        j.monthEnd && kIsValidDate(j.monthEnd)
           ? mechMonthKeyFromDate(j.monthEnd)
           : mechMonthKeyFromDate(d);
       if (monthKey) rec.monthsActiveSet.add(monthKey);
@@ -341,7 +328,7 @@ function mechRenderGlobalSummary(stats, globalEarliest, globalLatest) {
   }
 
   if (sumActivityRangeEl) {
-    if (mechIsValidDate(globalEarliest) && mechIsValidDate(globalLatest)) {
+    if (kIsValidDate(globalEarliest) && kIsValidDate(globalLatest)) {
       sumActivityRangeEl.textContent =
         mechFmtDate(globalEarliest) + " → " + mechFmtDate(globalLatest);
       if (sumActivityRangeSubEl) {
@@ -766,8 +753,8 @@ async function mechLoad() {
 
     // Load State IDs and jobs in parallel
     const [stateRows, data] = await Promise.all([
-      mechFetchCSV(MECH_STATE_ID_SHEET),
-      mechFetchCSV(MECH_JOBS_SHEET),
+      kFetchCSV(MECH_STATE_ID_SHEET),
+      kFetchCSV(MECH_JOBS_SHEET),
     ]);
 
     mechBuildStateIdMap(stateRows);
@@ -834,9 +821,9 @@ async function mechLoad() {
       const weekRaw = iWeek !== -1 ? row[iWeek] : "";
       const monthRaw = iMonth !== -1 ? row[iMonth] : "";
 
-      const tsDate = tsRaw ? mechParseDateLike(tsRaw) : null;
-      const weekEnd = weekRaw ? mechParseDateLike(weekRaw) : null;
-      const monthEnd = monthRaw ? mechParseDateLike(monthRaw) : null;
+      const tsDate = tsRaw ? kParseDateLike(tsRaw) : null;
+      const weekEnd = weekRaw ? kParseDateLike(weekRaw) : null;
+      const monthEnd = monthRaw ? kParseDateLike(monthRaw) : null;
       const bestDate = mechGetBestDate({ tsDate, weekEnd, monthEnd });
 
       jobs.push({
