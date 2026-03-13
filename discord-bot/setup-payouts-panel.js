@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // =======================================
-// Kintsugi Discord Bot — Payouts Panel Setup
+// Kintsugi Discord Bot — Invoice Panel Setup
 //
-// Posts the permanent "View My Payout" panel to a Discord channel.
+// Posts the permanent "Generate Monthly Invoice" panel to a Discord channel.
 // Run this ONCE.  The message will stay there forever; the bot handles
 // all interactions without ever editing the panel itself.
 //
@@ -31,19 +31,22 @@ if (!BOT_TOKEN || !CHANNEL_ID) {
 }
 
 // ===== Panel message payload =====
-// The panel is entirely static.  The bot fetches live payout data from
+// The panel is entirely static.  The bot fetches live job data from
 // Google Sheets each time the button is pressed.
 const panelPayload = {
   embeds: [
     {
-      title:       '💸 Kintsugi Payouts',
+      title:       '📋 Kintsugi Department Invoices',
       description:
-        'Click **View My Payout** below to check your payout for the most recent completed week.\n\n' +
-        '> 1. **Select your mechanic name** from the dropdown\n' +
-        '> 2. Your payout details appear **privately** (only you can see it)\n\n' +
+        'Click **Generate Monthly Invoice** below to produce billing invoices for BCSO and LSPD.\n\n' +
+        '> 1. **Select a month** from the dropdown\n' +
+        '> 2. Two invoices are generated **privately** (only you can see them):\n' +
+        '>    — one for **BCSO**, one for **LSPD**\n' +
+        '> 3. Each invoice includes a **CSV file** with every job — mechanic,\n' +
+        '>    officer, license plate, date, repairs, engine replacements & total\n\n' +
         '_Data is loaded live from the job sheet each time you press the button._',
       color:  0x22c55e,
-      footer: { text: 'Kintsugi Motorworks · Payouts Panel' },
+      footer: { text: 'Kintsugi Motorworks · Invoice Panel' },
     },
   ],
   components: [
@@ -53,9 +56,9 @@ const panelPayload = {
         {
           type:      2,    // BUTTON
           custom_id: 'payouts_panel_start',
-          label:     'View My Payout',
+          label:     'Generate Monthly Invoice',
           style:     1,    // PRIMARY (blurple)
-          emoji:     { name: '💸' },
+          emoji:     { name: '📋' },
         },
       ],
     },
@@ -78,11 +81,11 @@ async function postPanel() {
   const data = await res.json();
 
   if (!res.ok) {
-    console.error('Failed to post payouts panel:', JSON.stringify(data, null, 2));
+    console.error('Failed to post invoice panel:', JSON.stringify(data, null, 2));
     process.exit(1);
   }
 
-  console.log('✅ Payouts panel posted!');
+  console.log('✅ Invoice panel posted!');
   console.log(`   Channel : ${CHANNEL_ID}`);
   console.log(`   Message : ${data.id}`);
   console.log('');
@@ -94,3 +97,4 @@ postPanel().catch(err => {
   console.error('Unexpected error:', err);
   process.exit(1);
 });
+

@@ -4,7 +4,8 @@
 // Handles Discord component interactions (button presses + select menus) for
 // two permanent panels:
 //   • Job Logs panel    — request any mechanic's repair history by week
-//   • Payouts panel     — view the current week's payout breakdown
+//   • Payouts panel     — generate monthly department invoices (BCSO / LSPD)
+//                         with CSV file attachments
 //
 // Also handles /payouts and /update-analytics slash commands, and the weekly cron
 // trigger that posts/edits summaries to #analytics, #jobs, and #payouts
@@ -237,6 +238,157 @@ function filterByWeekEnding(jobs, weekEndDate) {
   });
 }
 
+/**
+ * Filter jobs that fall within the given calendar month.
+ * @param {Array}  jobs  - Parsed job records
+ * @param {number} year  - Full year (e.g. 2026)
+ * @param {number} month - 0-based month (JS convention; 0 = January)
+ */
+function filterByMonth(jobs, year, month) {
+  return jobs.filter(j => {
+    const d = j.bestDate;
+    if (!d) return false;
+    return d.getUTCFullYear() === year && d.getUTCMonth() === month;
+  });
+}
+
+// ===== Invoice helpers =====
+
+/**
+ * Escape a single cell value for RFC-4180 CSV output.
+ * Fields that contain commas, double-quotes, or newlines are wrapped in
+ * double-quotes and internal double-quotes are doubled.
+ */
+function toCsvCell(v) {
+  const s = String(v == null ? '' : v);
+  if (/[,"\n\r]/.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+function toCsvRow(cells) {
+  return cells.map(toCsvCell).join(',');
+}
+
+/**
+ * Build a CSV invoice string for one department and one calendar month.
+ * The file includes a header, per-job rows, and a TOTALS footer row.
+ */
+function buildInvoiceCsv(dept, monthLabel, jobs) {
+  const lines = [
+    toCsvRow([`Kintsugi Motorworks — ${dept} Invoice for ${monthLabel}`]),
+    '',
+    toCsvRow(['Date', 'Mechanic', 'Officer', 'License Plate', 'Repairs', 'Engine Replacements', 'Job Total ($)']),
+  ];
+
+  for (const j of jobs) {
+    const jobTotal = (j.across || 0) * PAY_PER_REPAIR + (j.engineReplacements || 0) * ENGINE_REIMBURSEMENT;
+    lines.push(toCsvRow([
+      fmtDate(j.bestDate),
+      j.mechanic,
+      j.cop || '',
+      j.plate || '',
+      j.across || 0,
+      j.engineReplacements || 0,
+      jobTotal,
+    ]));
+  }
+
+  if (jobs.length > 0) {
+    const totalRepairs = jobs.reduce((s, j) => s + (j.across || 0), 0);
+    const totalEngines = jobs.reduce((s, j) => s + (j.engineReplacements || 0), 0);
+    const grandTotal   = totalRepairs * PAY_PER_REPAIR + totalEngines * ENGINE_REIMBURSEMENT;
+    lines.push('');
+    lines.push(toCsvRow(['TOTALS', '', '', '', totalRepairs, totalEngines, grandTotal]));
+  }
+
+  return lines.join('\r\n');
+}
+
+/**
+ * Build a Discord embed summarising the monthly invoice for one department.
+ */
+function buildDeptInvoiceEmbed(dept, monthLabel, jobs) {
+  const totalRepairs = jobs.reduce((s, j) => s + (j.across || 0), 0);
+  const totalEngines = jobs.reduce((s, j) => s + (j.engineReplacements || 0), 0);
+  const repairCost   = totalRepairs * PAY_PER_REPAIR;
+  const engineCost   = totalEngines * ENGINE_REIMBURSEMENT;
+  const grandTotal   = repairCost + engineCost;
+
+  const deptUpper = dept.toUpperCase();
+  const color = deptUpper === 'BCSO' ? 0xd4a017 : deptUpper === 'LSPD' ? 0x1e90ff : 0x22c55e;
+
+  const fields = [
+    { name: '📅 Month',               value: monthLabel,            inline: true  },
+    { name: '🧾 Total Jobs',          value: String(jobs.length),   inline: true  },
+    { name: '🔧 Total Repairs',       value: String(totalRepairs),  inline: true  },
+    { name: '🔩 Engine Replacements', value: String(totalEngines),  inline: true  },
+    { name: '💰 Repair Cost',         value: fmtMoney(repairCost),  inline: true  },
+    { name: '⚙️ Engine Cost',         value: fmtMoney(engineCost),  inline: true  },
+    { name: '💵 Total Owed',          value: fmtMoney(grandTotal),  inline: false },
+  ];
+
+  const description = jobs.length === 0
+    ? `_No jobs recorded for **${dept}** in ${monthLabel}._`
+    : `Full job breakdown is attached as a CSV file.`;
+
+  return {
+    title:       `📋 ${dept} — Monthly Invoice`,
+    description,
+    color,
+    fields,
+    footer:      { text: 'Kintsugi Motorworks · Invoice' },
+    timestamp:   new Date().toISOString(),
+  };
+}
+
+// ===== Discord API helpers — file attachments =====
+
+/**
+ * Edit the original deferred ephemeral message and attach a file.
+ * Uses multipart/form-data so Discord accepts both the JSON payload and the
+ * binary attachment in a single PATCH request.
+ */
+async function editOriginalMessageWithFile(appId, token, content, embeds, filename, fileContent) {
+  const url  = `https://discord.com/api/v10/webhooks/${appId}/${token}/messages/@original`;
+  const form = new FormData();
+  form.append('payload_json', JSON.stringify({
+    content,
+    embeds,
+    components:  [],
+    attachments: [{ id: 0, filename }],
+  }));
+  form.append('files[0]', new Blob([fileContent], { type: 'text/csv' }), filename);
+  const res = await fetch(url, { method: 'PATCH', body: form });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`editOriginalMessageWithFile failed (${res.status}): ${body}`);
+  }
+}
+
+/**
+ * Post a new ephemeral follow-up message with a file attachment.
+ * Useful for sending a second department invoice without clobbering the first.
+ */
+async function postFollowupWithFile(appId, token, content, embeds, filename, fileContent) {
+  const url  = `https://discord.com/api/v10/webhooks/${appId}/${token}`;
+  const form = new FormData();
+  form.append('payload_json', JSON.stringify({
+    content,
+    embeds,
+    components:  [],
+    flags:       64, // ephemeral
+    attachments: [{ id: 0, filename }],
+  }));
+  form.append('files[0]', new Blob([fileContent], { type: 'text/csv' }), filename);
+  const res = await fetch(url, { method: 'POST', body: form });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`postFollowupWithFile failed (${res.status}): ${body}`);
+  }
+}
+
 // ===== Weekly aggregation (mirrors mechanics-script.js mechBuildWeeklyStats) =====
 
 function buildWeeklyStats(jobs) {
@@ -304,6 +456,9 @@ function parseJobsSheet(rows) {
   const iWeek   = lower.findIndex(h => h.includes('week') && h.includes('end'));
   const iMonth  = lower.findIndex(h => h.includes('month') && h.includes('end'));
   const iEngine = lower.findIndex(h => h.includes('engine') && h.includes('replacement'));
+  const iCop    = lower.findIndex(h => h.includes('cop') || (h.includes('officer') && !h.includes('timestamp')));
+  const iPlate  = lower.findIndex(h => h.includes('plate') || h.includes('license') || h.includes('licence'));
+  const iDept   = lower.findIndex(h => h.includes('department') || h.includes('dept') || h.includes('division') || h.includes('unit'));
 
   if (iMech === -1 || iAcross === -1) return [];
 
@@ -331,8 +486,15 @@ function parseJobsSheet(rows) {
     const monthEnd= iMonth !== -1 ? parseDateLike(row[iMonth]) : null;
     const bestDate = tsDate || weekEnd || monthEnd;
 
-    jobs.push({ mechanic: mech, across, engineReplacements: engineCount,
-                tsDate, weekEnd, monthEnd, bestDate });
+    jobs.push({
+      mechanic:           mech,
+      across,
+      engineReplacements: engineCount,
+      cop:                iCop   !== -1 ? (row[iCop]   || '').trim() : '',
+      plate:              iPlate !== -1 ? (row[iPlate] || '').trim() : '',
+      department:         iDept  !== -1 ? (row[iDept]  || '').trim() : '',
+      tsDate, weekEnd, monthEnd, bestDate,
+    });
   }
   return jobs;
 }
@@ -914,61 +1076,64 @@ async function handleWeekSelect(interaction, ctx) {
   return jsonResponse({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
 }
 
-// ===== Payouts panel handlers =====
+// ===== Invoice panel handlers =====
 
 /**
- * "View My Payout" button pressed on the permanent payouts panel.
+ * "Generate Monthly Invoice" button pressed on the permanent payouts panel.
  *
- * Responds immediately with an ephemeral deferral, fetches the mechanic list,
- * and edits the private message with a mechanic select menu so the user can
- * choose which mechanic's payout they want to view.
+ * Responds immediately with an ephemeral deferral, then edits the private
+ * message with a month select menu built from the dates present in the sheet.
  */
-async function handlePayoutsPanelButton(interaction, ctx) {
+async function handleInvoicePanelButton(interaction, ctx) {
   const { application_id: appId, token } = interaction;
 
   ctx.waitUntil((async () => {
     try {
       const jobRows = await fetchSheet(JOBS_SHEET);
       const allJobs = parseJobsSheet(jobRows);
-      const names   = [...new Set(allJobs.map(j => j.mechanic))].sort(
-        (a, b) => a.localeCompare(b)
-      );
 
-      if (names.length === 0) {
+      // Collect distinct months (YYYY-MM) that have job data
+      const monthSet = new Set();
+      for (const j of allJobs) {
+        if (j.bestDate) {
+          const y = j.bestDate.getUTCFullYear();
+          const m = j.bestDate.getUTCMonth() + 1;
+          monthSet.add(`${y}-${String(m).padStart(2, '0')}`);
+        }
+      }
+
+      if (monthSet.size === 0) {
         await editOriginalMessage(appId, token, {
-          content:    '❌ No mechanics found in the sheet.',
+          content:    '❌ No job data found in the sheet.',
           components: [],
         });
         return;
       }
 
-      const options = names.slice(0, 25).map(name => ({
-        label: name.length > 100 ? name.slice(0, 97) + '…' : name,
-        value: name,
-      }));
-      const overflow = names.length > 25
-        ? `\n_Showing 25 of ${names.length} mechanics (sorted A→Z)._`
-        : '';
+      // Sort newest-first, cap at Discord's 25-option limit
+      const months  = [...monthSet].sort((a, b) => b.localeCompare(a)).slice(0, 25);
+      const options = months.map(ym => {
+        const [y, m] = ym.split('-').map(Number);
+        const label  = new Date(Date.UTC(y, m - 1, 1))
+          .toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+        return { label, value: ym };
+      });
 
       await editOriginalMessage(appId, token, {
-        content: `💸 **Select a mechanic to view their payout:**${overflow}`,
-        components: [
-          {
-            type: 1,
-            components: [
-              {
-                type:        3,
-                custom_id:   'payouts_mech_select',
-                placeholder: 'Choose a mechanic…',
-                options,
-              },
-            ],
-          },
-        ],
+        content:    '📋 **Select a month to generate department invoices:**',
+        components: [{
+          type: 1,
+          components: [{
+            type:        3,
+            custom_id:   'invoice_month_select',
+            placeholder: 'Choose a month…',
+            options,
+          }],
+        }],
       });
     } catch (err) {
       await editOriginalMessage(appId, token, {
-        content:    `❌ Failed to load mechanic list.\n\`${err.message}\``,
+        content:    `❌ Failed to load job data.\n\`${err.message}\``,
         components: [],
       }).catch(() => {});
     }
@@ -981,8 +1146,63 @@ async function handlePayoutsPanelButton(interaction, ctx) {
 }
 
 /**
+ * Month selected from the invoice panel dropdown.
+ *
+ * Fetches all jobs for that month, splits them by department (BCSO / LSPD),
+ * then:
+ *   1. Edits the original ephemeral message with the BCSO invoice embed + CSV.
+ *   2. Posts an ephemeral follow-up message with the LSPD invoice embed + CSV.
+ */
+async function handleInvoiceMonthSelect(interaction, ctx) {
+  const { application_id: appId, token } = interaction;
+  const monthValue = interaction.data.values[0]; // e.g. "2026-01"
+
+  ctx.waitUntil((async () => {
+    try {
+      const [y, m]     = monthValue.split('-').map(Number);
+      const monthLabel = new Date(Date.UTC(y, m - 1, 1))
+        .toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+      const jobRows   = await fetchSheet(JOBS_SHEET);
+      const allJobs   = parseJobsSheet(jobRows);
+      const monthJobs = filterByMonth(allJobs, y, m - 1); // getUTCMonth() is 0-based
+
+      const bcsoJobs = monthJobs.filter(j => /bcso/i.test(j.department));
+      const lspdJobs = monthJobs.filter(j => /lspd/i.test(j.department));
+
+      // BCSO invoice — edit the original ephemeral message
+      await editOriginalMessageWithFile(
+        appId, token,
+        `📋 **BCSO Invoice — ${monthLabel}**`,
+        [buildDeptInvoiceEmbed('BCSO', monthLabel, bcsoJobs)],
+        `kintsugi-invoice-bcso-${monthValue}.csv`,
+        buildInvoiceCsv('BCSO', monthLabel, bcsoJobs)
+      );
+
+      // LSPD invoice — ephemeral follow-up (separate message)
+      await postFollowupWithFile(
+        appId, token,
+        `📋 **LSPD Invoice — ${monthLabel}**`,
+        [buildDeptInvoiceEmbed('LSPD', monthLabel, lspdJobs)],
+        `kintsugi-invoice-lspd-${monthValue}.csv`,
+        buildInvoiceCsv('LSPD', monthLabel, lspdJobs)
+      );
+    } catch (err) {
+      await editOriginalMessage(appId, token, {
+        content:    `❌ Failed to generate invoices.\n\`${err.message}\``,
+        components: [],
+      }).catch(() => {});
+    }
+  })());
+
+  return jsonResponse({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
+}
+
+// ===== Week-specific payouts helpers (used by post-payouts workflow messages) =====
+
+/**
  * Build a payout embed for one mechanic covering a specific set of jobs.
- * Shows jobs count, total across, engines, payout, and a per-job breakdown.
+ * Used by the week-specific payouts messages posted by the post-payouts workflow.
  */
 function buildMechanicPayoutEmbed(mechanic, stateId, filteredJobs, period) {
   let repairs = 0, engines = 0;
@@ -995,10 +1215,10 @@ function buildMechanicPayoutEmbed(mechanic, stateId, filteredJobs, period) {
   const color    = repairs > 0 ? 0x22c55e : 0xef4444;
 
   const fields = [
-    { name: '📅 Period',   value: period,           inline: true },
-    { name: '🧾 Jobs',     value: String(jobCount), inline: true },
-    { name: '🔧 Repairs (Across)', value: String(repairs),  inline: true },
-    { name: '💰 Payout',   value: fmtMoney(payout), inline: true },
+    { name: '📅 Period',             value: period,           inline: true },
+    { name: '🧾 Jobs',               value: String(jobCount), inline: true },
+    { name: '🔧 Repairs (Across)',   value: String(repairs),  inline: true },
+    { name: '💰 Payout',             value: fmtMoney(payout), inline: true },
   ];
   if (engines > 0) {
     fields.push({ name: '🔩 Engines', value: String(engines), inline: true });
@@ -1007,7 +1227,6 @@ function buildMechanicPayoutEmbed(mechanic, stateId, filteredJobs, period) {
     fields.push({ name: '🪪 State ID', value: stateId, inline: true });
   }
 
-  // Per-job breakdown (only shown when at least one job exists)
   if (jobCount > 0) {
     const lines = filteredJobs.map((j, i) => {
       let line = `${i + 1}. **${j.across}** across`;
@@ -1019,7 +1238,7 @@ function buildMechanicPayoutEmbed(mechanic, stateId, filteredJobs, period) {
     });
     fields.push({
       name:   `🧾 Jobs breakdown (${jobCount})`,
-      value:  lines.join('\n').slice(0, 1024),
+      value:  lines.join('\n').slice(0, DISCORD_FIELD_MAX_CHARS),
       inline: false,
     });
   }
@@ -1040,139 +1259,6 @@ function buildMechanicPayoutEmbed(mechanic, stateId, filteredJobs, period) {
       timestamp:   new Date().toISOString(),
     }],
   };
-}
-
-/**
- * Build the week-selection message payload for the general payouts panel.
- * Lists all weeks the mechanic has worked (newest first) plus an "All Weeks"
- * option so they can view their all-time payout summary.
- */
-function buildPayoutsGeneralWeekSelectPayload(mechanic, weeks) {
-  const options = [];
-
-  // "All Weeks" first so it is always accessible regardless of history length
-  options.push({
-    label:       '📆 All Weeks',
-    value:       'all',
-    description: 'View all-time payout summary',
-  });
-
-  // Historical weeks from job data (sorted newest first, capped at 24 remaining slots)
-  const seenKeys = new Set();
-  for (const w of weeks) {
-    if (options.length >= 25) break;
-    const key = w.weekEndDate
-      ? w.weekEndDate.toISOString().slice(0, 10)
-      : w.weekKey;
-    if (seenKeys.has(key)) continue;
-    seenKeys.add(key);
-
-    const label = w.weekEndDate
-      ? `Week ending ${fmtDate(w.weekEndDate)}`
-      : `Week ${w.weekKey}`;
-    options.push({
-      label: label.length > 100 ? label.slice(0, 97) + '…' : label,
-      value: key,
-    });
-  }
-
-  // custom_id is max 100 chars: prefix (29 chars) + mechanic name (≤71 chars)
-  const safeMech = mechanic.slice(0, 71);
-  const customId = `payouts_general_week_select:${safeMech}`;
-
-  return {
-    content:    `💸 **${mechanic}** — Select a week to view your payout:`,
-    components: [{
-      type: 1,
-      components: [{
-        type:        3,
-        custom_id:   customId,
-        placeholder: 'Choose a week…',
-        options,
-      }],
-    }],
-  };
-}
-
-/**
- * Mechanic selected from the payouts panel dropdown.
- *
- * Shows a week-select menu (with "All Weeks" as the first option) so the
- * mechanic can choose which pay period they want to inspect.
- */
-async function handlePayoutsMechSelect(interaction, ctx) {
-  const { application_id: appId, token } = interaction;
-  const mechanic = interaction.data.values[0];
-
-  ctx.waitUntil((async () => {
-    try {
-      const jobRows      = await fetchSheet(JOBS_SHEET);
-      const allJobs      = parseJobsSheet(jobRows);
-      const mechanicJobs = allJobs.filter(j => j.mechanic === mechanic);
-      const weeks        = buildWeeklyStats(mechanicJobs);
-
-      await editOriginalMessage(appId, token, buildPayoutsGeneralWeekSelectPayload(mechanic, weeks));
-    } catch (err) {
-      await editOriginalMessage(appId, token, {
-        content:    `❌ Failed to load week list.\n\`${err.message}\``,
-        components: [],
-      }).catch(() => {});
-    }
-  })());
-
-  return jsonResponse({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
-}
-
-/**
- * Week selected from the general payouts panel week dropdown.
- *
- * Fetches the mechanic's jobs for the chosen week (or all time when "all" is
- * selected) and edits the message with a detailed payout embed that includes
- * jobs count, total across, engine replacements, and a per-job breakdown.
- */
-async function handlePayoutsGeneralWeekSelect(interaction, ctx) {
-  const { application_id: appId, token } = interaction;
-  const weekKey  = interaction.data.values[0];
-
-  const colonIdx = interaction.data.custom_id.indexOf(':');
-  const mechanic = interaction.data.custom_id.slice(colonIdx + 1);
-
-  ctx.waitUntil((async () => {
-    try {
-      const [jobRows, stateRows] = await Promise.all([
-        fetchSheet(JOBS_SHEET),
-        fetchSheet(STATE_IDS_SHEET).catch(() => []),
-      ]);
-      const allJobs      = parseJobsSheet(jobRows);
-      const stateMap     = parseStateIds(stateRows);
-      const mechanicJobs = allJobs.filter(j => j.mechanic === mechanic);
-      const stateId      = stateMap.get(mechanic) || 'N/A';
-
-      let filteredJobs;
-      if (weekKey === 'all') {
-        filteredJobs = mechanicJobs;
-      } else {
-        const weekEndDate = new Date(weekKey + 'T00:00:00Z');
-        filteredJobs = filterByWeekEnding(mechanicJobs, weekEndDate);
-      }
-
-      const period = weekKey === 'all'
-        ? 'All Time'
-        : `Week ending ${fmtDate(new Date(weekKey + 'T00:00:00Z'))}`;
-
-      await editOriginalMessage(
-        appId, token,
-        buildMechanicPayoutEmbed(mechanic, stateId, filteredJobs, period)
-      );
-    } catch (err) {
-      await editOriginalMessage(appId, token, {
-        content:    `❌ Failed to load payout data.\n\`${err.message}\``,
-        components: [],
-      }).catch(() => {});
-    }
-  })());
-
-  return jsonResponse({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
 }
 
 /**
@@ -1901,15 +1987,12 @@ export default {
         return handleWeekSelect(interaction, ctx);
       }
 
-      // Payouts panel button + mechanic select + week select
+      // Invoice panel button + month select (permanent payouts panel)
       if (customId === 'payouts_panel_start') {
-        return handlePayoutsPanelButton(interaction, ctx);
+        return handleInvoicePanelButton(interaction, ctx);
       }
-      if (customId === 'payouts_mech_select') {
-        return handlePayoutsMechSelect(interaction, ctx);
-      }
-      if (customId.startsWith('payouts_general_week_select:')) {
-        return handlePayoutsGeneralWeekSelect(interaction, ctx);
+      if (customId === 'invoice_month_select') {
+        return handleInvoiceMonthSelect(interaction, ctx);
       }
 
       // Week-specific payouts button + mechanic select (posted by post-payouts workflow)
