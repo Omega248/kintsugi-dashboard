@@ -127,7 +127,7 @@ jobs:
           # Uses node for JSON-safe editing.  Both configs share the same KV namespace.
           node - "${{ steps.kv.outputs.kv_namespace_id }}" << 'EOF'
           const fs   = require('fs');
-          const kvId = process.argv[1];
+          const kvId = process.argv[2];
           for (const file of ['wrangler.jsonc', 'wrangler-bot.jsonc']) {
             const raw      = fs.readFileSync(file, 'utf8');
             // Strip single-line // comments so JSON.parse works
