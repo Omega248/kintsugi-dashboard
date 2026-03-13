@@ -1079,7 +1079,7 @@ async function handleWeekSelect(interaction, ctx) {
 // ===== Invoice panel handlers =====
 
 /**
- * "Generate Monthly Invoice" button pressed on the permanent payouts panel.
+ * "Generate Monthly Invoice" button pressed on the permanent billing panel.
  *
  * Step 1 of 3: Responds immediately with an ephemeral deferral, then edits
  * the private message with a department select menu (BCSO / LSPD).
@@ -1094,7 +1094,7 @@ async function handleInvoicePanelButton(interaction, ctx) {
         type: 1,
         components: [{
           type:        3,
-          custom_id:   'invoice_dept_select',
+          custom_id:   'billing_dept_select',
           placeholder: 'Choose a department…',
           options: [
             { label: 'BCSO', value: 'BCSO', emoji: { name: '🟡' } },
@@ -1112,7 +1112,7 @@ async function handleInvoicePanelButton(interaction, ctx) {
 }
 
 /**
- * Department selected from the invoice panel dropdown.
+ * Department selected from the billing panel dropdown.
  *
  * Step 2 of 3: Fetches the sheet to discover available month-ending dates for
  * the chosen department, then edits the ephemeral message with a month-ending
@@ -1166,7 +1166,7 @@ async function handleInvoiceDeptSelect(interaction, ctx) {
           type: 1,
           components: [{
             type:        3,
-            custom_id:   `invoice_month_select:${dept}`,
+            custom_id:   `billing_month_select:${dept}`,
             placeholder: 'Choose a month ending…',
             options,
           }],
@@ -1184,21 +1184,21 @@ async function handleInvoiceDeptSelect(interaction, ctx) {
 }
 
 /**
- * Month ending selected from the invoice panel dropdown.
+ * Month ending selected from the billing panel dropdown.
  *
  * Final step: Fetches all jobs for the chosen department whose "Month Ending"
  * matches the selected date, then edits the ephemeral message with an invoice
  * embed and a CSV file attachment.
  *
  * The department is read from the select menu's custom_id
- * (format: `invoice_month_select:<dept>`).
+ * (format: `billing_month_select:<dept>`).
  * The selected value is an ISO date string (YYYY-MM-DD) taken from the sheet's
  * "Month Ending" column.
  */
 async function handleInvoiceMonthSelect(interaction, ctx) {
   const { application_id: appId, token } = interaction;
   const monthValue = interaction.data.values[0]; // e.g. "2026-03-31"
-  // Parse department encoded in the custom_id (e.g. "invoice_month_select:BCSO")
+  // Parse department encoded in the custom_id (e.g. "billing_month_select:BCSO")
   const dept = (interaction.data.custom_id || '').split(':')[1] || 'BCSO';
 
   ctx.waitUntil((async () => {
@@ -2027,14 +2027,14 @@ export default {
         return handleWeekSelect(interaction, ctx);
       }
 
-      // Invoice panel button + dept + month select (permanent payouts panel)
-      if (customId === 'payouts_panel_start') {
+      // Invoice panel button + dept + month select (permanent billing panel)
+      if (customId === 'billing_generate_invoice') {
         return handleInvoicePanelButton(interaction, ctx);
       }
-      if (customId === 'invoice_dept_select') {
+      if (customId === 'billing_dept_select') {
         return handleInvoiceDeptSelect(interaction, ctx);
       }
-      if (customId.startsWith('invoice_month_select')) {
+      if (customId.startsWith('billing_month_select:')) {
         return handleInvoiceMonthSelect(interaction, ctx);
       }
 

@@ -55,7 +55,7 @@ const panelPayload = {
       components: [
         {
           type:      2,    // BUTTON
-          custom_id: 'payouts_panel_start',
+          custom_id: 'billing_generate_invoice',
           label:     'Generate Monthly Invoice',
           style:     1,    // PRIMARY (blurple)
           emoji:     { name: '📋' },
