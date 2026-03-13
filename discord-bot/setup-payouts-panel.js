@@ -38,11 +38,11 @@ const panelPayload = {
     {
       title:       '📋 Kintsugi Department Invoices',
       description:
-        'Click **Generate Monthly Invoice** below to produce billing invoices for BCSO and LSPD.\n\n' +
-        '> 1. **Select a month** from the dropdown\n' +
-        '> 2. Two invoices are generated **privately** (only you can see them):\n' +
-        '>    — one for **BCSO**, one for **LSPD**\n' +
-        '> 3. Each invoice includes a **CSV file** with every job — mechanic,\n' +
+        'Click **Generate Monthly Invoice** below to produce a billing invoice for BCSO or LSPD.\n\n' +
+        '> 1. **Select a department** (BCSO or LSPD)\n' +
+        '> 2. **Select a month** from the dropdown\n' +
+        '> 3. The invoice is generated **privately** (only you can see it)\n' +
+        '>    and includes a **CSV file** with every job — mechanic,\n' +
         '>    officer, license plate, date, repairs, engine replacements & total\n\n' +
         '_Data is loaded live from the job sheet each time you press the button._',
       color:  0x22c55e,
