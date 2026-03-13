@@ -49,10 +49,58 @@ The workflow:
 | `PAYOUTS_CHANNEL_ID` | ✅ | Channel for the payday reminder ping |
 | `INVOICE_CHANNEL_ID` | ✅ | Channel for the Invoice panel |
 | `RIPTIDE_USER_ID` | Optional | Discord user ID to @mention in payday reminder |
-| `TRIGGER_TOKEN` | Optional | Auth token for the "Notify Discord" button on the web dashboard |
-| `DEBUG_CHANNEL_ID` | Optional | Discord channel ID for debug/error embed logs |
+| `TRIGGER_TOKEN` | Optional | Auth token for the "Notify Discord" button on the web dashboard (also gates `GET /api/logs`) |
 
 All secrets are set in **GitHub → Settings → Secrets and variables → Actions** and synced to the Worker automatically on deploy.
+
+---
+
+## Viewing Logs
+
+Every action, response, and error the Worker handles is written to a plain-text log stored in the `KINTSUGI_BOT` KV namespace. Entries expire automatically after **7 days**. No Discord channel or paid service is required.
+
+Each log entry looks like:
+
+```
+[2026-03-13T19:26:11.176Z] INFO  interaction  kind="slash_command" name="payouts" user="omega248"
+[2026-03-13T19:30:00.000Z] INFO  scheduled_run_complete  weekEnd="2026-03-13" repairs=42 payout=29400
+[2026-03-13T20:01:05.312Z] ERROR unhandled_interaction_error  error="Sheet returned no data"
+```
+
+### Option 1 — Browser or curl
+
+```
+GET https://<your-worker-url>/api/logs
+Authorization: Bearer <TRIGGER_TOKEN>
+```
+
+**curl example:**
+
+```bash
+curl -H "Authorization: Bearer YOUR_TRIGGER_TOKEN" \
+     https://kintsugi.reecestangoe0824.workers.dev/api/logs
+```
+
+Replace `YOUR_TRIGGER_TOKEN` with the value of the `TRIGGER_TOKEN` GitHub secret (or the fallback token printed in the Worker source if the secret is not set).
+
+The response is **plain text**, oldest entries first, one line per event.
+
+### Option 2 — Cloudflare real-time logs (wrangler tail)
+
+All log entries are also written to the Cloudflare console so they appear in `wrangler tail`:
+
+```bash
+npx wrangler tail kintsugi
+```
+
+Look for lines prefixed `[klog]`. These are emitted at `console.log`, `console.warn`, or `console.error` level depending on severity.
+
+### Option 3 — Cloudflare Dashboard
+
+1. Go to **Cloudflare → Workers & Pages → kintsugi → Logs**.
+2. Filter by the text `[klog]` to see only bot log entries.
+
+> **Tip:** If `/api/logs` returns `503 KV namespace is not bound`, re-run the **Deploy** workflow so the `KINTSUGI_BOT` KV namespace is provisioned and bound.
 
 ---
 
@@ -61,14 +109,17 @@ All secrets are set in **GitHub → Settings → Secrets and variables → Actio
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | "This interaction failed" — Google Sheet error | Sheet is private | Share the Sheet as **Anyone with the link → Viewer** |
-| "This interaction failed" — missing secret | Required secret not set | Check **Cloudflare → Workers & Pages → kintsugi → Logs** and confirm all channel ID secrets are set |
-| Invoice button shows "This interaction failed" | Invoice flow error | Check Cloudflare Logs for `invoice_generation_failed` — it contains an `errorId` and stack trace |
+| "This interaction failed" — missing secret | Required secret not set | Check `GET /api/logs` or **Cloudflare → Workers & Pages → kintsugi → Logs** and confirm all channel ID secrets are set |
+| Invoice button shows "This interaction failed" | Invoice flow error | Check `GET /api/logs` for `invoice_generation_failed` — it contains an `errorId` and stack trace |
 | Slash commands not showing in Discord | Commands not registered | Run **Register Slash Commands** workflow |
 | Mechanic list or department dropdown is empty | Google Sheet not publicly readable | Share the Sheet as **Anyone with the link → Viewer** |
 | Analytics posts a new message every 5 minutes | KV namespace not bound | Check **Cloudflare → kintsugi → Settings → Bindings** for a `KV` binding; re-run Deploy |
 | Panel message disappeared | Message was deleted | Re-run the relevant **Post … Panel** workflow and pin the new message |
 | "Notify Discord" returns 401 | Token mismatch | Confirm `TRIGGER_TOKEN` in GitHub Secrets matches what's saved in the dashboard config panel |
 | Deploy fails at "Provision KV" | API token missing KV permission | Recreate the token with both `Workers Scripts:Edit` and `Workers KV Storage:Edit` permissions |
+| `/api/logs` returns 401 | Wrong token | Use the value of the `TRIGGER_TOKEN` GitHub secret as the Bearer token |
+| `/api/logs` returns 503 | KV not bound | Re-run the **Deploy** workflow to provision and bind the `KINTSUGI_BOT` KV namespace |
+| `/api/logs` is empty | No events logged yet | The log fills as the bot handles interactions and cron runs; trigger a cron with **Actions → Deploy → Run workflow** |
 
 ---
 
