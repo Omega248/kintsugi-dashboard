@@ -57,17 +57,14 @@ All secrets are set in **GitHub → Settings → Secrets and variables → Actio
 
 ## Viewing Logs
 
-Every action, response, and error the Worker handles is written to a plain-text log stored in the `KINTSUGI_BOT` KV namespace. Entries expire automatically after **7 days**. No Discord channel or paid service is required.
+Every action, response, and error the Worker handles is written as a JSON entry to the `KINTSUGI_BOT` KV namespace. Entries expire automatically after **7 days**. No Discord channel or paid service is required.
 
-Each log entry looks like:
+### Option 1 — Logs page (browser)
 
-```
-[2026-03-13T19:26:11.176Z] INFO  interaction  kind="slash_command" name="payouts" user="omega248"
-[2026-03-13T19:30:00.000Z] INFO  scheduled_run_complete  weekEnd="2026-03-13" repairs=42 payout=29400
-[2026-03-13T20:01:05.312Z] ERROR unhandled_interaction_error  error="Sheet returned no data"
-```
+Navigate to `/Logs/` on the worker URL (e.g. `https://kintsugi.reecestangoe0824.workers.dev/Logs/`).  
+Enter your `TRIGGER_TOKEN` when prompted. The page auto-refreshes every 30 seconds and lets you filter by level or search by event name.
 
-### Option 1 — Browser or curl
+### Option 2 — curl / API
 
 ```
 GET https://<your-worker-url>/api/logs
@@ -83,9 +80,19 @@ curl -H "Authorization: Bearer YOUR_TRIGGER_TOKEN" \
 
 Replace `YOUR_TRIGGER_TOKEN` with the value of the `TRIGGER_TOKEN` GitHub secret (or the fallback token printed in the Worker source if the secret is not set).
 
-The response is **plain text**, oldest entries first, one line per event.
+The response is **JSON**, newest entries first:
 
-### Option 2 — Cloudflare real-time logs (wrangler tail)
+```json
+{
+  "entries": [
+    { "ts": "2026-03-13T20:01:05.312Z", "level": "error", "event": "unhandled_interaction_error", "error": "Sheet returned no data" },
+    { "ts": "2026-03-13T19:30:00.000Z", "level": "info",  "event": "scheduled_run_complete", "weekEnd": "2026-03-13", "repairs": 42, "payout": 29400 },
+    { "ts": "2026-03-13T19:26:11.176Z", "level": "info",  "event": "interaction", "kind": "slash_command", "name": "payouts", "user": "omega248" }
+  ]
+}
+```
+
+### Option 3 — Cloudflare real-time logs (wrangler tail)
 
 All log entries are also written to the Cloudflare console so they appear in `wrangler tail`:
 
@@ -95,7 +102,7 @@ npx wrangler tail kintsugi
 
 Look for lines prefixed `[klog]`. These are emitted at `console.log`, `console.warn`, or `console.error` level depending on severity.
 
-### Option 3 — Cloudflare Dashboard
+### Option 4 — Cloudflare Dashboard
 
 1. Go to **Cloudflare → Workers & Pages → kintsugi → Logs**.
 2. Filter by the text `[klog]` to see only bot log entries.
@@ -117,6 +124,7 @@ Look for lines prefixed `[klog]`. These are emitted at `console.log`, `console.w
 | Panel message disappeared | Message was deleted | Re-run the relevant **Post … Panel** workflow and pin the new message |
 | "Notify Discord" returns 401 | Token mismatch | Confirm `TRIGGER_TOKEN` in GitHub Secrets matches what's saved in the dashboard config panel |
 | Deploy fails at "Provision KV" | API token missing KV permission | Recreate the token with both `Workers Scripts:Edit` and `Workers KV Storage:Edit` permissions |
+| Deploy fails with "KV namespace '-' is not valid" | Workflow injected `-` as the KV ID | This was a bug in the `Inject KV binding` step (fixed); re-run the **Deploy** workflow after updating to the latest `main` |
 | `/api/logs` returns 401 | Wrong token | Use the value of the `TRIGGER_TOKEN` GitHub secret as the Bearer token |
 | `/api/logs` returns 503 | KV not bound | Re-run the **Deploy** workflow to provision and bind the `KINTSUGI_BOT` KV namespace |
 | `/api/logs` is empty | No events logged yet | The log fills as the bot handles interactions and cron runs; trigger a cron with **Actions → Deploy → Run workflow** |
@@ -141,6 +149,7 @@ kintsugi-dashboard/
 │
 ├── Analytics/                      Analytics sub-page
 ├── Bank_Record/                    Bank Record sub-page
+├── Logs/                           Bot Logs sub-page (browser viewer for /api/logs)
 ├── Mechanics/                      Mechanics sub-page
 ├── Payouts/                        Payouts sub-page
 │
