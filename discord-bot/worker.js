@@ -266,9 +266,10 @@ function buildWeeklyStats(jobs) {
 
     let rec = weekMap.get(weekKey);
     if (!rec) {
-      rec = { weekKey, weekEndDate, totalRepairs: 0, engineReplacements: 0 };
+      rec = { weekKey, weekEndDate, jobCount: 0, totalRepairs: 0, engineReplacements: 0 };
       weekMap.set(weekKey, rec);
     }
+    rec.jobCount++;
     rec.totalRepairs      += j.across || 0;
     rec.engineReplacements += j.engineReplacements || 0;
   }
@@ -396,12 +397,14 @@ function getLatestWeekPayouts(allJobs, stateMap) {
       rec = {
         name:               j.mechanic,
         stateId:            stateMap.get(j.mechanic) || '',
-        repairs:            0, // "across" = repairs across (number of repair slots)
+        jobs:               0, // individual job submissions (rows)
+        repairs:            0, // total "across" = repair slots across all jobs
         engineReplacements: 0,
         totalPayout:        0,
       };
       mechMap.set(j.mechanic, rec);
     }
+    rec.jobs++;
     rec.repairs            += j.across || 0; // j.across = "How many Across" sheet column
     rec.engineReplacements += j.engineReplacements || 0;
   }
@@ -434,7 +437,7 @@ function buildPayoutsProcessedPayload(weekEndDate, payouts) {
     const lines = payouts.map(m => {
       let line = `• **${m.name}**`;
       if (m.stateId) line += ` _(ID: ${m.stateId})_`;
-      line += ` — ${m.repairs} repair${m.repairs !== 1 ? 's' : ''}`;
+      line += ` — ${m.jobs} job${m.jobs !== 1 ? 's' : ''} (${m.repairs} across)`;
       if (m.engineReplacements > 0) {
         line += `, ${m.engineReplacements} engine${m.engineReplacements !== 1 ? 's' : ''}`;
       }
@@ -449,7 +452,7 @@ function buildPayoutsProcessedPayload(weekEndDate, payouts) {
     });
 
     const grandTotal = payouts.reduce((s, m) => s + m.totalPayout, 0);
-    fields.push({ name: '💰 Total Disbursed', value: fmtMoney(grandTotal), inline: true });
+    fields.push({ name: '💰 Total Paid', value: fmtMoney(grandTotal), inline: true });
     fields.push({ name: '👷 Mechanics Paid', value: String(payouts.length), inline: true });
   }
 
@@ -714,7 +717,7 @@ function buildWeekSelectPayload(mechanic, weeks) {
 
   // Add historical weeks from job data (sorted newest first)
   for (const w of weeks) {
-    if (options.length >= 25) break;
+    if (options.length >= 24) break; // reserve last slot for "All Weeks Ever"
     const key = w.weekEndDate
       ? w.weekEndDate.toISOString().slice(0, 10)
       : w.weekKey;
@@ -729,6 +732,13 @@ function buildWeekSelectPayload(mechanic, weeks) {
       value: key,
     });
   }
+
+  // Always add "All Weeks Ever" as the last option
+  options.push({
+    label:       '📆 All Weeks Ever',
+    value:       'all',
+    description: 'View all-time job history',
+  });
 
   // custom_id is max 100 chars: prefix (21 chars) + mechanic name (≤79 chars)
   const safeMech = mechanic.slice(0, 79);
@@ -782,17 +792,18 @@ function buildJobLogPayload(mechanic, stateId, weeks, period) {
     };
   }
 
+  const totalJobs    = weeks.reduce((s, w) => s + (w.jobCount ?? 0), 0);
   const totalRepairs = weeks.reduce((s, w) => s + w.totalRepairs, 0);
   const totalPayout  = weeks.reduce((s, w) => s + w.totalPayout,  0);
   const totalEngines = weeks.reduce((s, w) => s + w.engineReplacements, 0);
 
-  // One inline field per week, newest first, capped at 10
-  const displayWeeks = weeks.slice(0, 10);
+  // One inline field per week, newest first, capped at 24 (Discord max 25 fields)
+  const displayWeeks = weeks.slice(0, 24);
   const fields = displayWeeks.map(w => {
     const name  = w.weekEndDate
       ? `Week ending ${fmtDate(w.weekEndDate)}`
       : w.weekKey;
-    let value   = `Repairs: **${w.totalRepairs}**`;
+    let value   = `Jobs: **${w.jobCount ?? 0}** · Across: **${w.totalRepairs}**`;
     if (w.engineReplacements > 0) {
       value += `\nEngines: ${w.engineReplacements}`;
     }
@@ -800,18 +811,19 @@ function buildJobLogPayload(mechanic, stateId, weeks, period) {
     return { name, value, inline: true };
   });
 
-  if (weeks.length > 10) {
+  if (weeks.length > 24) {
     fields.push({
-      name:   `+${weeks.length - 10} more week(s)`,
-      value:  'Only the 10 most recent weeks are shown. Use **This Month** or **Current Week** to narrow the range.',
+      name:   `+${weeks.length - 24} more week(s)`,
+      value:  'Only the 24 most recent weeks are shown. Select **All Weeks Ever** to view the full summary.',
       inline: false,
     });
   }
 
   let description = `**State ID:** ${stateId || 'N/A'} · **Period:** ${periodLabel(period)}\n`;
+  const jobStr = `${totalJobs} job${totalJobs !== 1 ? 's' : ''} (${totalRepairs} across)`;
   description += totalEngines > 0
-    ? `**Total:** ${totalRepairs} repairs · ${totalEngines} engines · ${fmtMoney(totalPayout)}`
-    : `**Total:** ${totalRepairs} repairs · ${fmtMoney(totalPayout)}`;
+    ? `**Total:** ${jobStr} · ${totalEngines} engine${totalEngines !== 1 ? 's' : ''} · ${fmtMoney(totalPayout)}`
+    : `**Total:** ${jobStr} · ${fmtMoney(totalPayout)}`;
 
   return {
     content:    '',
@@ -918,9 +930,15 @@ async function handleWeekSelect(interaction, ctx) {
       const stateMap     = parseStateIds(stateRows);
       const mechanicJobs = allJobs.filter(j => j.mechanic === mechanic);
       const stateId      = stateMap.get(mechanic) || 'N/A';
-      const weekEndDate  = new Date(weekKey + 'T00:00:00Z');
-      const filteredJobs = filterByWeekEnding(mechanicJobs, weekEndDate);
-      const weeks        = buildWeeklyStats(filteredJobs);
+
+      let filteredJobs;
+      if (weekKey === 'all') {
+        filteredJobs = mechanicJobs;
+      } else {
+        const weekEndDate = new Date(weekKey + 'T00:00:00Z');
+        filteredJobs = filterByWeekEnding(mechanicJobs, weekEndDate);
+      }
+      const weeks = buildWeeklyStats(filteredJobs);
 
       await editOriginalMessage(
         appId, token,
