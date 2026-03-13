@@ -1,7 +1,7 @@
 # =======================================
 # Register slash commands with Discord
 #
-# Registers /payouts and /analytics globally with Discord.
+# Registers /payouts and /update-analytics globally with Discord.
 # This workflow is also called automatically by the Deploy Discord Bot workflow
 # after each successful deployment.
 #

@@ -40,13 +40,6 @@ const commands = [
     default_member_permissions: '32',
   },
   {
-    name:                       'analytics',
-    description:                'Show the current week\'s analytics summary with per-mechanic breakdown.',
-    dm_permission:              false,
-    // Same permission requirement as /payouts — adjust per-server as needed.
-    default_member_permissions: '32',
-  },
-  {
     name:                       'update-analytics',
     description:                'Refresh the pinned analytics summary now and optionally set which channel auto-updates every 5 min.',
     dm_permission:              false,

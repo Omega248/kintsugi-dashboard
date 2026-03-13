@@ -344,6 +344,7 @@ async function loadPayouts() {
     populateFilters();
     applyFiltersFromUrl();
     renderAll();
+    populateInvoiceMonthSelect();
 
     if (statusEl) statusEl.textContent = "";
 
@@ -1310,6 +1311,108 @@ function generateBill() {
 }
 
 
+// ===== Generate Department Invoice (BCSO / LSPD) =====
+// Produces a detailed CSV invoice for the selected department and month.
+// Mechanic process-payments remain unchanged and mechanic-only.
+function populateInvoiceMonthSelect() {
+  const sel = document.getElementById("invoiceMonthSelect");
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Select Month…</option>';
+  Array.from(monthKeys)
+    .sort((a, b) => monthKeyToDate.get(b) - monthKeyToDate.get(a))
+    .forEach((key) => {
+      const d = monthKeyToDate.get(key);
+      const opt = document.createElement("option");
+      opt.value = key;
+      opt.textContent = kFmtDate(d);
+      sel.appendChild(opt);
+    });
+}
+
+function generateDeptInvoice(dept) {
+  const sel = document.getElementById("invoiceMonthSelect");
+  const mKey = sel ? sel.value : "";
+
+  if (!mKey) {
+    kShowToast("Please select a month for the invoice.", "warning", 3000);
+    return;
+  }
+
+  const filteredJobs = jobs.filter((j) => j.department === dept && j.mKey === mKey);
+
+  if (!filteredJobs.length) {
+    kShowToast(`No jobs found for ${dept} in the selected month.`, "error", 3000);
+    return;
+  }
+
+  // Sort chronologically
+  const sortedJobs = filteredJobs.slice().sort((a, b) => {
+    if (a.tsDate && b.tsDate) return a.tsDate - b.tsDate;
+    return 0;
+  });
+
+  const engineRate = dept === "BCSO" ? ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
+
+  const billRows = sortedJobs.map((j) => {
+    const engineReps = j.engineReplacements || 0;
+    const repairValue = j.across * REPAIR_RATE;
+    const engineValue = engineReps * engineRate;
+    const total = repairValue + engineValue;
+    return {
+      "Date": j.tsDate ? kFmtDate(j.tsDate) : "",
+      "Mechanic": j.mechanic,
+      "Officer / Owner": j.owner,
+      "License Plate": j.plate,
+      "Repairs": j.across,
+      "Engine Replacements": engineReps,
+      "Repair Value ($)": repairValue,
+      "Engine Replacement Value ($)": engineValue,
+      "Total ($)": total,
+    };
+  });
+
+  // Calculate totals
+  const totalRepairs = billRows.reduce((s, r) => s + r["Repairs"], 0);
+  const totalEngines = billRows.reduce((s, r) => s + r["Engine Replacements"], 0);
+  const totalRepairValue = billRows.reduce((s, r) => s + r["Repair Value ($)"], 0);
+  const totalEngineValue = billRows.reduce((s, r) => s + r["Engine Replacement Value ($)"], 0);
+  const grandTotal = billRows.reduce((s, r) => s + r["Total ($)"], 0);
+
+  // Add a blank separator then summary row
+  billRows.push({
+    "Date": "",
+    "Mechanic": "",
+    "Officer / Owner": "",
+    "License Plate": "TOTAL",
+    "Repairs": totalRepairs,
+    "Engine Replacements": totalEngines,
+    "Repair Value ($)": totalRepairValue,
+    "Engine Replacement Value ($)": totalEngineValue,
+    "Total ($)": grandTotal,
+  });
+
+  const cols = [
+    "Date",
+    "Mechanic",
+    "Officer / Owner",
+    "License Plate",
+    "Repairs",
+    "Engine Replacements",
+    "Repair Value ($)",
+    "Engine Replacement Value ($)",
+    "Total ($)",
+  ];
+
+  const monthDate = monthKeyToDate.get(mKey);
+  const monthStr = monthDate ? kFmtDate(monthDate).replace(/\//g, "-") : mKey;
+  const filename = `invoice_${dept}_${monthStr}.csv`;
+
+  kDownloadCsv(filename, kToCsv(cols, billRows));
+  kShowToast(`${dept} invoice for ${monthStr} downloaded!`, "success", 3000);
+}
+
+
+
 function updateUrlFromState() {
   try {
     const params = new URLSearchParams(window.location.search);
@@ -1783,6 +1886,17 @@ document.addEventListener("DOMContentLoaded", () => {
       const url = "../Bank_Record/bank-index.html?" + params.toString();
       window.location.href = url;
     });
+  }
+
+  // Department invoice buttons
+  const generateBcsoInvoiceBtn = document.getElementById("generateBcsoInvoiceBtn");
+  if (generateBcsoInvoiceBtn) {
+    generateBcsoInvoiceBtn.addEventListener("click", () => generateDeptInvoice("BCSO"));
+  }
+
+  const generateLspdInvoiceBtn = document.getElementById("generateLspdInvoiceBtn");
+  if (generateLspdInvoiceBtn) {
+    generateLspdInvoiceBtn.addEventListener("click", () => generateDeptInvoice("LSPD"));
   }
 
   // Initial load
