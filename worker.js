@@ -787,7 +787,7 @@ async function sendDebugMessage(env, title, color, details) {
     // Cap at 3900 chars: Discord embed descriptions allow up to 4096 characters;
     // the ```json\n...\n``` code block wrapper adds ~10 chars of overhead.
     const body = JSON.stringify(details, null, 2).slice(0, 3900);
-    await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+    const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
       method:  'POST',
       headers: {
         'Authorization': `Bot ${token}`,
@@ -803,7 +803,18 @@ async function sendDebugMessage(env, title, color, details) {
         }],
       }),
     });
-  } catch { /* never let debug reporting crash the worker */ }
+    // Always consume the response body to free the connection.
+    // Log Discord API errors so they are visible in Cloudflare real-time logs.
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '(unreadable)');
+      console.error(`sendDebugMessage: Discord API error ${res.status} for channel ${channelId}: ${errText.slice(0, 300)}`);
+    } else {
+      await res.body?.cancel();
+    }
+  } catch (err) {
+    // Never let debug reporting crash the worker, but log the failure.
+    console.error('sendDebugMessage: fetch failed:', err?.message);
+  }
 }
 
 /**
