@@ -709,6 +709,11 @@ async function handleUpdateAnalyticsCommand(interaction, env, ctx) {
         const autoUpdateNote = channelId
           ? '\n\n🔄 This channel is now the auto-update target — the hourly refresh will keep it updated.'
           : '';
+        kLog(env, 'info', 'update_analytics_ok', {
+          weekEnding:   fmtDate(summary.weekEndDate),
+          totalRepairs: summary.totalRepairs,
+          channelId:    effectiveChannelId,
+        });
         await editOriginalMessage(appId, token, {
           content:
             `✅ Analytics updated in ${channelMention} for the week ending **${fmtDate(summary.weekEndDate)}** — ` +
@@ -720,11 +725,13 @@ async function handleUpdateAnalyticsCommand(interaction, env, ctx) {
         const channelHint = effectiveChannelId
           ? `Could not post to <#${effectiveChannelId}> — check that the bot has **Send Messages** permission in that channel.`
           : 'No analytics channel configured. Run `/update-analytics` and pick a channel from the dropdown, or add `ANALYTICS_CHANNEL_ID` as a GitHub secret and redeploy.';
+        kLog(env, 'warn', 'update_analytics_failed', { channelId: effectiveChannelId });
         await editOriginalMessage(appId, token, {
           content: `❌ Failed to update analytics. ${channelHint}`,
         });
       }
     } catch (err) {
+      kLog(env, 'error', 'update_analytics_error', { error: err.message });
       await editOriginalMessage(appId, token, {
         content: `❌ Error: ${err.message}`,
       }).catch(() => {});
@@ -825,54 +832,50 @@ async function handleViewLogs(request, env) {
   const auth     = request.headers.get('Authorization') ?? '';
   const expected = `Bearer ${env.TRIGGER_TOKEN || FALLBACK_TRIGGER_TOKEN}`;
   if (auth !== expected) {
-    return new Response('Unauthorized', { status: 401 });
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+    });
   }
 
   if (!env.KV) {
     return new Response(
-      'KV namespace is not bound — logs are only available in the console.\n' +
-      'Check that the KINTSUGI_BOT KV namespace is provisioned and the deploy workflow ran successfully.',
-      { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
+      JSON.stringify({ error: 'KV namespace is not bound — logs are only available in the console.' }),
+      { status: 503, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }
     );
   }
 
   try {
     // List up to 1000 entries, sorted by key (which starts with ISO timestamp).
     const list = await env.KV.list({ prefix: LOG_KV_PREFIX, limit: 1000 });
-    const keys = list.keys.map(k => k.name).sort();
+    const keys = list.keys.map(k => k.name).sort().reverse(); // newest first
 
     if (keys.length === 0) {
-      return new Response('(no log entries yet)\n', {
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      return new Response(JSON.stringify({ entries: [] }), {
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       });
     }
 
     // Fetch all values in parallel.
     const values = await Promise.all(keys.map(k => env.KV.get(k).catch(() => null)));
 
-    const lines = values
+    const entries = values
       .filter(Boolean)
       .map(raw => {
         try {
-          const e = JSON.parse(raw);
-          const level  = (e.level ?? 'info').toUpperCase().padEnd(5);
-          const extras = Object.entries(e)
-            .filter(([k]) => k !== 'ts' && k !== 'level' && k !== 'event')
-            .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
-            .join(' ');
-          return `[${e.ts}] ${level} ${e.event}${extras ? '  ' + extras : ''}`;
+          return JSON.parse(raw);
         } catch {
-          return raw;
+          return { ts: new Date().toISOString(), level: 'info', event: raw };
         }
       });
 
-    return new Response(lines.join('\n') + '\n', {
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    return new Response(JSON.stringify({ entries }), {
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
     });
   } catch (err) {
-    return new Response(`Error reading logs: ${err.message}\n`, {
+    return new Response(JSON.stringify({ error: `Error reading logs: ${err.message}` }), {
       status: 500,
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
     });
   }
 }
@@ -1411,7 +1414,14 @@ async function handleInvoiceMonthSelect(interaction, env, ctx) {
         filename,
         csvContent,
       );
+      kLog(env, 'info', 'invoice_generated', {
+        dept,
+        monthEnd:  monthValue,
+        jobCount:  deptJobs.length,
+        filename,
+      });
     } catch (err) {
+      kLog(env, 'error', 'invoice_error', { dept, monthEnd: monthValue, error: err.message });
       await editOriginalMessage(appId, token, {
         content:    `❌ Invoice generation failed.\n\`${err.message}\``,
         components: [],
@@ -1995,7 +2005,7 @@ async function postPaydayReminder(env, weekEndDate, totalPayout = 0) {
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   'Access-Control-Max-Age':       '86400',
 };
@@ -2094,6 +2104,11 @@ async function handleNotifyPayouts(request, env, ctx) {
       }, 502);
     }
 
+    ctx.waitUntil(kLog(env, 'info', 'notify_payouts_ok', {
+      weekEnding:    fmtDate(weekEndDate),
+      mechanicCount: payouts.length,
+      messageId,
+    }));
     return apiJson({
       ok:            true,
       weekEnding:    fmtDate(weekEndDate),
@@ -2158,6 +2173,13 @@ async function handleTriggerWeekly(request, env, ctx) {
       postPaydayReminder(env, summary.weekEndDate, summary.totalPayout),
     ]);
 
+    ctx.waitUntil(kLog(env, 'info', 'trigger_weekly_ok', {
+      weekEnding:   fmtDate(summary.weekEndDate),
+      totalRepairs: summary.totalRepairs,
+      analytics:    analyticsOk,
+      jobs:         jobsOk,
+      payouts:      payoutsOk,
+    }));
     return apiJson({
       ok:          true,
       weekEnding:  fmtDate(summary.weekEndDate),
