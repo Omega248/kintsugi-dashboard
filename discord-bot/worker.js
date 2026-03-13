@@ -813,8 +813,10 @@ function buildJobLogPayload(mechanic, stateId, weeks, period) {
 
   if (weeks.length > 24) {
     fields.push({
-      name:   `+${weeks.length - 24} more week(s)`,
-      value:  'Only the 24 most recent weeks are shown. Select **All Weeks Ever** to view the full summary.',
+      name:  `+${weeks.length - 24} more week(s)`,
+      value: period === 'all'
+        ? 'Only the 24 most recent weeks are shown above due to Discord embed limits. The totals above include all weeks.'
+        : 'Only the 24 most recent weeks are shown. Select **📆 All Weeks Ever** to view the full all-time summary.',
       inline: false,
     });
   }
