@@ -17,6 +17,10 @@
 #                       When provided the script PATCHes the existing message
 #                       instead of POSTing a new one, keeping the pinned
 #                       message in place and avoiding stale duplicate panels.
+#   delete_existing   — Set to "true" together with panel_message_id to DELETE
+#                       the old panel message and POST a brand-new one.
+#                       Use this when the old panel is broken and you want a
+#                       fresh message (you will need to pin the new message).
 # =======================================
 name: Post Invoice Panel
 
@@ -33,8 +37,16 @@ on:
         description: >
           Discord message ID of the existing panel to edit instead of posting a new one.
           Leave blank to post a fresh panel (get the ID from the first run's output).
+          Provide this together with delete_existing=true to delete and recreate.
         required: false
         default: ''
+      delete_existing:
+        description: >
+          Set to "true" to DELETE the panel_message_id message and post a brand-new panel.
+          The old message is removed from Discord before the new one is posted.
+          You will need to pin the resulting new message manually.
+        required: false
+        default: 'false'
 
 jobs:
   post-panel:
@@ -61,4 +73,8 @@ jobs:
           # When panel_message_id is supplied the script edits the existing
           # message instead of posting a new one.
           PANEL_MESSAGE_ID: ${{ inputs.panel_message_id }}
+          # When true (and PANEL_MESSAGE_ID is set) the script deletes the old
+          # message and posts a fresh panel instead of patching in place.
+          DELETE_EXISTING: ${{ inputs.delete_existing }}
         run: node setup-invoice-panel.js
+

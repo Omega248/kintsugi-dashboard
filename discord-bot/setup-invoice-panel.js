@@ -25,9 +25,10 @@
 // Tip: After running, pin the message so it stays at the top of the channel.
 // =======================================
 
-const BOT_TOKEN       = process.env.DISCORD_BOT_TOKEN;
-const CHANNEL_ID      = process.env.DISCORD_CHANNEL_ID;
+const BOT_TOKEN        = process.env.DISCORD_BOT_TOKEN;
+const CHANNEL_ID       = process.env.DISCORD_CHANNEL_ID;
 const PANEL_MESSAGE_ID = process.env.PANEL_MESSAGE_ID || '';
+const DELETE_EXISTING  = process.env.DELETE_EXISTING === 'true';
 
 if (!BOT_TOKEN || !CHANNEL_ID) {
   console.error(
@@ -80,7 +81,24 @@ async function upsertPanel() {
     'Content-Type':  'application/json',
   };
 
-  if (PANEL_MESSAGE_ID) {
+  // Delete the existing panel message first, then fall through to post a new one.
+  if (DELETE_EXISTING && PANEL_MESSAGE_ID) {
+    const delUrl = `https://discord.com/api/v10/channels/${CHANNEL_ID}/messages/${PANEL_MESSAGE_ID}`;
+    const delRes = await fetch(delUrl, { method: 'DELETE', headers });
+
+    if (delRes.status === 404) {
+      // Message was already deleted or never existed — treat as a no-op and
+      // continue so a fresh panel is still posted.
+      console.log(`ℹ️  Message ${PANEL_MESSAGE_ID} not found (already deleted?), continuing.`);
+    } else if (!delRes.ok) {
+      const delData = await delRes.json().catch(() => ({}));
+      console.error('Failed to delete invoice panel:', JSON.stringify(delData, null, 2));
+      process.exit(1);
+    } else {
+      console.log(`🗑️  Deleted old invoice panel message (${PANEL_MESSAGE_ID}).`);
+    }
+    // Fall through to post a fresh panel below.
+  } else if (PANEL_MESSAGE_ID) {
     // Edit the existing panel message instead of posting a new one.
     const url = `https://discord.com/api/v10/channels/${CHANNEL_ID}/messages/${PANEL_MESSAGE_ID}`;
     const res  = await fetch(url, {
