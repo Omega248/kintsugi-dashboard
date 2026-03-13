@@ -214,8 +214,10 @@ function buildPayload(weekEndDate, payouts) {
   const lines = payouts.map(m => {
     let line = `• **${m.name}**`;
     if (m.stateId) line += ` _(ID: ${m.stateId})_`;
-    line += ` — ${m.repairs} repair${m.repairs !== 1 ? 's' : ''}`;
-    line += `, ${m.engineReplacements} engine replacement${m.engineReplacements !== 1 ? 's' : ''}`;
+    line += ` — ${m.jobs} job${m.jobs !== 1 ? 's' : ''} (${m.repairs} across)`;
+    if (m.engineReplacements > 0) {
+      line += `, ${m.engineReplacements} engine replacement${m.engineReplacements !== 1 ? 's' : ''}`;
+    }
     line += ` · **${fmtMoney(m.totalPayout)}**`;
     return line;
   });
@@ -233,7 +235,7 @@ function buildPayload(weekEndDate, payouts) {
           value:  lines.join('\n').slice(0, 1024) || '_No mechanics found._',
           inline: false,
         },
-        { name: '💰 Total Disbursed', value: fmtMoney(grandTotal), inline: true },
+        { name: '💰 Total Paid',    value: fmtMoney(grandTotal), inline: true },
         { name: '👷 Mechanics Paid',  value: String(payouts.length), inline: true },
       ],
       timestamp: new Date().toISOString(),
@@ -298,12 +300,14 @@ async function main() {
       rec = {
         name:               j.mechanic,
         stateId:            stateMap.get(j.mechanic) || '',
+        jobs:               0,
         repairs:            0,
         engineReplacements: 0,
         totalPayout:        0,
       };
       mechMap.set(j.mechanic, rec);
     }
+    rec.jobs++;
     rec.repairs            += j.across || 0;
     rec.engineReplacements += j.engineReplacements || 0;
   }
