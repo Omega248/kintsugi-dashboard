@@ -21,6 +21,7 @@
 #   PAYOUTS_CHANNEL_ID     — Discord channel ID for the #payouts channel
 #   RIPTIDE_USER_ID        — Numeric Discord user ID to @mention on payday
 #   TRIGGER_TOKEN          — Secret token for dashboard "Notify Discord" button
+#   DEBUG_CHANNEL_ID       — Discord channel ID for bot activity/error debug embeds
 #
 # After deployment, copy the worker URL
 #   (e.g. https://kintsugi-discord-bot.<subdomain>.workers.dev)
@@ -139,9 +140,11 @@ jobs:
           }
           EOF
 
-      # ---- Deploy the primary "kintsugi" Worker + push secrets ----
-      # Uses the official Cloudflare Wrangler Action which handles installing
-      # Wrangler, deploying the worker, and bulk-pushing secrets in one step.
+      # ---- Deploy the primary "kintsugi" Worker ----
+      # Uses the official Cloudflare Wrangler Action.
+      # Secrets are pushed in the next step (after deploy) to avoid Cloudflare
+      # error 10214: wrangler-action uploads secrets before the deploy command,
+      # which fails when no version is currently deployed.
       - name: Deploy Worker (kintsugi)
         uses: cloudflare/wrangler-action@v3
         with:
@@ -149,16 +152,14 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: '4.72.0'
           command: deploy --config wrangler.jsonc
-          secrets: |
-            DISCORD_PUBLIC_KEY
-            DISCORD_BOT_TOKEN
-            ANALYTICS_CHANNEL_ID
-            JOBS_CHANNEL_ID
-            PAYOUTS_CHANNEL_ID
-            RIPTIDE_USER_ID
-            TRIGGER_TOKEN
-            DEBUG_CHANNEL_ID
+
+      # ---- Push secrets to "kintsugi" after deploy ----
+      # Running secret bulk after deploy ensures the latest version is deployed,
+      # satisfying the Cloudflare version-level settings API requirement.
+      - name: Push secrets (kintsugi)
         env:
+          CLOUDFLARE_API_TOKEN:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DISCORD_PUBLIC_KEY:    ${{ secrets.DISCORD_PUBLIC_KEY }}
           DISCORD_BOT_TOKEN:     ${{ secrets.DISCORD_BOT_TOKEN }}
           ANALYTICS_CHANNEL_ID:  ${{ secrets.ANALYTICS_CHANNEL_ID }}
@@ -167,8 +168,9 @@ jobs:
           RIPTIDE_USER_ID:       ${{ secrets.RIPTIDE_USER_ID }}
           TRIGGER_TOKEN:         ${{ secrets.TRIGGER_TOKEN }}
           DEBUG_CHANNEL_ID:      ${{ secrets.DEBUG_CHANNEL_ID }}
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/push-worker-secrets.sh" kintsugi
 
-      # ---- Deploy the alias "kintsugi-discord-bot" Worker + push secrets ----
+      # ---- Deploy the alias "kintsugi-discord-bot" Worker ----
       # Deploys the same worker.js under the legacy name so that existing Discord
       # Developer Portal Interactions Endpoint URLs pointing to kintsugi-discord-bot
       # continue to work alongside the primary kintsugi worker.
@@ -181,16 +183,12 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: '4.72.0'
           command: deploy --config wrangler-bot.jsonc
-          secrets: |
-            DISCORD_PUBLIC_KEY
-            DISCORD_BOT_TOKEN
-            ANALYTICS_CHANNEL_ID
-            JOBS_CHANNEL_ID
-            PAYOUTS_CHANNEL_ID
-            RIPTIDE_USER_ID
-            TRIGGER_TOKEN
-            DEBUG_CHANNEL_ID
+
+      # ---- Push secrets to "kintsugi-discord-bot" after deploy ----
+      - name: Push secrets (kintsugi-discord-bot)
         env:
+          CLOUDFLARE_API_TOKEN:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DISCORD_PUBLIC_KEY:    ${{ secrets.DISCORD_PUBLIC_KEY }}
           DISCORD_BOT_TOKEN:     ${{ secrets.DISCORD_BOT_TOKEN }}
           ANALYTICS_CHANNEL_ID:  ${{ secrets.ANALYTICS_CHANNEL_ID }}
@@ -199,6 +197,7 @@ jobs:
           RIPTIDE_USER_ID:       ${{ secrets.RIPTIDE_USER_ID }}
           TRIGGER_TOKEN:         ${{ secrets.TRIGGER_TOKEN }}
           DEBUG_CHANNEL_ID:      ${{ secrets.DEBUG_CHANNEL_ID }}
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/push-worker-secrets.sh" kintsugi-discord-bot
 
       # ---- Register slash commands ----
       - name: Register slash commands
