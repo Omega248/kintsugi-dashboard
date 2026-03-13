@@ -689,9 +689,9 @@ function buildMechanicSelectPayload(mechanicNames) {
 
 /**
  * Build the week-selection message payload.
- * The current week (ending this coming Sunday) is always listed first so the
- * user can always check the current pay period even with no jobs yet.
- * Historical weeks come from the mechanic's actual job data, newest first.
+ * "All Weeks Ever" is listed first so it is always visible without scrolling.
+ * The current week comes second so users can quickly check the active period.
+ * Historical weeks follow, newest first.
  * The mechanic name is encoded into the select menu's custom_id.
  * Select menus support a maximum of 25 options.
  */
@@ -706,7 +706,14 @@ function buildWeekSelectPayload(mechanic, weeks) {
   const options  = [];
   const seenKeys = new Set();
 
-  // Always include the current week first
+  // Always list "All Weeks Ever" first so it is immediately visible
+  options.push({
+    label:       '📆 All Weeks Ever',
+    value:       'all',
+    description: 'View all-time job history',
+  });
+
+  // Current week second — always present even if no jobs recorded yet
   options.push({
     label:       `Week ending ${fmtDate(currentSunday)}`,
     value:       currentSundayKey,
@@ -715,9 +722,9 @@ function buildWeekSelectPayload(mechanic, weeks) {
   });
   seenKeys.add(currentSundayKey);
 
-  // Add historical weeks from job data (sorted newest first)
+  // Add historical weeks from job data (sorted newest first, cap at 23 more)
   for (const w of weeks) {
-    if (options.length >= 24) break; // reserve last slot for "All Weeks Ever"
+    if (options.length >= 25) break;
     const key = w.weekEndDate
       ? w.weekEndDate.toISOString().slice(0, 10)
       : w.weekKey;
@@ -732,13 +739,6 @@ function buildWeekSelectPayload(mechanic, weeks) {
       value: key,
     });
   }
-
-  // Always add "All Weeks Ever" as the last option
-  options.push({
-    label:       '📆 All Weeks Ever',
-    value:       'all',
-    description: 'View all-time job history',
-  });
 
   // custom_id is max 100 chars: prefix (21 chars) + mechanic name (≤79 chars)
   const safeMech = mechanic.slice(0, 79);
@@ -1024,11 +1024,124 @@ async function handlePayoutsPanelButton(interaction, ctx) {
 }
 
 /**
+ * Build a payout embed for one mechanic covering a specific set of jobs.
+ * Shows jobs count, total across, engines, payout, and a per-job breakdown.
+ */
+function buildMechanicPayoutEmbed(mechanic, stateId, filteredJobs, period) {
+  let repairs = 0, engines = 0;
+  for (const j of filteredJobs) {
+    repairs += j.across || 0;
+    engines += j.engineReplacements || 0;
+  }
+  const jobCount = filteredJobs.length;
+  const payout   = repairs * PAY_PER_REPAIR + engines * ENGINE_PAY_DEFAULT;
+  const color    = repairs > 0 ? 0x22c55e : 0xef4444;
+
+  const fields = [
+    { name: '📅 Period',   value: period,           inline: true },
+    { name: '🧾 Jobs',     value: String(jobCount), inline: true },
+    { name: '🔧 Repairs (Across)', value: String(repairs),  inline: true },
+    { name: '💰 Payout',   value: fmtMoney(payout), inline: true },
+  ];
+  if (engines > 0) {
+    fields.push({ name: '🔩 Engines', value: String(engines), inline: true });
+  }
+  if (stateId && stateId !== 'N/A') {
+    fields.push({ name: '🪪 State ID', value: stateId, inline: true });
+  }
+
+  // Per-job breakdown (only shown when at least one job exists)
+  if (jobCount > 0) {
+    const lines = filteredJobs.map((j, i) => {
+      let line = `${i + 1}. **${j.across}** across`;
+      if (j.engineReplacements > 0) {
+        line += ` + **${j.engineReplacements}** engine${j.engineReplacements !== 1 ? 's' : ''}`;
+      }
+      if (j.tsDate) line += ` _(${fmtDate(j.tsDate)})_`;
+      return line;
+    });
+    fields.push({
+      name:   `🧾 Jobs breakdown (${jobCount})`,
+      value:  lines.join('\n').slice(0, 1024),
+      inline: false,
+    });
+  }
+
+  const notice = repairs === 0
+    ? `No jobs were recorded for **${mechanic}** in the selected period.`
+    : '';
+
+  return {
+    content:    '',
+    components: [],
+    embeds: [{
+      title:       `💸 Payout — ${mechanic}`,
+      description: notice || undefined,
+      color,
+      fields,
+      footer:      { text: 'Kintsugi Motorworks · Payouts' },
+      timestamp:   new Date().toISOString(),
+    }],
+  };
+}
+
+/**
+ * Build the week-selection message payload for the general payouts panel.
+ * Lists all weeks the mechanic has worked (newest first) plus an "All Weeks"
+ * option so they can view their all-time payout summary.
+ */
+function buildPayoutsGeneralWeekSelectPayload(mechanic, weeks) {
+  const options = [];
+
+  // "All Weeks" first so it is always accessible regardless of history length
+  options.push({
+    label:       '📆 All Weeks',
+    value:       'all',
+    description: 'View all-time payout summary',
+  });
+
+  // Historical weeks from job data (sorted newest first, capped at 24 remaining slots)
+  const seenKeys = new Set();
+  for (const w of weeks) {
+    if (options.length >= 25) break;
+    const key = w.weekEndDate
+      ? w.weekEndDate.toISOString().slice(0, 10)
+      : w.weekKey;
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
+
+    const label = w.weekEndDate
+      ? `Week ending ${fmtDate(w.weekEndDate)}`
+      : `Week ${w.weekKey}`;
+    options.push({
+      label: label.length > 100 ? label.slice(0, 97) + '…' : label,
+      value: key,
+    });
+  }
+
+  // custom_id is max 100 chars: prefix (29 chars) + mechanic name (≤71 chars)
+  const safeMech = mechanic.slice(0, 71);
+  const customId = `payouts_general_week_select:${safeMech}`;
+
+  return {
+    content:    `💸 **${mechanic}** — Select a week to view your payout:`,
+    components: [{
+      type: 1,
+      components: [{
+        type:        3,
+        custom_id:   customId,
+        placeholder: 'Choose a week…',
+        options,
+      }],
+    }],
+  };
+}
+
+/**
  * Mechanic selected from the payouts panel dropdown.
  *
- * Fetches live sheet data, finds that mechanic's payout for the most recent
- * week (or the current week if it has data), and edits the private message
- * with a formatted payout embed.
+ * Shows a week-select menu (with "All Weeks" as the first option) so the
+ * mechanic can choose which pay period they want to inspect.
  */
 async function handlePayoutsMechSelect(interaction, ctx) {
   const { application_id: appId, token } = interaction;
@@ -1036,67 +1149,64 @@ async function handlePayoutsMechSelect(interaction, ctx) {
 
   ctx.waitUntil((async () => {
     try {
+      const jobRows      = await fetchSheet(JOBS_SHEET);
+      const allJobs      = parseJobsSheet(jobRows);
+      const mechanicJobs = allJobs.filter(j => j.mechanic === mechanic);
+      const weeks        = buildWeeklyStats(mechanicJobs);
+
+      await editOriginalMessage(appId, token, buildPayoutsGeneralWeekSelectPayload(mechanic, weeks));
+    } catch (err) {
+      await editOriginalMessage(appId, token, {
+        content:    `❌ Failed to load week list.\n\`${err.message}\``,
+        components: [],
+      }).catch(() => {});
+    }
+  })());
+
+  return jsonResponse({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
+}
+
+/**
+ * Week selected from the general payouts panel week dropdown.
+ *
+ * Fetches the mechanic's jobs for the chosen week (or all time when "all" is
+ * selected) and edits the message with a detailed payout embed that includes
+ * jobs count, total across, engine replacements, and a per-job breakdown.
+ */
+async function handlePayoutsGeneralWeekSelect(interaction, ctx) {
+  const { application_id: appId, token } = interaction;
+  const weekKey  = interaction.data.values[0];
+
+  const colonIdx = interaction.data.custom_id.indexOf(':');
+  const mechanic = interaction.data.custom_id.slice(colonIdx + 1);
+
+  ctx.waitUntil((async () => {
+    try {
       const [jobRows, stateRows] = await Promise.all([
         fetchSheet(JOBS_SHEET),
         fetchSheet(STATE_IDS_SHEET).catch(() => []),
       ]);
-      const allJobs  = parseJobsSheet(jobRows);
-      const stateMap = parseStateIds(stateRows);
-      const stateId  = stateMap.get(mechanic) || 'N/A';
+      const allJobs      = parseJobsSheet(jobRows);
+      const stateMap     = parseStateIds(stateRows);
+      const mechanicJobs = allJobs.filter(j => j.mechanic === mechanic);
+      const stateId      = stateMap.get(mechanic) || 'N/A';
 
-      // Find the most recent week that has data for anyone (not just this mechanic)
-      const allWeeks = buildWeeklyStats(allJobs);
-      if (!allWeeks.length) {
-        await editOriginalMessage(appId, token, {
-          content:    '❌ No payout data found.',
-          components: [],
-        });
-        return;
+      let filteredJobs;
+      if (weekKey === 'all') {
+        filteredJobs = mechanicJobs;
+      } else {
+        const weekEndDate = new Date(weekKey + 'T00:00:00Z');
+        filteredJobs = filterByWeekEnding(mechanicJobs, weekEndDate);
       }
 
-      const latestWeek    = allWeeks[0];
-      const weekEndDate   = latestWeek.weekEndDate
-        || new Date(latestWeek.weekKey + 'T00:00:00Z');
-      const weekJobs      = filterByWeekEnding(allJobs, weekEndDate);
-      const mechanicJobs  = weekJobs.filter(j => j.mechanic === mechanic);
+      const period = weekKey === 'all'
+        ? 'All Time'
+        : `Week ending ${fmtDate(new Date(weekKey + 'T00:00:00Z'))}`;
 
-      // Aggregate this mechanic's repairs and engines for that week
-      let repairs  = 0, engines = 0;
-      for (const j of mechanicJobs) {
-        repairs += j.across || 0;
-        engines += j.engineReplacements || 0;
-      }
-      const payout = repairs * PAY_PER_REPAIR + engines * ENGINE_PAY_DEFAULT;
-
-      const fields = [
-        { name: '📅 Week Ending',   value: fmtDate(weekEndDate), inline: true },
-        { name: '🔧 Repairs',        value: String(repairs),      inline: true },
-        { name: '💰 Payout',         value: fmtMoney(payout),     inline: true },
-      ];
-      if (engines > 0) {
-        fields.push({ name: '🔩 Engines', value: String(engines), inline: true });
-      }
-      if (stateId && stateId !== 'N/A') {
-        fields.push({ name: '🪪 State ID', value: stateId, inline: true });
-      }
-
-      const color  = repairs > 0 ? 0x22c55e : 0xef4444;
-      const notice = repairs === 0
-        ? `No jobs were recorded for **${mechanic}** in the week ending **${fmtDate(weekEndDate)}**.`
-        : '';
-
-      await editOriginalMessage(appId, token, {
-        content:    '',
-        components: [],
-        embeds: [{
-          title:       `💸 Payout — ${mechanic}`,
-          description: notice || undefined,
-          color,
-          fields,
-          footer:      { text: 'Kintsugi Motorworks · Payouts' },
-          timestamp:   new Date().toISOString(),
-        }],
-      });
+      await editOriginalMessage(
+        appId, token,
+        buildMechanicPayoutEmbed(mechanic, stateId, filteredJobs, period)
+      );
     } catch (err) {
       await editOriginalMessage(appId, token, {
         content:    `❌ Failed to load payout data.\n\`${err.message}\``,
@@ -1185,7 +1295,8 @@ async function handlePayoutsWeekButton(interaction, ctx) {
  * The week-ending date is encoded in the select menu's custom_id
  * (e.g. payouts_week_mech:2026-03-15); the selected mechanic name is in
  * interaction.data.values[0].  Edits the ephemeral message with that
- * mechanic's payout for the exact week the workflow ran for.
+ * mechanic's payout for the exact week the workflow ran for, including jobs
+ * count and a per-job breakdown.
  */
 async function handlePayoutsWeekMechSelect(interaction, ctx) {
   const { application_id: appId, token } = interaction;
@@ -1204,43 +1315,13 @@ async function handlePayoutsWeekMechSelect(interaction, ctx) {
       const weekJobs = filterByWeekEnding(allJobs, weekEndDate);
       const mechJobs = weekJobs.filter(j => j.mechanic === mechanic);
 
-      const stateId = stateMap.get(mechanic) || null;
-      let repairs = 0, engines = 0;
-      for (const j of mechJobs) {
-        repairs += j.across || 0;
-        engines += j.engineReplacements || 0;
-      }
-      const payout = repairs * PAY_PER_REPAIR + engines * ENGINE_PAY_DEFAULT;
+      const stateId = stateMap.get(mechanic) || 'N/A';
+      const period  = `Week ending ${fmtDate(weekEndDate)}`;
 
-      const fields = [
-        { name: '📅 Week Ending', value: fmtDate(weekEndDate), inline: true },
-        { name: '🔧 Repairs',     value: String(repairs),      inline: true },
-        { name: '💰 Payout',      value: fmtMoney(payout),     inline: true },
-      ];
-      if (engines > 0) {
-        fields.push({ name: '🔩 Engines', value: String(engines), inline: true });
-      }
-      if (stateId && stateId !== 'N/A') {
-        fields.push({ name: '🪪 State ID', value: stateId, inline: true });
-      }
-
-      const color  = repairs > 0 ? 0x22c55e : 0xef4444;
-      const notice = repairs === 0
-        ? `No jobs were recorded for **${mechanic}** in the week ending **${fmtDate(weekEndDate)}**.`
-        : '';
-
-      await editOriginalMessage(appId, token, {
-        content:    '',
-        components: [],
-        embeds: [{
-          title:       `💸 Payout — ${mechanic}`,
-          description: notice || undefined,
-          color,
-          fields,
-          footer:      { text: 'Kintsugi Motorworks · Payouts' },
-          timestamp:   new Date().toISOString(),
-        }],
-      });
+      await editOriginalMessage(
+        appId, token,
+        buildMechanicPayoutEmbed(mechanic, stateId, mechJobs, period)
+      );
     } catch (err) {
       await editOriginalMessage(appId, token, {
         content:    `❌ Failed to load payout data.\n\`${err.message}\``,
@@ -1810,12 +1891,15 @@ export default {
         return handleWeekSelect(interaction, ctx);
       }
 
-      // Payouts panel button + mechanic select
+      // Payouts panel button + mechanic select + week select
       if (customId === 'payouts_panel_start') {
         return handlePayoutsPanelButton(interaction, ctx);
       }
       if (customId === 'payouts_mech_select') {
         return handlePayoutsMechSelect(interaction, ctx);
+      }
+      if (customId.startsWith('payouts_general_week_select:')) {
+        return handlePayoutsGeneralWeekSelect(interaction, ctx);
       }
 
       // Week-specific payouts button + mechanic select (posted by post-payouts workflow)
