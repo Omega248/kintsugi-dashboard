@@ -163,7 +163,7 @@ jobs:
           # shellcheck source=.github/scripts/with_retry.sh
           . "$GITHUB_WORKSPACE/.github/scripts/with_retry.sh"
 
-          with_retry wrangler deploy
+          with_retry wrangler deploy --config wrangler.toml
 
       # ---- Push all secrets only when they are configured ----
       # wrangler secret put rejects empty-string values, so we skip any secret
@@ -193,7 +193,7 @@ jobs:
             if [ -n "${value}" ]; then
               echo "Pushing ${name}..."
               local max=5 attempt=1 delay=15
-              until printf '%s' "${value}" | wrangler secret put "${name}"; do
+              until printf '%s' "${value}" | wrangler secret put "${name}" --config wrangler.toml; do
                 if [ "$attempt" -ge "$max" ]; then
                   echo "All $max attempts to push ${name} failed." >&2
                   return 1
