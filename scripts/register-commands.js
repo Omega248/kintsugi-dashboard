@@ -57,6 +57,19 @@ const commands = [
       },
     ],
   },
+  {
+    name:         'ask',
+    description:  'Ask the Assistant Manager a question (free-tier replacement for @mention responses).',
+    dm_permission: false,
+    options: [
+      {
+        name:        'question',
+        description: 'Your question for the Assistant Manager.',
+        type:         3,    // APPLICATION_COMMAND_OPTION_TYPE: STRING
+        required:     true,
+      },
+    ],
+  },
 ];
 
 // ===== Register commands =====

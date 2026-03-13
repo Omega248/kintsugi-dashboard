@@ -29,6 +29,9 @@
 //   TRIGGER_TOKEN         — Bearer token for the dashboard "Notify Discord" and
 //                           "Trigger Weekly" buttons. Falls back to the hardcoded
 //                           FALLBACK_TRIGGER_TOKEN constant if not set.
+//   DEBUG_CHANNEL_ID      — Private Discord channel ID. When set, unexpected
+//                           interaction errors are posted there as embeds, providing
+//                           free-tier debugging without Cloudflare Log Explorer.
 // =======================================
 
 // ===== Sheet config (mirrors kintsugi-core.js) =====
@@ -731,11 +734,11 @@ async function handleUpdateAnalyticsCommand(interaction, env, ctx) {
   });
 }
 
-// ===== Assistant Manager — AI persona used by DiscordGateway for @mentions =====
+// ===== Assistant Manager — AI persona used by the /ask slash command =====
 
 /**
  * System prompt that defines the Assistant Manager personality.
- * Used by the DiscordGateway Durable Object when the bot is @mentioned.
+ * Used by the /ask slash command when a user asks a question.
  */
 const ASSISTANT_MANAGER_SYSTEM_PROMPT = `\
 You are the Assistant Manager of Kintsugi Motorworks, a British mechanic shop. \
@@ -764,6 +767,94 @@ Rules for responding:
    embarrassed for having wasted your time.
 3. Keep all responses under 180 words. No markdown headers. No bullet lists unless it helps. \
    Do not break character. Do not apologise. Ever.`;
+
+// ===== Debug channel error reporter =====
+
+/**
+ * Send a structured error report to the private DEBUG_CHANNEL_ID channel.
+ * Never throws — debug reporting must never crash the Worker.
+ *
+ * @param {object} env
+ * @param {object} details - Arbitrary key/value pairs to include in the report.
+ */
+async function sendDebugError(env, details) {
+  const channelId = env.DEBUG_CHANNEL_ID;
+  const token     = env.DISCORD_BOT_TOKEN;
+  if (!channelId || !token) return;
+  try {
+    // Cap at 3900 chars: Discord embed descriptions allow up to 4096 characters;
+    // the ```json\n...\n``` code block wrapper adds ~10 chars of overhead.
+    const body = JSON.stringify(details, null, 2).slice(0, 3900);
+    await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+      method:  'POST',
+      headers: {
+        'Authorization': `Bot ${token}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify({
+        embeds: [{
+          title:       '🐛 Interaction Error',
+          color:       0xef4444,
+          description: `\`\`\`json\n${body}\n\`\`\``,
+          timestamp:   new Date().toISOString(),
+          footer:      { text: 'Kintsugi Bot · Debug' },
+        }],
+      }),
+    });
+  } catch { /* never let debug reporting crash the worker */ }
+}
+
+// ===== /ask slash-command handler =====
+
+/**
+ * Handle the /ask slash command.
+ * Calls Workers AI with the Assistant Manager persona and replies ephemerally.
+ * This is the free-tier replacement for @mention responses, which required the
+ * DiscordGateway Durable Object (paid plan only).
+ *
+ * @param {object} interaction - Discord interaction object.
+ * @param {object} env         - Worker environment bindings.
+ * @param {object} ctx         - Cloudflare execution context.
+ */
+async function handleAskCommand(interaction, env, ctx) {
+  const { application_id: appId, token } = interaction;
+  const question = (interaction.data?.options?.find(o => o.name === 'question')?.value ?? '').trim();
+
+  ctx.waitUntil((async () => {
+    let answer;
+    try {
+      if (!env.AI) throw new Error('Workers AI binding (env.AI) is not configured.');
+      const result = await env.AI.run('@cf/meta/llama-3-8b-instruct', {
+        messages: [
+          { role: 'system', content: ASSISTANT_MANAGER_SYSTEM_PROMPT },
+          { role: 'user',   content: question || '(user asked with no text)' },
+        ],
+        max_tokens: 350,
+      });
+      answer = (result?.response ?? '').trim() ||
+        "Right, the AI's gone completely blank. Brilliant. Try again later, mate.";
+    } catch (err) {
+      answer =
+        `Fantastic, the AI's having a complete strop. \`${err?.message ?? 'Unknown error'}\` ` +
+        '— sort it out and try again, will ya?';
+      await sendDebugError(env, {
+        command:        '/ask',
+        interaction_id: interaction.id,
+        error:          err?.message ?? 'Unknown error',
+      }).catch((e) => console.error('sendDebugError failed:', e?.message));
+    }
+    await editOriginalMessage(appId, token, {
+      content:    answer.slice(0, 2000),
+      components: [],
+    }).catch((e) => console.error('handleAskCommand: editOriginalMessage failed:', e?.message));
+  })());
+
+  // Ephemeral deferred — only the invoker sees the answer
+  return jsonResponse({
+    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+    data: { flags: 64 },
+  });
+}
 
 // ===== Mechanic select-menu builder =====
 
@@ -2045,6 +2136,9 @@ async function handleDiscordInteraction(request, env, ctx) {
       if (interaction.data?.name === 'update-analytics') {
         return handleUpdateAnalyticsCommand(interaction, env, ctx);
       }
+      if (interaction.data?.name === 'ask') {
+        return handleAskCommand(interaction, env, ctx);
+      }
       // Unknown slash command — return an ephemeral error instead of HTTP 400.
       return jsonResponse({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -2120,7 +2214,16 @@ async function handleDiscordInteraction(request, env, ctx) {
     // Last-resort catch: any unexpected exception in the routing or handler
     // code is converted to a proper ephemeral Discord error so the user sees
     // a helpful message rather than Discord's generic "This interaction failed".
+    // Also fires a debug report to DEBUG_CHANNEL_ID if configured.
     console.error('Unhandled error in interaction handler:', err);
+    ctx.waitUntil(sendDebugError(env, {
+      event:          'unhandled_interaction_error',
+      interaction_id: interaction.id,
+      interaction_type: interaction.type,
+      custom_id:      interaction.data?.custom_id ?? null,
+      command_name:   interaction.data?.name ?? null,
+      error:          err?.message ?? 'Unknown error',
+    }).catch(() => {}));
     return jsonResponse({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
       data: {
@@ -2160,17 +2263,16 @@ export default {
       return handleTriggerWeekly(request, env);
     }
 
-    // 2b. Gateway management — start or restart the Discord Gateway Durable Object.
-    //     Called once after deploy and periodically by the cron health-check.
-    //     No authentication required (the DO is only accessible via internal routing).
+    // 2b. Legacy gateway-start endpoint — the DiscordGateway Durable Object was
+    //     removed to stay on the free Cloudflare plan.  @mention responses are
+    //     now handled via the /ask slash command.  Return 410 Gone so any stale
+    //     callers (old deploy scripts, bookmarks) get a clear explanation.
     if (url.pathname === '/api/gateway-start') {
-      if (env.DISCORD_GATEWAY && env.DISCORD_BOT_TOKEN) {
-        const id  = env.DISCORD_GATEWAY.idFromName('main');
-        const stub = env.DISCORD_GATEWAY.get(id);
-        await stub.fetch('https://do-internal/start');
-        return new Response('Gateway start signalled.', { status: 200 });
-      }
-      return new Response('DISCORD_GATEWAY binding not configured.', { status: 503 });
+      return new Response(
+        'The DiscordGateway Durable Object has been removed. ' +
+        'Use the /ask slash command for AI responses instead.',
+        { status: 410 }
+      );
     }
 
     // 3. Discord interactions — Discord always POSTs with Ed25519 signature headers.
@@ -2264,349 +2366,8 @@ export default {
     } catch (err) {
       console.error('scheduled: error posting to Discord:', err.message);
     }
-
-    // Keep the Discord Gateway Durable Object alive.
-    // If the DO was evicted and its alarm somehow failed (e.g. first deploy),
-    // this ensures it reconnects within 5 minutes.
-    if (env.DISCORD_GATEWAY && env.DISCORD_BOT_TOKEN) {
-      try {
-        const id   = env.DISCORD_GATEWAY.idFromName('main');
-        const stub = env.DISCORD_GATEWAY.get(id);
-        await stub.fetch('https://do-internal/start');
-      } catch (err) {
-        console.warn('scheduled: gateway keepalive failed:', err?.message);
-      }
-    }
   },
 };
-
-// ===== DiscordGateway Durable Object =====
-//
-// Maintains a persistent WebSocket connection to Discord's Gateway so the bot
-// can receive MESSAGE_CREATE events and respond to @mentions in real time.
-//
-// Why a Durable Object?
-//   Cloudflare Workers are stateless HTTP handlers — they can't hold an open
-//   WebSocket to Discord's servers between requests.  Durable Objects CAN
-//   maintain long-lived async operations via ctx.waitUntil(), and their
-//   alarm() method wakes the object up to reconnect if the connection ever
-//   drops.  This gives us real-time @mention responses without any external
-//   hosting or persistent VM.
-//
-// Connection lifecycle:
-//   1. main Worker receives GET /api/gateway-start → forwards to DO
-//   2. DO opens wss://gateway.discord.gg, identifies, receives READY
-//   3. DO heartbeats on Discord's interval; ctx.waitUntil keeps it alive
-//   4. On MESSAGE_CREATE with bot @mention: fetches last 5 messages for
-//      context, calls Workers AI, replies to the message
-//   5. On connection drop: DO sets a 5-second alarm then may hibernate
-//   6. Alarm fires → fresh DO instance reconnects (session resume attempted)
-//   7. 5-minute cron pings /start as a safety net if alarm somehow failed
-//
-// Required Gateway intents:
-//   GUILDS (1) + GUILD_MESSAGES (512) = 513
-//   No privileged intents needed: Discord always includes message content
-//   for messages that @mention the bot, regardless of MESSAGE_CONTENT intent.
-
-export class DiscordGateway {
-  constructor(ctx, env) {
-    this.ctx = ctx;
-    this.env = env;
-    // _running tracks whether _connect() is already active on THIS instance.
-    // Prevents double connections when /start is called while already connected.
-    this._running = false;
-  }
-
-  // ---- Public fetch handler (called by the main Worker) ----
-
-  async fetch(request) {
-    const url = new URL(request.url);
-    if (url.pathname === '/start') {
-      if (!this._running) {
-        this._running = true;
-        this.ctx.waitUntil(
-          this._connect().finally(() => { this._running = false; })
-        );
-      }
-      return new Response('ok');
-    }
-    return new Response('not found', { status: 404 });
-  }
-
-  // ---- Alarm handler — fires when the connection drops and reconnects ----
-
-  async alarm() {
-    if (!this._running) {
-      this._running = true;
-      this.ctx.waitUntil(
-        this._connect().finally(() => { this._running = false; })
-      );
-    }
-  }
-
-  // ---- Gateway connection ----
-
-  async _connect() {
-    if (!this.env.DISCORD_BOT_TOKEN) {
-      console.warn('DiscordGateway: DISCORD_BOT_TOKEN is not set — cannot connect.');
-      return;
-    }
-
-    // Retrieve persisted session state (survives DO hibernation)
-    const [storedSeq, storedSession, storedResumeUrl] = await Promise.all([
-      this.ctx.storage.get('seq'),
-      this.ctx.storage.get('sessionId'),
-      this.ctx.storage.get('resumeGatewayUrl'),
-    ]);
-
-    // Decide gateway URL: use resume URL if we have a session to resume
-    const gatewayUrl = (storedSession && storedResumeUrl)
-      ? `${storedResumeUrl}?v=10&encoding=json`
-      : 'wss://gateway.discord.gg/?v=10&encoding=json';
-
-    let ws;
-    try {
-      ws = new WebSocket(gatewayUrl);
-    } catch (err) {
-      console.error('DiscordGateway: failed to open WebSocket:', err?.message);
-      await this.ctx.storage.setAlarm(Date.now() + 10_000);
-      return;
-    }
-
-    let seq        = storedSeq   ?? null;
-    let sessionId  = storedSession  ?? null;
-    let resuming   = !!(storedSession && storedResumeUrl);
-    let identified = false;
-    let heartbeatTimer = null;
-
-    // This Promise stays pending while the WebSocket is open, keeping the DO alive.
-    await new Promise((resolve) => {
-      ws.addEventListener('open', () => {
-        console.log('DiscordGateway: WebSocket connected.');
-      });
-
-      ws.addEventListener('message', (event) => {
-        let payload;
-        try { payload = JSON.parse(event.data); } catch { return; }
-
-        if (payload.s != null) seq = payload.s;
-
-        switch (payload.op) {
-          case 10: { // HELLO — server tells us the heartbeat interval
-            const interval = payload.d?.heartbeat_interval ?? 41_250;
-            // Send an initial heartbeat slightly early (jitter per Discord docs)
-            const jitter = Math.random() * interval;
-            heartbeatTimer = setTimeout(() => {
-              this._heartbeat(ws, seq);
-              heartbeatTimer = setInterval(() => this._heartbeat(ws, seq), interval);
-            }, jitter);
-
-            if (resuming && sessionId) {
-              // Attempt RESUME to replay missed events
-              ws.send(JSON.stringify({
-                op: 6,
-                d: { token: this.env.DISCORD_BOT_TOKEN, session_id: sessionId, seq },
-              }));
-            } else {
-              // Fresh IDENTIFY
-              ws.send(JSON.stringify({
-                op: 2,
-                d: {
-                  token:      this.env.DISCORD_BOT_TOKEN,
-                  intents:    513, // GUILDS (1) | GUILD_MESSAGES (512)
-                  properties: { os: 'linux', browser: 'kintsugi', device: 'kintsugi' },
-                },
-              }));
-            }
-            identified = true;
-            break;
-          }
-
-          case 11: // HEARTBEAT_ACK — Discord acknowledged our heartbeat
-            break;
-
-          case 1: // HEARTBEAT request from server
-            this._heartbeat(ws, seq);
-            break;
-
-          case 7: // RECONNECT — Discord wants us to reconnect
-            console.log('DiscordGateway: server requested RECONNECT.');
-            ws.close(1000);
-            break;
-
-          case 9: // INVALID_SESSION
-            if (!payload.d) {
-              // Session is not resumable — clear stored state and re-identify
-              sessionId = null;
-              resuming  = false;
-              this.ctx.storage.delete('sessionId');
-              this.ctx.storage.delete('resumeGatewayUrl');
-            }
-            // Back off before re-identifying (Discord recommends 1–5 s)
-            setTimeout(() => {
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                  op: 2,
-                  d: {
-                    token:      this.env.DISCORD_BOT_TOKEN,
-                    intents:    513,
-                    properties: { os: 'linux', browser: 'kintsugi', device: 'kintsugi' },
-                  },
-                }));
-              }
-            }, 2_500);
-            break;
-
-          case 0: // DISPATCH — an actual event
-            this._onDispatch(payload, (s) => { seq = s; }).catch((err) => {
-              console.error('DiscordGateway: dispatch error:', err?.message);
-            });
-            break;
-        }
-      });
-
-      ws.addEventListener('close', (event) => {
-        clearTimeout(heartbeatTimer);
-        clearInterval(heartbeatTimer);
-        console.log(`DiscordGateway: WebSocket closed (${event.code}). Scheduling reconnect.`);
-        // Persist sequence so we can RESUME
-        Promise.all([
-          this.ctx.storage.put('seq', seq),
-          this.ctx.storage.put('sessionId', sessionId),
-        ]).catch(() => {}).finally(() => resolve());
-        this.ctx.storage.setAlarm(Date.now() + 5_000).catch(() => {});
-      });
-
-      ws.addEventListener('error', (err) => {
-        console.error('DiscordGateway: WebSocket error:', err?.message ?? err);
-        // close event will follow — resolve happens there
-      });
-    });
-  }
-
-  // ---- Send a heartbeat ----
-
-  _heartbeat(ws, seq) {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ op: 1, d: seq }));
-    }
-  }
-
-  // ---- Handle DISPATCH events ----
-
-  async _onDispatch(payload, updateSeq) {
-    if (payload.s != null) updateSeq(payload.s);
-
-    if (payload.t === 'READY') {
-      const user = payload.d?.user;
-      await Promise.all([
-        this.ctx.storage.put('botUserId',       user?.id ?? ''),
-        this.ctx.storage.put('sessionId',       payload.d?.session_id ?? ''),
-        this.ctx.storage.put('resumeGatewayUrl', payload.d?.resume_gateway_url ?? ''),
-      ]);
-      console.log(`DiscordGateway: READY as ${user?.username ?? 'unknown'}#${user?.discriminator ?? '0'}`);
-      return;
-    }
-
-    if (payload.t === 'RESUMED') {
-      console.log('DiscordGateway: session successfully RESUMED.');
-      return;
-    }
-
-    if (payload.t === 'MESSAGE_CREATE') {
-      await this._onMessage(payload.d);
-    }
-  }
-
-  // ---- Handle a MESSAGE_CREATE event ----
-
-  async _onMessage(msg) {
-    // Ignore messages from bots (including ourselves)
-    if (msg.author?.bot) return;
-
-    const botUserId = await this.ctx.storage.get('botUserId');
-    if (!botUserId) return;
-
-    // Only respond when the bot is @mentioned in this message
-    const mentioned = Array.isArray(msg.mentions)
-      ? msg.mentions.some(m => m.id === botUserId)
-      : (msg.content || '').includes(`<@${botUserId}>`) ||
-        (msg.content || '').includes(`<@!${botUserId}>`);
-    if (!mentioned) return;
-
-    // Strip all @mentions and clean up the question text
-    const question = (msg.content || '')
-      .replace(/<@!?\d+>/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    // Fetch the last 5 messages in the channel BEFORE this one for context.
-    // REST API calls always return full message content regardless of intents.
-    let contextMessages = [];
-    try {
-      const ctxRes = await fetch(
-        `https://discord.com/api/v10/channels/${msg.channel_id}/messages?limit=5&before=${msg.id}`,
-        { headers: { Authorization: `Bot ${this.env.DISCORD_BOT_TOKEN}` } }
-      );
-      if (ctxRes.ok) {
-        const raw = await ctxRes.json();
-        // Reverse so oldest-first; skip messages from bots to keep context clean
-        contextMessages = raw
-          .filter(m => !m.author?.bot)
-          .reverse();
-      }
-    } catch (err) {
-      console.warn('DiscordGateway: failed to fetch context messages:', err?.message);
-    }
-
-    // Build a readable context string for the AI
-    const contextBlock = contextMessages
-      .map(m => `${m.author?.username ?? 'Unknown'}: ${(m.content || '').trim()}`)
-      .filter(Boolean)
-      .join('\n');
-
-    const userPrompt = contextBlock
-      ? `Recent conversation for context:\n${contextBlock}\n\n@mention question: ${question || '(no text — user just mentioned me)'}`
-      : (question || '(user mentioned me with no text)');
-
-    // Call Workers AI with the assistant manager persona
-    let answer;
-    try {
-      if (!this.env.AI) throw new Error('Workers AI binding (env.AI) is not configured.');
-      const result = await this.env.AI.run('@cf/meta/llama-3-8b-instruct', {
-        messages: [
-          { role: 'system', content: ASSISTANT_MANAGER_SYSTEM_PROMPT },
-          { role: 'user',   content: userPrompt },
-        ],
-        max_tokens: 350,
-      });
-      answer = (result?.response ?? '').trim() ||
-        "Right, the AI's gone completely blank. Brilliant. Try again later, mate.";
-    } catch (err) {
-      console.error('DiscordGateway: AI call failed:', err?.message);
-      answer =
-        `Fantastic, the AI's having a complete strop. \`${err?.message ?? 'Unknown error'}\` ` +
-        '— sort it out and try again, will ya?';
-    }
-
-    // Reply to the original message so the thread is clear
-    try {
-      await fetch(`https://discord.com/api/v10/channels/${msg.channel_id}/messages`, {
-        method:  'POST',
-        headers: {
-          Authorization:  `Bot ${this.env.DISCORD_BOT_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          content:           answer,
-          message_reference: { message_id: msg.id },
-        }),
-      });
-    } catch (err) {
-      console.error('DiscordGateway: failed to send reply:', err?.message);
-    }
-  }
-}
 
 // ===== Global error handlers (Node.js / local test runtime only) =====
 // In Cloudflare Workers `process` is undefined — the guards below prevent
