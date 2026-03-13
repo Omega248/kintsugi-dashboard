@@ -467,6 +467,223 @@ await runTest('Unknown interaction type → ephemeral error (type 4), not HTTP 4
   assert(data.data?.content?.includes('❌'), 'Error content starts with ❌');
 });
 
+// ── Additional reliability tests ───────────────────────────────────────────
+//
+// These tests exercise the new reliability layer added to the invoice handlers:
+//   • fetchSheetWithRetry  — timeout via AbortController, 500 retry, backoff
+//   • acquireInvoiceLock   — KV-based concurrent-run guard
+//   • Input validation     — malformed dept / monthValue rejected early
+//   • Empty result set     — 0-job month produces a valid 0-row invoice
+
+// Shared in-memory KV mock (exposes _store for manual seeding in tests)
+const fakekv = (() => {
+  const store = new Map();
+  return {
+    get:    async (k)    => store.get(k) ?? null,
+    put:    async (k, v) => store.set(k, v),
+    delete: async (k)    => store.delete(k),
+    _store: store,
+  };
+})();
+
+const FAKE_ENV_WITH_KV = {
+  DISCORD_PUBLIC_KEY: '0'.repeat(64),
+  DISCORD_BOT_TOKEN:  'Bot.fake-token-for-testing',
+  KV: fakekv,
+};
+
+// Helper: override the Google Sheets portion of globalThis.fetch temporarily.
+// Calls the provided `sheetFn(url, opts)` instead of the default mock.
+// Always restores the original mock, even on throw.
+async function withSheetFetch(sheetFn, testFn) {
+  const orig = globalThis.fetch;
+  globalThis.fetch = async (url, opts = {}) => {
+    if (typeof url === 'string' && url.includes('docs.google.com')) {
+      return sheetFn(url, opts);
+    }
+    return orig(url, opts); // Discord webhook calls use the original mock
+  };
+  try {
+    await testFn();
+  } finally {
+    globalThis.fetch = orig;
+  }
+}
+
+// ── Test: network failure (AbortError) → error message shown ────────────────
+await runTest('Network failure (AbortError) → error message shown to user', async () => {
+  let attemptCount = 0;
+  await withSheetFetch(
+    async (_url, opts) => {
+      attemptCount++;
+      // Throw an AbortError immediately — simulates a timed-out fetch
+      const err = new Error('The operation was aborted');
+      err.name  = 'AbortError';
+      throw err;
+    },
+    async () => {
+      const { ctx, flush } = makeCtx();
+      const res  = await worker.fetch(makeRequest('billing_dept_select', ['BCSO']), FAKE_ENV, ctx);
+      const data = await res.json();
+
+      assert(data.type === 6, 'Response type is DEFERRED_UPDATE_MESSAGE (6) on timeout path');
+
+      await flush(); // wait for retries + error handler
+
+      assert(capturedPatch !== null, 'editOriginalMessage was called with an error');
+      const content = capturedPatch.content || '';
+      assert(content.includes('❌'), 'Error response starts with ❌');
+      assert(
+        content.toLowerCase().includes('timed out') ||
+        content.toLowerCase().includes('failed') ||
+        content.toLowerCase().includes('error'),
+        `Error message is informative (got: "${content}")`
+      );
+      assert((capturedPatch.components ?? []).length === 0, 'No stale dropdown in error response');
+      // Verify retries happened: initial attempt + INVOICE_MAX_RETRIES retries = 3 total
+      assert(attemptCount === 3, `Expected 3 fetch attempts (got ${attemptCount})`);
+    }
+  );
+});
+
+// ── Test: upstream HTTP 500 → retried, then error message shown ─────────────
+await runTest('Upstream HTTP 500 → retried then error message shown (fetchCount = 3)', async () => {
+  let fetchCount = 0;
+  await withSheetFetch(
+    async () => {
+      fetchCount++;
+      return {
+        ok:      false,
+        status:  500,
+        headers: { get: () => null },
+        text:    async () => 'Internal Server Error',
+      };
+    },
+    async () => {
+      const { ctx, flush } = makeCtx();
+      const res  = await worker.fetch(makeRequest('billing_dept_select', ['LSPD']), FAKE_ENV, ctx);
+      const data = await res.json();
+
+      assert(data.type === 6, 'Response type is DEFERRED_UPDATE_MESSAGE (6)');
+
+      await flush();
+
+      assert(capturedPatch !== null, 'editOriginalMessage was called after exhausting retries');
+      const content = capturedPatch.content || '';
+      assert(content.includes('❌'), 'Error response starts with ❌');
+      assert(fetchCount === 3, `Expected 3 fetch attempts with retries (got ${fetchCount})`);
+    }
+  );
+});
+
+// ── Test: KV in-flight lock prevents concurrent invoice for same user ────────
+await runTest('KV in-flight lock → concurrent generation blocked with user-friendly message', async () => {
+  // Seed the lock that a previous (still-running) request would have set
+  const lockKey = 'invoice:anon:BCSO:2026-03-31';
+  await fakekv.put(lockKey, '1');
+
+  const { ctx, flush } = makeCtx();
+  const res  = await worker.fetch(
+    makeRequest('billing_month_select:BCSO', ['2026-03-31']),
+    FAKE_ENV_WITH_KV,
+    ctx
+  );
+  const data = await res.json();
+
+  assert(data.type === 6, 'Response type is DEFERRED_UPDATE_MESSAGE (6)');
+
+  await flush();
+
+  assert(capturedPatch !== null, 'editOriginalMessage was called');
+  const content = capturedPatch.content || '';
+  assert(
+    content.toLowerCase().includes('already') || content.toLowerCase().includes('in progress'),
+    `Lock message mentions "already" or "in progress" (got: "${content}")`
+  );
+  assert(!(capturedPatch.embeds?.length > 0), 'No invoice embed when locked');
+  assert(!capturedPatchIsFile, 'No CSV attachment when locked');
+
+  // Clean up the seeded lock
+  await fakekv.delete(lockKey);
+});
+
+// ── Test: month with no matching jobs → 0-row invoice (not an error) ────────
+await runTest('Month with 0 matching jobs → valid 0-row invoice (no crash)', async () => {
+  // "2026-01-31" has no data in the fake sheet → 0 deptJobs for LSPD
+  const { ctx, flush } = makeCtx();
+  const res  = await worker.fetch(
+    makeRequest('billing_month_select:LSPD', ['2026-01-31']),
+    FAKE_ENV,
+    ctx
+  );
+  const data = await res.json();
+
+  assert(data.type === 6, 'Response type is DEFERRED_UPDATE_MESSAGE (6)');
+
+  await flush();
+
+  assert(capturedPatch !== null, 'editOriginalMessageWithFile was called');
+  assert(capturedPatchIsFile, 'CSV attachment present even for 0-job month');
+  const embeds = capturedPatch.embeds ?? [];
+  assert(embeds.length > 0, 'At least one embed in the 0-job invoice');
+  const description = (embeds[0].description ?? '').toLowerCase();
+  assert(
+    description.includes('no jobs') || description.includes('_no jobs'),
+    `Embed description notes no jobs recorded (got: "${embeds[0].description}")`
+  );
+});
+
+// ── Test: INVOICE_DEBUG=true → does not crash and invoice still delivered ────
+await runTest('INVOICE_DEBUG=true → invoice delivered normally (no crash from debug mode)', async () => {
+  const debugEnv = { ...FAKE_ENV, INVOICE_DEBUG: 'true' };
+  const { ctx, flush } = makeCtx();
+  const monthValue = '2026-03-31';
+  const res  = await worker.fetch(
+    makeRequest('billing_month_select:BCSO', [monthValue]),
+    debugEnv,
+    ctx
+  );
+  const data = await res.json();
+
+  assert(data.type === 6, 'Response type is DEFERRED_UPDATE_MESSAGE (6)');
+
+  await flush();
+
+  assert(capturedPatch !== null, 'editOriginalMessageWithFile was called in debug mode');
+  assert(capturedPatchIsFile, 'CSV attached in debug mode');
+  assert(capturedPatch.content?.includes('BCSO'), 'Invoice content references BCSO');
+});
+
+// ── Test: invalid dept value → early validation error, no sheet fetch ────────
+await runTest('Invalid dept (SQL-like) → validation error before sheet fetch', async () => {
+  let sheetFetched = false;
+  await withSheetFetch(
+    async () => { sheetFetched = true; return { ok: true, text: async () => '' }; },
+    async () => {
+      const { ctx, flush } = makeCtx();
+      // Inject an invalid dept value (would only be possible with a crafted request)
+      const res  = await worker.fetch(makeRequest('billing_month_select:DROP TABLE jobs--', ['2026-03-31']), FAKE_ENV, ctx);
+      const data = await res.json();
+
+      assert(data.type === 6, 'Response type is DEFERRED_UPDATE_MESSAGE (6)');
+
+      // NOTE: The custom_id split(':')[1] returns "DROP TABLE jobs--" — validation rejects it
+      await flush();
+
+      // Validation should have short-circuited before the sheet was fetched
+      // (the dept regex /^[A-Za-z]{2,10}$/ blocks values with spaces or special chars)
+      // editOriginalMessage is called by the validation path, not fetchSheetWithRetry
+      // Since the validation fires inside the waitUntil, capturedPatch gets the error msg
+      // Note: 'DROP TABLE jobs--' fails /^[A-Za-z]{2,10}$/ due to spaces
+      if (capturedPatch !== null) {
+        // If editOriginalMessage was called, it must be an error response, not an invoice
+        assert(!capturedPatchIsFile, 'No CSV attachment for invalid input');
+      }
+      assert(!sheetFetched, 'Sheet was NOT fetched when dept validation failed');
+    }
+  );
+});
+
 // ── Summary ────────────────────────────────────────────────────────────
 console.log('');
 console.log('─────────────────────────────────────────────────────');
