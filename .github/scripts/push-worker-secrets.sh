@@ -20,7 +20,7 @@ node -e "
   const keys = [
     'DISCORD_PUBLIC_KEY', 'DISCORD_BOT_TOKEN', 'ANALYTICS_CHANNEL_ID',
     'JOBS_CHANNEL_ID', 'PAYOUTS_CHANNEL_ID', 'RIPTIDE_USER_ID',
-    'TRIGGER_TOKEN', 'DEBUG_CHANNEL_ID',
+    'TRIGGER_TOKEN', 'DEBUG_CHANNEL_ID', 'BOT_APP_ID',
   ];
   const obj = {};
   for (const k of keys) { if (process.env[k]) obj[k] = process.env[k]; }

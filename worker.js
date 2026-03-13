@@ -11,6 +11,8 @@
 //   POST /api/notify-payouts → Notify Discord that payouts were processed
 //   POST /api/trigger-weekly → Trigger the cron manually from the dashboard
 //   POST (Discord signature) → Discord interactions (buttons, menus, commands)
+//   GET  /api/gateway-start  → Connect/restart the DiscordGateway DO
+//   GET  /api/gateway-status → Check whether the gateway DO is connected
 //   GET /bot-config.js     → Auto-generated bot config (or safe fallback)
 //   Everything else        → Static web-dashboard assets (with CSP headers)
 //
@@ -27,8 +29,26 @@
 // Optional secrets:
 //   RIPTIDE_USER_ID       — Numeric Discord user ID to @mention on payday
 //   TRIGGER_TOKEN         — Bearer token for the dashboard "Notify Discord" and
-//                           "Trigger Weekly" buttons. Falls back to the hardcoded
-//                           FALLBACK_TRIGGER_TOKEN constant if not set.
+//                           "Trigger Weekly" buttons, and for /api/gateway-start.
+//                           Falls back to the hardcoded FALLBACK_TRIGGER_TOKEN
+//                           constant if not set.
+//   BOT_APP_ID            — Discord Application ID (same value as DISCORD_APP_ID).
+//                           Required for real-time @mention detection via the
+//                           DiscordGateway Durable Object.  Pushed by CI from the
+//                           DISCORD_APP_ID GitHub secret automatically.
+//
+// @mention support — DiscordGateway Durable Object:
+//   The DiscordGateway DO holds a persistent outgoing WebSocket to Discord's
+//   Gateway API.  When a user @mentions the bot, the DO receives the
+//   MESSAGE_CREATE event in real time, generates an AI reply (using live sheet
+//   data when relevant), and posts a Discord reply visible to everyone.
+//
+//   One-time setup after deploy:
+//     POST /api/gateway-start  (Authorization: Bearer <TRIGGER_TOKEN>)
+//   After that, the DO self-heals via Cloudflare Alarms — no manual restarts.
+//
+//   Discord Developer Portal — required:
+//     Bot → Privileged Gateway Intents → "Message Content Intent" → ON
 //
 // Logging (KV file log — no Discord interactions required):
 //   Every action, response, and error is written to the KV namespace as a
@@ -762,6 +782,10 @@ Shop systems:
 - Invoice: #invoice → "📋 Generate Monthly Invoice" → pick dept → pick month. Done.
 - Payouts: #payouts panel for mechanics; web dashboard or /payouts for managers.
 
+Pay rates: $700 per repair. Engine replacements: $12,000 reimbursement for all departments; LSPD jobs additionally receive a $1,500 bonus, making LSPD engine replacements $13,500 total. Non-LSPD engine replacements are $12,000.
+
+When live sheet data or channel context is provided below, use it to give precise answers about earnings, invoices, and payouts — quote the exact figures. Do not invent numbers if no data is provided.
+
 Rules:
 1. Be helpful first — give the exact answer or step in ONE sentence.
 2. Add a quick, dry quip if it fits. Skip it if it doesn't.
@@ -868,13 +892,157 @@ async function handleViewLogs(request, env) {
   }
 }
 
+// ===== /ask slash-command helpers =====
+
+// Regex patterns used by buildSheetDataContext to decide whether to hit the
+// Google Sheets API.  Extracted as constants for clarity and easy maintenance.
+const DATA_QUESTION_REGEX    = /\b(earn|made|make|paid|pay(?:out)?s?|owe|invoice|bill|how much|this week|last week|last month|this month|mechanic|total)\b/;
+const INVOICE_QUESTION_REGEX = /\b(owe|invoice|bill|department|dept|lspd|bcso|sasp|sheriff|police)\b/;
+
+// Maximum characters of the original question shown in the public reply prefix.
+const MAX_QUESTION_PREVIEW_LENGTH = 120;
+
+/**
+ * Fetch the most recent messages from a Discord channel using the bot token.
+ * Returns messages in chronological order (oldest first).  Never throws.
+ *
+ * @param {string|null} channelId - Discord channel ID from the interaction.
+ * @param {object}      env       - Worker environment (needs DISCORD_BOT_TOKEN).
+ * @param {number}      [limit=10] - Number of messages to fetch (max 100).
+ * @returns {Promise<Array>} Array of Discord message objects, oldest first.
+ */
+async function fetchChannelMessages(channelId, env, limit = 10) {
+  if (!env.DISCORD_BOT_TOKEN || !channelId) return [];
+  try {
+    const res = await fetch(
+      `https://discord.com/api/v10/channels/${channelId}/messages?limit=${limit}`,
+      { headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` } }
+    );
+    if (!res.ok) return [];
+    const msgs = await res.json();
+    if (!Array.isArray(msgs)) return [];
+    // Discord returns newest-first; reverse for chronological order.
+    return msgs.reverse();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetch live Google Sheets data and format it as a short context string for
+ * the AI prompt.  Only runs when the question appears to be data-related
+ * (mentions earnings, payouts, invoices, mechanics, etc.).  Never throws.
+ *
+ * Returns null when the question is not data-related or the sheet is
+ * unavailable, so the AI falls back to its built-in knowledge.
+ *
+ * @param {string} question - The user's question (plain text).
+ * @returns {Promise<string|null>}
+ */
+async function buildSheetDataContext(question) {
+  try {
+    const q = question.toLowerCase();
+    // Only hit the sheet for questions that plausibly need real data.
+    if (!DATA_QUESTION_REGEX.test(q)) {
+      return null;
+    }
+
+    const [jobRows, stateRows] = await Promise.all([
+      fetchSheet(JOBS_SHEET),
+      fetchSheet(STATE_IDS_SHEET).catch(() => []),
+    ]);
+    const allJobs  = parseJobsSheet(jobRows);
+    const stateMap = parseStateIds(stateRows);
+
+    if (!allJobs.length) return null;
+
+    let context = '';
+
+    // --- Latest-week payouts (always include when data-related) ---
+    const { weekEndDate, payouts } = getLatestWeekPayouts(allJobs, stateMap);
+    if (weekEndDate && payouts.length) {
+      context += `Live data — week ending ${fmtDate(weekEndDate)}:\n`;
+      for (const m of payouts) {
+        context += `  ${m.name}: ${m.repairs} repair${m.repairs !== 1 ? 's' : ''}`;
+        if (m.engineReplacements) {
+          context += `, ${m.engineReplacements} engine replacement${m.engineReplacements !== 1 ? 's' : ''}`;
+        }
+        context += ` → ${fmtMoney(m.totalPayout)}\n`;
+      }
+      const grandTotal = payouts.reduce((s, m) => s + m.totalPayout, 0);
+      context += `  Shop total: ${fmtMoney(grandTotal)}\n`;
+    }
+
+    // --- Department invoice data (include when question is invoice/dept-related) ---
+    if (INVOICE_QUESTION_REGEX.test(q)) {
+      const now   = new Date();
+      // Determine which month the user is asking about.
+      const monthNames = [
+        'january','february','march','april','may','june',
+        'july','august','september','october','november','december',
+      ];
+      const namedMonth = monthNames.findIndex(m => q.includes(m));
+
+      let targetYear, targetMonth;
+      if (namedMonth !== -1) {
+        targetMonth = namedMonth;
+        targetYear  = now.getFullYear();
+        // If the named month hasn't started yet this year, assume last year.
+        if (targetMonth > now.getMonth()) targetYear--;
+      } else if (q.includes('this month')) {
+        targetMonth = now.getMonth();
+        targetYear  = now.getFullYear();
+      } else {
+        // Default: last calendar month.
+        const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        targetMonth = d.getMonth();
+        targetYear  = d.getFullYear();
+      }
+
+      const monthLabel = new Date(targetYear, targetMonth, 1)
+        .toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+      const monthJobs  = filterByMonth(allJobs, targetYear, targetMonth);
+
+      if (monthJobs.length > 0) {
+        // Group by department.
+        const deptMap = new Map();
+        for (const j of monthJobs) {
+          const dept = (j.department || 'Unknown').trim() || 'Unknown';
+          let rec = deptMap.get(dept);
+          if (!rec) { rec = { repairs: 0, engines: 0 }; deptMap.set(dept, rec); }
+          rec.repairs += j.across || 0;
+          rec.engines += j.engineReplacements || 0;
+        }
+
+        context += `\nInvoice data — ${monthLabel}:\n`;
+        for (const [dept, rec] of deptMap) {
+          const total = rec.repairs * PAY_PER_REPAIR + rec.engines * ENGINE_REIMBURSEMENT;
+          context += `  ${dept}: ${rec.repairs} repair${rec.repairs !== 1 ? 's' : ''}`;
+          if (rec.engines) {
+            context += `, ${rec.engines} engine${rec.engines !== 1 ? 's' : ''}`;
+          }
+          context += ` → ${fmtMoney(total)} owed\n`;
+        }
+      }
+    }
+
+    return context || null;
+  } catch {
+    return null;
+  }
+}
+
 // ===== /ask slash-command handler =====
 
 /**
  * Handle the /ask slash command.
- * Calls Workers AI with the Assistant Manager persona and replies ephemerally.
- * This is the free-tier replacement for @mention responses, which required the
- * DiscordGateway Durable Object (paid plan only).
+ * Posts a public reply (visible to everyone) using Workers AI with the
+ * Assistant Manager persona.  Reads the last 10 channel messages for
+ * conversational context and fetches live Google Sheets data when the
+ * question is about earnings, payouts, or department invoices.
+ *
+ * All processing is deferred via ctx.waitUntil so Discord's 3-second
+ * acknowledgement deadline is always met.
  *
  * @param {object} interaction - Discord interaction object.
  * @param {object} env         - Worker environment bindings.
@@ -882,18 +1050,46 @@ async function handleViewLogs(request, env) {
  */
 async function handleAskCommand(interaction, env, ctx) {
   const { application_id: appId, token } = interaction;
-  const question = (interaction.data?.options?.find(o => o.name === 'question')?.value ?? '').trim();
+  const question  = (interaction.data?.options?.find(o => o.name === 'question')?.value ?? '').trim();
+  const channelId = interaction.channel_id ?? null;
+  const asker     = (interaction.member?.user ?? interaction.user)?.username ?? null;
 
   ctx.waitUntil((async () => {
     let answer;
     try {
       if (!env.AI) throw new Error('Workers AI binding (env.AI) is not configured.');
+
+      // Fetch recent channel messages and relevant sheet data in parallel.
+      const [channelMsgs, sheetContext] = await Promise.all([
+        fetchChannelMessages(channelId, env, 10),
+        buildSheetDataContext(question),
+      ]);
+
+      // Build the system prompt, appending live sheet data when available.
+      const systemContent = sheetContext
+        ? `${ASSISTANT_MANAGER_SYSTEM_PROMPT}\n\nLive sheet data:\n${sheetContext}`
+        : ASSISTANT_MANAGER_SYSTEM_PROMPT;
+
+      // Build message list, optionally injecting channel context.
+      const messages = [{ role: 'system', content: systemContent }];
+
+      // Include recent non-bot messages as conversation context.
+      const contextLines = channelMsgs
+        .filter(m => !m.author?.bot)
+        .slice(-8)
+        .map(m => `${m.author?.username ?? 'User'}: ${m.content}`)
+        .join('\n');
+
+      if (contextLines) {
+        messages.push({ role: 'user',      content: `Recent channel context:\n${contextLines}` });
+        messages.push({ role: 'assistant', content: 'Noted. What do you need?' });
+      }
+
+      messages.push({ role: 'user', content: question || '(no question provided)' });
+
       const result = await env.AI.run('@cf/meta/llama-3-8b-instruct', {
-        messages: [
-          { role: 'system', content: ASSISTANT_MANAGER_SYSTEM_PROMPT },
-          { role: 'user',   content: question || '(user asked with no text)' },
-        ],
-        max_tokens: 180,
+        messages,
+        max_tokens: 300,
       });
       answer = (result?.response ?? '').trim() ||
         "Right, the AI's gone completely blank. Brilliant. Try again later, mate.";
@@ -907,16 +1103,20 @@ async function handleAskCommand(interaction, env, ctx) {
         error:          err?.message ?? 'Unknown error',
       });
     }
+
+    // Prefix shows who asked and what they asked so the public reply has context.
+    const prefix = asker
+      ? `**${asker}** asked: *${(question || '…').slice(0, MAX_QUESTION_PREVIEW_LENGTH)}${question.length > MAX_QUESTION_PREVIEW_LENGTH ? '…' : ''}*\n\n`
+      : '';
     await editOriginalMessage(appId, token, {
-      content:    answer.slice(0, 2000),
+      content:    (prefix + answer).slice(0, 2000),
       components: [],
     }).catch((e) => console.error('handleAskCommand: editOriginalMessage failed:', e?.message));
   })());
 
-  // Ephemeral deferred — only the invoker sees the answer
+  // Public deferred response — visible to everyone in the channel.
   return jsonResponse({
     type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
-    data: { flags: 64 },
   });
 }
 
@@ -2336,6 +2536,334 @@ async function handleDiscordInteraction(request, env, ctx) {
   }
 }
 
+// ===== DiscordGateway Durable Object =====
+//
+// Holds a persistent outgoing WebSocket connection to the Discord Gateway API
+// so the bot can receive MESSAGE_CREATE events and reply to @mentions in real
+// time without needing any infrastructure beyond a single Cloudflare Worker.
+//
+// Lifecycle:
+//   1. Main worker (cron or /api/gateway-start) calls DO.fetch('/start').
+//   2. DO fetches the Gateway WSS URL from Discord, upgrades the connection,
+//      and sends an IDENTIFY (or RESUME if a previous session is stored).
+//   3. Discord delivers events via the WebSocket.  MESSAGE_CREATE events that
+//      @mention the bot trigger an AI reply posted back to Discord via REST.
+//   4. Cloudflare Alarms drive heartbeats; on connection loss the alarm
+//      automatically reconnects and resumes the session.
+//
+// Discord Developer Portal setup:
+//   Bot → Privileged Gateway Intents → "Message Content Intent" → ON
+//   Without this, message.content will be empty for non-bot messages.
+//
+// Gateway intents used (combined = 33281):
+//   GUILDS         (1 << 0  =     1) — guild metadata
+//   GUILD_MESSAGES (1 << 9  =   512) — MESSAGE_CREATE in guilds
+//   MESSAGE_CONTENT(1 << 15 = 32768) — read message text (privileged)
+export class DiscordGateway {
+  constructor(state, env) {
+    this.state = state;
+    this.env   = env;
+    /** @type {WebSocket|null} Outgoing WebSocket to Discord Gateway. Lost on DO eviction; restored via alarm. */
+    this.ws      = null;
+    /** @type {number|null} Last event sequence number (in-memory mirror of KV). */
+    this.lastSeq = null;
+    /**
+     * Compiled regex to detect @mentions of this bot in message content.
+     * Built once at construction time from BOT_APP_ID so it isn't recompiled
+     * for every MESSAGE_CREATE event.  null when BOT_APP_ID is not configured.
+     * @type {RegExp|null}
+     */
+    this._botMentionRe = env.BOT_APP_ID
+      ? new RegExp(`<@!?${env.BOT_APP_ID}>`)
+      : null;
+  }
+
+  // ---- DO fetch handler ----
+
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (url.pathname === '/start')  return this.handleStart();
+    if (url.pathname === '/status') return this.handleStatus();
+    return new Response('Not Found', { status: 404 });
+  }
+
+  async handleStart() {
+    if (this.ws) {
+      return new Response(JSON.stringify({ status: 'already_connected' }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    try {
+      await this.connect();
+      return new Response(JSON.stringify({ status: 'connecting' }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (err) {
+      return new Response(JSON.stringify({ status: 'error', error: err.message }), {
+        status: 500, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }
+
+  async handleStatus() {
+    const [sessionId, lastSeq, heartbeatInterval] = await Promise.all([
+      this.state.storage.get('session_id').catch(() => null),
+      this.state.storage.get('last_seq').catch(() => null),
+      this.state.storage.get('heartbeat_interval').catch(() => null),
+    ]);
+    return new Response(JSON.stringify({
+      connected:         !!this.ws,
+      sessionId:         sessionId ?? null,
+      lastSeq:           lastSeq ?? this.lastSeq ?? null,
+      heartbeatInterval: heartbeatInterval ?? null,
+    }), { headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // ---- WebSocket connection ----
+
+  /**
+   * Open an outgoing WebSocket to the Discord Gateway.
+   * Uses the Cloudflare Workers WebSocket client API (fetch + Upgrade header).
+   * Stores the connection in this.ws; registers message/close/error handlers.
+   */
+  async connect() {
+    // Retrieve any existing session so we can RESUME instead of re-IDENTIFY.
+    const [storedSession, storedSeq] = await Promise.all([
+      this.state.storage.get('session_id').catch(() => null),
+      this.state.storage.get('last_seq').catch(() => null),
+    ]);
+
+    // Step 1: get the recommended Gateway WSS URL from Discord.
+    const gwApiRes = await fetch('https://discord.com/api/v10/gateway/bot', {
+      headers: { Authorization: `Bot ${this.env.DISCORD_BOT_TOKEN}` },
+    });
+    if (!gwApiRes.ok) {
+      throw new Error(`Discord /gateway/bot returned HTTP ${gwApiRes.status}`);
+    }
+    const { url: gwUrl } = await gwApiRes.json();
+
+    // Step 2: upgrade the connection to a WebSocket.
+    const upgradeRes = await fetch(`${gwUrl}?v=10&encoding=json`, {
+      headers: { Upgrade: 'websocket' },
+    });
+    if (upgradeRes.status !== 101) {
+      throw new Error(`WebSocket upgrade failed: HTTP ${upgradeRes.status}`);
+    }
+
+    const ws = upgradeRes.webSocket;
+    ws.accept(); // must call accept() before adding listeners
+    this.ws = ws;
+
+    // Stash the session info so the HELLO handler can use it without another KV read.
+    this._pendingSession = storedSession;
+    this._pendingSeq     = storedSeq;
+
+    ws.addEventListener('message', async (event) => {
+      try {
+        await this.onGatewayMessage(JSON.parse(event.data));
+      } catch (err) {
+        kLog(this.env, 'error', 'gateway_message_error', { error: err?.message }).catch(() => {});
+      }
+    });
+
+    ws.addEventListener('close', async (event) => {
+      kLog(this.env, 'warn', 'gateway_ws_closed', { code: event.code, reason: event.reason }).catch(() => {});
+      this.ws = null;
+      // Reconnect after a short back-off; alarm() will call connect() again.
+      await this.state.storage.setAlarm(Date.now() + 5_000).catch(() => {});
+    });
+
+    ws.addEventListener('error', (event) => {
+      kLog(this.env, 'error', 'gateway_ws_error', { detail: String(event) }).catch(() => {});
+    });
+
+    kLog(this.env, 'info', 'gateway_connecting', {
+      url:     gwUrl,
+      resume:  !!storedSession,
+    }).catch(() => {});
+  }
+
+  // ---- Gateway event handler ----
+
+  async onGatewayMessage(payload) {
+    const { op, d, s, t } = payload;
+
+    // Keep sequence number current for RESUME and heartbeats.
+    if (s != null) {
+      this.lastSeq = s;
+      this.state.storage.put('last_seq', s).catch(() => {});
+    }
+
+    switch (op) {
+      // HEARTBEAT — server requests an immediate heartbeat.
+      case 1:
+        if (this.ws) this.ws.send(JSON.stringify({ op: 1, d: this.lastSeq ?? null }));
+        break;
+
+      // RECONNECT — server is going down; close and reconnect.
+      case 7:
+        this.ws?.close(1000, 'server requested reconnect');
+        break;
+
+      // INVALID_SESSION — session can't be resumed; optionally clear stored state.
+      case 9:
+        if (!d) {
+          // d === false means not resumable; clear stored session.
+          await Promise.all([
+            this.state.storage.delete('session_id'),
+            this.state.storage.delete('last_seq'),
+          ]).catch(() => {});
+          this.lastSeq = null;
+          this._pendingSession = null;
+          this._pendingSeq     = null;
+        }
+        this.ws?.close(1000, 'invalid session');
+        break;
+
+      // HELLO — first event after connecting; send IDENTIFY or RESUME.
+      case 10: {
+        const interval = d.heartbeat_interval;
+        await this.state.storage.put('heartbeat_interval', interval).catch(() => {});
+
+        const session = this._pendingSession;
+        const seq     = this._pendingSeq ?? this.lastSeq;
+
+        if (session) {
+          // Attempt to resume the previous session to avoid replaying the full READY.
+          this.ws.send(JSON.stringify({
+            op: 6, // RESUME
+            d:  { token: this.env.DISCORD_BOT_TOKEN, session_id: session, seq: seq ?? 0 },
+          }));
+        } else {
+          // Fresh identify with the required intents.
+          this.ws.send(JSON.stringify({
+            op: 2, // IDENTIFY
+            d:  {
+              token:   this.env.DISCORD_BOT_TOKEN,
+              intents: 33281, // GUILDS(1) | GUILD_MESSAGES(512) | MESSAGE_CONTENT(32768)
+              properties: { os: 'linux', browser: 'kintsugi', device: 'kintsugi' },
+            },
+          }));
+        }
+
+        // Schedule heartbeat with random jitter so multiple DOs don't sync up.
+        const jitter = Math.floor(Math.random() * interval);
+        await this.state.storage.setAlarm(Date.now() + jitter).catch(() => {});
+        break;
+      }
+
+      // HEARTBEAT_ACK — connection is healthy; nothing extra needed.
+      case 11:
+        break;
+
+      // DISPATCH — actual events from Discord.
+      case 0:
+        if (t === 'READY') {
+          await this.state.storage.put('session_id', d.session_id).catch(() => {});
+          this._pendingSession = d.session_id;
+          kLog(this.env, 'info', 'gateway_ready', { username: d.user?.username }).catch(() => {});
+        } else if (t === 'RESUMED') {
+          kLog(this.env, 'info', 'gateway_resumed').catch(() => {});
+        } else if (t === 'MESSAGE_CREATE') {
+          // Handle @mention asynchronously so we don't block the event loop.
+          this.handleMessageCreate(d).catch((err) => {
+            kLog(this.env, 'error', 'gateway_message_create_error', { error: err?.message }).catch(() => {});
+          });
+        }
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  // ---- Alarm handler (heartbeat + reconnect) ----
+
+  async alarm() {
+    if (this.ws) {
+      // Connection is alive — send heartbeat and reschedule.
+      this.ws.send(JSON.stringify({ op: 1, d: this.lastSeq ?? null }));
+      const interval = await this.state.storage.get('heartbeat_interval').catch(() => null) ?? 41_250;
+      await this.state.storage.setAlarm(Date.now() + interval).catch(() => {});
+    } else {
+      // Connection was lost (DO eviction or network error) — reconnect.
+      kLog(this.env, 'info', 'gateway_alarm_reconnecting').catch(() => {});
+      try {
+        await this.connect();
+      } catch (err) {
+        kLog(this.env, 'error', 'gateway_alarm_reconnect_failed', { error: err?.message }).catch(() => {});
+        // Retry in 30 s if connect() didn't already schedule an alarm.
+        await this.state.storage.setAlarm(Date.now() + 30_000).catch(() => {});
+      }
+    }
+  }
+
+  // ---- @mention handler ----
+
+  /**
+   * Called when a MESSAGE_CREATE event arrives.  Detects bot @mentions and
+   * responds with an AI-generated reply visible to everyone in the channel.
+   *
+   * @param {object} message - Discord MESSAGE_CREATE payload.
+   */
+  async handleMessageCreate(message) {
+    // Ignore messages from bots (including ourselves) and messages with no author.
+    if (!message.author || message.author.bot) return;
+
+    // BOT_APP_ID is required to detect mentions.
+    if (!this._botMentionRe) return;
+
+    // Check the message content and the mentions array for our bot ID.
+    const mentionedInContent = this._botMentionRe.test(message.content ?? '');
+    const mentionedInArray   = (message.mentions ?? []).some(u => u.id === this.env.BOT_APP_ID);
+    if (!mentionedInContent && !mentionedInArray) return;
+
+    // Strip all @mentions from the question text.
+    const question  = (message.content ?? '').replace(/<@!?\d+>/g, '').trim();
+    const channelId = message.channel_id;
+    const messageId = message.id;
+    const username  = message.author.username ?? 'unknown';
+
+    kLog(this.env, 'info', 'gateway_mention_received', {
+      channelId, messageId, username, question: question.slice(0, 100),
+    }).catch(() => {});
+
+    // Generate reply with Workers AI, optionally augmented by live sheet data.
+    let answer;
+    try {
+      if (!this.env.AI) throw new Error('Workers AI binding (env.AI) is not configured');
+
+      const sheetContext  = await buildSheetDataContext(question).catch(() => null);
+      const systemContent = sheetContext
+        ? `${ASSISTANT_MANAGER_SYSTEM_PROMPT}\n\nLive sheet data:\n${sheetContext}`
+        : ASSISTANT_MANAGER_SYSTEM_PROMPT;
+
+      const result = await this.env.AI.run('@cf/meta/llama-3-8b-instruct', {
+        messages: [
+          { role: 'system', content: systemContent },
+          { role: 'user',   content: question || '(no question — just mentioned me)' },
+        ],
+        max_tokens: 300,
+      });
+      answer = (result?.response ?? '').trim() ||
+        "Right, I've gone completely blank. Brilliant. Try again later, mate.";
+    } catch (err) {
+      answer = `Blimey, something's gone pear-shaped. \`${err?.message ?? 'Unknown error'}\``;
+      kLog(this.env, 'error', 'gateway_mention_ai_error', { error: err?.message }).catch(() => {});
+    }
+
+    // Post the reply as a Discord message reply (threaded, visible to all).
+    const posted = await botPost(channelId, this.env.DISCORD_BOT_TOKEN, {
+      content:           answer.slice(0, 2000),
+      message_reference: { message_id: messageId, fail_if_not_exists: false },
+    });
+
+    kLog(this.env, posted ? 'info' : 'warn', 'gateway_mention_reply', {
+      channelId, messageId, posted: !!posted,
+    }).catch(() => {});
+  }
+}
+
 // ===== Worker entry-point (unified: static assets + Discord bot) =====
 
 export default {
@@ -2371,16 +2899,35 @@ export default {
       return handleViewLogs(request, env);
     }
 
-    // 2b. Legacy gateway-start endpoint — the DiscordGateway Durable Object was
-    //     removed to stay on the free Cloudflare plan.  @mention responses are
-    //     now handled via the /ask slash command.  Return 410 Gone so any stale
-    //     callers (old deploy scripts, bookmarks) get a clear explanation.
-    if (url.pathname === '/api/gateway-start') {
-      return new Response(
-        'The DiscordGateway Durable Object has been removed. ' +
-        'Use the /ask slash command for AI responses instead.',
-        { status: 410 }
-      );
+    // 2b. Gateway management endpoints — require TRIGGER_TOKEN authentication.
+    //     GET /api/gateway-start  → connect/reconnect the DiscordGateway DO.
+    //     GET /api/gateway-status → check whether the gateway is connected.
+    if (url.pathname === '/api/gateway-start' || url.pathname === '/api/gateway-status') {
+      const auth     = request.headers.get('Authorization') ?? '';
+      const expected = `Bearer ${env.TRIGGER_TOKEN || FALLBACK_TRIGGER_TOKEN}`;
+      if (auth !== expected) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (!env.DISCORD_GATEWAY) {
+        return new Response(JSON.stringify({
+          error: 'DISCORD_GATEWAY Durable Object is not bound. ' +
+                 'Ensure wrangler.jsonc has the durable_objects binding and the worker has been deployed.',
+        }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+      }
+      // Route to the single named DO instance ('gateway') that persists forever.
+      const doId   = env.DISCORD_GATEWAY.idFromName('gateway');
+      const doStub = env.DISCORD_GATEWAY.get(doId);
+      const doPath = url.pathname === '/api/gateway-start' ? '/start' : '/status';
+      // Forward using an internal URL the DO can parse.
+      const doRes  = await doStub.fetch(new Request(`https://do-internal${doPath}`));
+      const data   = await doRes.json();
+      return new Response(JSON.stringify(data), {
+        status:  doRes.status,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     // 3. Discord interactions — Discord always POSTs with Ed25519 signature headers.
@@ -2446,6 +2993,21 @@ export default {
       ctx.waitUntil(kLog(env, 'warn', 'scheduled_no_kv',
         { detail: 'env.KV not bound — KV log and analytics message editing disabled' }
       ));
+    }
+
+    // Keep the DiscordGateway DO alive / reconnect it if it dropped.
+    // This is a belt-and-suspenders backup; the DO's own alarm handles reconnection
+    // automatically.  ctx.waitUntil ensures this runs even after fetch() returns.
+    if (env.DISCORD_GATEWAY && env.BOT_APP_ID) {
+      ctx.waitUntil((async () => {
+        try {
+          const doId   = env.DISCORD_GATEWAY.idFromName('gateway');
+          const doStub = env.DISCORD_GATEWAY.get(doId);
+          await doStub.fetch(new Request('https://do-internal/start'));
+        } catch (err) {
+          await kLog(env, 'warn', 'gateway_cron_ping_failed', { error: err?.message });
+        }
+      })());
     }
 
     const missing = validateConfig(env);
