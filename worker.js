@@ -11,7 +11,7 @@
 //   POST /api/notify-payouts → Notify Discord that payouts were processed
 //   POST /api/trigger-weekly → Trigger the cron manually from the dashboard
 //   POST (Discord signature) → Discord interactions (buttons, menus, commands)
-//   GET  /api/gateway-start  → Connect/restart the DiscordGateway DO
+//   POST /api/gateway-start  → Connect/restart the DiscordGateway DO
 //   GET  /api/gateway-status → Check whether the gateway DO is connected
 //   GET /bot-config.js     → Auto-generated bot config (always dynamic, never 404)
 //   Everything else        → Static web-dashboard assets (with CSP headers)
@@ -2607,6 +2607,7 @@ export class DiscordGateway {
         headers: { 'Content-Type': 'application/json' },
       });
     } catch (err) {
+      await kLog(this.env, 'error', 'gateway_start_failed', { error: err.message }).catch(() => {});
       return new Response(JSON.stringify({ status: 'error', error: err.message }), {
         status: 500, headers: { 'Content-Type': 'application/json' },
       });
@@ -2655,7 +2656,9 @@ export class DiscordGateway {
       headers: { Authorization: `Bot ${this.env.DISCORD_BOT_TOKEN}` },
     });
     if (!gwApiRes.ok) {
-      throw new Error(`Discord /gateway/bot returned HTTP ${gwApiRes.status}`);
+      const reason = `Discord /gateway/bot returned HTTP ${gwApiRes.status}`;
+      await kLog(this.env, 'error', 'gateway_connect_failed', { reason }).catch(() => {});
+      throw new Error(reason);
     }
     const { url: gwUrl } = await gwApiRes.json();
 
@@ -2664,7 +2667,9 @@ export class DiscordGateway {
       headers: { Upgrade: 'websocket' },
     });
     if (upgradeRes.status !== 101) {
-      throw new Error(`WebSocket upgrade failed: HTTP ${upgradeRes.status}`);
+      const reason = `WebSocket upgrade failed: HTTP ${upgradeRes.status}`;
+      await kLog(this.env, 'error', 'gateway_connect_failed', { reason }).catch(() => {});
+      throw new Error(reason);
     }
 
     const ws = upgradeRes.webSocket;
@@ -2917,8 +2922,8 @@ export default {
     }
 
     // 2b. Gateway management endpoints — require TRIGGER_TOKEN authentication.
-    //     GET /api/gateway-start  → connect/reconnect the DiscordGateway DO.
-    //     GET /api/gateway-status → check whether the gateway is connected.
+    //     POST /api/gateway-start → connect/reconnect the DiscordGateway DO.
+    //     GET  /api/gateway-status → check whether the gateway is connected.
     if (url.pathname === '/api/gateway-start' || url.pathname === '/api/gateway-status') {
       const token    = getTriggerToken(env);
       const auth     = request.headers.get('Authorization') ?? '';
@@ -2926,14 +2931,23 @@ export default {
       if (!expected || auth !== expected) {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), {
           status: 401,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
         });
       }
       if (!env.DISCORD_GATEWAY) {
         return new Response(JSON.stringify({
           error: 'DISCORD_GATEWAY Durable Object is not bound. ' +
                  'Ensure wrangler.jsonc has the durable_objects binding and the worker has been deployed.',
-        }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+        }), { status: 503, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } });
+      }
+      // Pre-flight: DISCORD_BOT_TOKEN must be set for the gateway to connect.
+      // Check here (in the main worker) to surface a clear 503 rather than a
+      // cryptic 500 from inside the Durable Object.
+      if (!env.DISCORD_BOT_TOKEN) {
+        return new Response(JSON.stringify({
+          error: 'DISCORD_BOT_TOKEN secret is not configured on this Worker. ' +
+                 'Set it via GitHub Secrets (DISCORD_BOT_TOKEN) and redeploy.',
+        }), { status: 503, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } });
       }
       // Route to the single named DO instance ('gateway') that persists forever.
       const doId   = env.DISCORD_GATEWAY.idFromName('gateway');
@@ -2944,7 +2958,7 @@ export default {
       const data   = await doRes.json();
       return new Response(JSON.stringify(data), {
         status:  doRes.status,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       });
     }
 
