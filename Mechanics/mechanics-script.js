@@ -1,9 +1,9 @@
-// ===== Config (using KINTSUGI_SHEET_ID from kintsugi-core.js) =====
-const MECH_JOBS_SHEET = "Form responses 1";
-const MECH_STATE_ID_SHEET = "State ID's";
-const MECH_PAY_PER_REPAIR = 700;
-const MECH_ENGINE_REIMBURSEMENT = 12000;
-const MECH_ENGINE_BONUS_LSPD = 1500;
+// ===== Config (values sourced from constants.js) =====
+const MECH_JOBS_SHEET         = KINTSUGI_CONFIG.SHEETS.JOBS;
+const MECH_STATE_ID_SHEET     = KINTSUGI_CONFIG.SHEETS.STATE_IDS;
+const MECH_PAY_PER_REPAIR     = PAYMENT_RATES.PAY_PER_REPAIR;
+const MECH_ENGINE_REIMBURSEMENT = PAYMENT_RATES.ENGINE_REIMBURSEMENT;
+const MECH_ENGINE_BONUS_LSPD  = PAYMENT_RATES.ENGINE_BONUS_LSPD;
 
 // ===== State =====
 let mechJobs = [];      // raw parsed jobs

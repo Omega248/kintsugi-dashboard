@@ -22,6 +22,37 @@ const CORS_HEADERS = {
   'Access-Control-Max-Age':       '86400',
 };
 
+// Content-Security-Policy applied to all HTML responses.
+// Allows scripts from self and the Chart.js / SheetJS CDN used by the
+// Analytics page, inline styles (needed for dynamic style attributes in
+// generated HTML), and outbound fetches to Google Sheets and any *.workers.dev
+// bot URL configured by the user.
+const CSP_HEADER =
+  "default-src 'self'; " +
+  "script-src 'self' https://cdnjs.cloudflare.com; " +
+  "style-src 'self' 'unsafe-inline'; " +
+  "connect-src 'self' https://docs.google.com https://sheets.googleapis.com https://*.workers.dev; " +
+  "img-src 'self' data:; " +
+  "font-src 'self'; " +
+  "object-src 'none'; " +
+  "frame-ancestors 'none';";
+
+/**
+ * Adds the Content-Security-Policy header to an HTML response, leaving all
+ * other response properties (status, body, existing headers) unchanged.
+ */
+function addCspToHtmlResponse(response) {
+  const contentType = response.headers.get('Content-Type') || '';
+  if (!contentType.includes('text/html')) return response;
+  const newHeaders = new Headers(response.headers);
+  newHeaders.set('Content-Security-Policy', CSP_HEADER);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: newHeaders,
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -73,6 +104,7 @@ export default {
       );
     }
 
-    return env.ASSETS.fetch(request);
+    const assetResponse = await env.ASSETS.fetch(request);
+    return addCspToHtmlResponse(assetResponse);
   },
 };

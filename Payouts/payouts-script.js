@@ -1,13 +1,13 @@
-// ===== Config (using KINTSUGI_SHEET_ID from kintsugi-core.js) =====
-const PAYOUTS_SHEET = "Form responses 1";
-const STATE_ID_SHEET = "State ID's";
+// ===== Config (values sourced from constants.js) =====
+const PAYOUTS_SHEET           = KINTSUGI_CONFIG.SHEETS.JOBS;
+const STATE_ID_SHEET          = KINTSUGI_CONFIG.SHEETS.STATE_IDS;
 
-const PAY_PER_REPAIR = 700;
-const REPAIR_RATE = 2500;              // per across, customer billing
-const ENGINE_REPLACEMENT_RATE = 15000; // per engine replacement, customer billing (LSPD)
-const ENGINE_REPLACEMENT_RATE_BCSO = 12100; // per engine replacement, customer billing (BCSO)
-const ENGINE_REIMBURSEMENT = 12000; // reimbursement to mechanic for buying engine
-const ENGINE_BONUS_LSPD = 1500; // 50% of 3k profit on LSPD engine replacements (mechanic share)
+const PAY_PER_REPAIR          = PAYMENT_RATES.PAY_PER_REPAIR;
+const REPAIR_RATE             = PAYMENT_RATES.REPAIR_RATE;
+const ENGINE_REPLACEMENT_RATE = PAYMENT_RATES.ENGINE_REPLACEMENT_RATE;
+const ENGINE_REPLACEMENT_RATE_BCSO = PAYMENT_RATES.ENGINE_REPLACEMENT_RATE_BCSO;
+const ENGINE_REIMBURSEMENT    = PAYMENT_RATES.ENGINE_REIMBURSEMENT;
+const ENGINE_BONUS_LSPD       = PAYMENT_RATES.ENGINE_BONUS_LSPD;
 
 // ===== State =====
 let weeklyAgg = [];   // mechanic-week aggregates
@@ -390,7 +390,10 @@ function populateFilters() {
     Array.from(mechanics)
       .sort()
       .forEach((m) => {
-        mechSel.innerHTML += `<option value="${m}">${m}</option>`;
+        const opt = document.createElement("option");
+        opt.value = m;
+        opt.textContent = m;
+        mechSel.appendChild(opt);
       });
   }
 
@@ -399,7 +402,10 @@ function populateFilters() {
     Array.from(departments)
       .sort()
       .forEach((d) => {
-        deptSel.innerHTML += `<option value="${d}">${d}</option>`;
+        const opt = document.createElement("option");
+        opt.value = d;
+        opt.textContent = d;
+        deptSel.appendChild(opt);
       });
   }
 
@@ -409,7 +415,10 @@ function populateFilters() {
       .sort((a, b) => new Date(b) - new Date(a)) // newest first
       .forEach((iso) => {
         const d = new Date(iso);
-        weekSel.innerHTML += `<option value="${iso}">${fmtDate(d)}</option>`;
+        const opt = document.createElement("option");
+        opt.value = iso;
+        opt.textContent = fmtDate(d);
+        weekSel.appendChild(opt);
       });
   }
 
@@ -421,7 +430,10 @@ function populateFilters() {
       )
       .forEach((key) => {
         const d = monthKeyToDate.get(key);
-        monthSel.innerHTML += `<option value="${key}">${fmtDate(d)}</option>`;
+        const opt = document.createElement("option");
+        opt.value = key;
+        opt.textContent = fmtDate(d);
+        monthSel.appendChild(opt);
       });
   }
 }
