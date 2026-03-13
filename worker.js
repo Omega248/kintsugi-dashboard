@@ -30,8 +30,8 @@
 //   RIPTIDE_USER_ID       — Numeric Discord user ID to @mention on payday
 //   TRIGGER_TOKEN         — Bearer token for the dashboard "Notify Discord" and
 //                           "Trigger Weekly" buttons, and for /api/gateway-start.
-//                           Falls back to the hardcoded FALLBACK_TRIGGER_TOKEN
-//                           constant if not set.
+//                           Must be set as a Worker secret; protected endpoints
+//                           return 401 when this is not configured.
 //   BOT_APP_ID            — Discord Application ID (same value as DISCORD_APP_ID).
 //                           Required for real-time @mention detection via the
 //                           DiscordGateway Durable Object.  Pushed by CI from the
@@ -63,11 +63,20 @@ const SHEET_ID        = '1EJxx9BAUyBgj9XImCXQ5_3nr_o5BXyLZ9SSkaww71Ks';
 const JOBS_SHEET      = 'Form responses 1';
 const STATE_IDS_SHEET = "State ID's";
 
-// ===== Fallback trigger token =====
-// Used when the TRIGGER_TOKEN secret is not configured in the Worker environment.
-// This allows the dashboard "Notify Discord" and "Trigger Weekly" buttons to work
-// out of the box without needing to set up a GitHub secret.
-const FALLBACK_TRIGGER_TOKEN = 'HnoKPfn9ZIYXD79c8PRos4cMphPKNHf5bfCbsjIS';
+// ===== Trigger token helper =====
+/**
+ * Returns the TRIGGER_TOKEN from the Worker environment, or null when the
+ * secret is not configured.  Protected endpoints return 401 when this is null.
+ *
+ * DISCORD_BOT_TOKEN is a separate secret used only for Discord API calls
+ * server-side; it is never included here or exposed to the browser.
+ *
+ * @param {object} env - Cloudflare Worker environment bindings.
+ * @returns {string|null} The TRIGGER_TOKEN secret value, or null if not set.
+ */
+function getTriggerToken(env) {
+  return env.TRIGGER_TOKEN ?? null;
+}
 
 // ===== Pay rates (mirrors constants.js) =====
 const PAY_PER_REPAIR        = 700;
@@ -841,9 +850,10 @@ async function kLog(env, level, event, details = {}) {
  * Protected by the same TRIGGER_TOKEN as the other dashboard API endpoints.
  */
 async function handleViewLogs(request, env) {
+  const token    = getTriggerToken(env);
   const auth     = request.headers.get('Authorization') ?? '';
-  const expected = `Bearer ${env.TRIGGER_TOKEN || FALLBACK_TRIGGER_TOKEN}`;
-  if (auth !== expected) {
+  const expected = token ? `Bearer ${token}` : null;
+  if (!expected || auth !== expected) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
@@ -2247,13 +2257,12 @@ function apiJson(data, status = 200) {
  * First-run safe: posts a fresh message every time — no KV state required.
  */
 async function handleNotifyPayouts(request, env, ctx) {
-  // Use the configured secret or fall back to the hardcoded token
-  const expectedToken = env.TRIGGER_TOKEN || FALLBACK_TRIGGER_TOKEN;
+  const expectedToken = getTriggerToken(env);
 
   // Validate bearer token
   const authHeader = request.headers.get('Authorization') || '';
   const provided   = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-  if (!provided || provided !== expectedToken) {
+  if (!expectedToken || !provided || provided !== expectedToken) {
     return apiJson({ ok: false, error: 'Invalid or missing token.' }, 401);
   }
 
@@ -2325,12 +2334,11 @@ async function handleNotifyPayouts(request, env, ctx) {
  * Useful for immediately populating channels after first deploy or for testing.
  */
 async function handleTriggerWeekly(request, env, ctx) {
-  // Use the configured secret or fall back to the hardcoded token
-  const expectedToken = env.TRIGGER_TOKEN || FALLBACK_TRIGGER_TOKEN;
+  const expectedToken = getTriggerToken(env);
 
   const authHeader = request.headers.get('Authorization') || '';
   const provided   = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-  if (!provided || provided !== expectedToken) {
+  if (!expectedToken || !provided || provided !== expectedToken) {
     return apiJson({ ok: false, error: 'Invalid or missing token.' }, 401);
   }
 
@@ -2627,6 +2635,15 @@ export class DiscordGateway {
    * Stores the connection in this.ws; registers message/close/error handlers.
    */
   async connect() {
+    // DISCORD_BOT_TOKEN is a required secret — fail fast with a clear log entry
+    // if it is not configured.  Never include the token value in log output.
+    if (!this.env.DISCORD_BOT_TOKEN) {
+      await kLog(this.env, 'error', 'gateway_connect_failed', {
+        reason: 'DISCORD_BOT_TOKEN secret is not configured on the Worker',
+      }).catch(() => {});
+      throw new Error('DISCORD_BOT_TOKEN is not configured — set it as a Worker secret');
+    }
+
     // Retrieve any existing session so we can RESUME instead of re-IDENTIFY.
     const [storedSession, storedSeq] = await Promise.all([
       this.state.storage.get('session_id').catch(() => null),
@@ -2903,9 +2920,10 @@ export default {
     //     GET /api/gateway-start  → connect/reconnect the DiscordGateway DO.
     //     GET /api/gateway-status → check whether the gateway is connected.
     if (url.pathname === '/api/gateway-start' || url.pathname === '/api/gateway-status') {
+      const token    = getTriggerToken(env);
       const auth     = request.headers.get('Authorization') ?? '';
-      const expected = `Bearer ${env.TRIGGER_TOKEN || FALLBACK_TRIGGER_TOKEN}`;
-      if (auth !== expected) {
+      const expected = token ? `Bearer ${token}` : null;
+      if (!expected || auth !== expected) {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), {
           status: 401,
           headers: { 'Content-Type': 'application/json' },
@@ -2942,18 +2960,26 @@ export default {
     }
 
     // 4. bot-config.js — generated by GitHub Actions at deploy time; falls back
-    //    to safe defaults so the dashboard functions before secrets are configured.
+    //    to a safe runtime-generated config so the dashboard can reach the same
+    //    origin without any hardcoded URLs or tokens in source code.
     if (url.pathname === '/bot-config.js') {
       if (env.ASSETS) {
         const assetResponse = await env.ASSETS.fetch(request);
         if (assetResponse.status !== 404) return assetResponse;
       }
+      // Derive the worker's own origin from the live request so no URL is hardcoded.
+      // TRIGGER_TOKEN comes from the Cloudflare secret (set via GitHub Actions deploy);
+      // it is null when the secret is not yet configured.
+      // DISCORD_BOT_TOKEN is a separate secret used only server-side and is never
+      // included here or anywhere else that is browser-accessible.
+      const selfOrigin    = `${url.protocol}//${url.host}`;
+      const triggerToken  = getTriggerToken(env);
       const defaultConfig = {
-        url:   'https://kintsugi-discord-bot.reecestangoe0824.workers.dev',
-        token: FALLBACK_TRIGGER_TOKEN,
+        url:   selfOrigin,
+        token: triggerToken,
       };
       return new Response(
-        '// Auto-generated fallback (deploy via GitHub Actions to inject real secrets).\n' +
+        '// Auto-generated at request time — deploy via GitHub Actions to bake in a static version.\n' +
         'window.KINTSUGI_BOT_CONFIG = ' + JSON.stringify(defaultConfig) + ';\n',
         { headers: { 'Content-Type': 'application/javascript' } }
       );
