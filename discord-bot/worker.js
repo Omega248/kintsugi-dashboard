@@ -63,18 +63,6 @@ const InteractionResponseType = {
   UPDATE_MESSAGE: 7,          // Immediately update the component's message (no follow-up needed)
 };
 
-// KV lock TTL — max expected invoice generation time in seconds.
-const INVOICE_INFLIGHT_TTL_S = 90;
-
-// Department name must be 2–10 ASCII letters (e.g. "BCSO", "LSPD").
-// Used in two places: step-1 filtering and step-3 input validation.
-const DEPT_NAME_PATTERN = /^[A-Za-z]{2,10}$/;
-
-// Max chars for copy-pasteable text block inside an embed description.
-// Discord embed descriptions cap at 4096 chars; leave room for code-block
-// markers, a truncation notice, and any prefix text.
-const COPY_TEXT_LIMIT = 3800;
-
 // ===== Utility helpers =====
 
 /** Convert a hex string to a Uint8Array. */
@@ -115,28 +103,6 @@ function jsonResponse(data, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json' },
   });
-}
-
-/**
- * Acquire an exclusive KV lock for an invoice generation job.
- * Returns true if the lock was obtained (proceed), false if already in progress.
- * Silently allows the job when KV is unavailable.
- */
-async function acquireInvoiceLock(kv, key) {
-  if (!kv) return true;
-  try {
-    if (await kv.get(key)) return false;
-    await kv.put(key, '1', { expirationTtl: INVOICE_INFLIGHT_TTL_S });
-    return true;
-  } catch {
-    return true; // KV errors must not block invoice generation
-  }
-}
-
-/** Release the KV invoice lock (called after the job completes or errors). */
-async function releaseInvoiceLock(kv, key) {
-  if (!kv) return;
-  await kv.delete(key).catch(() => {});
 }
 
 // ===== Google Sheets CSV fetch + parse =====
@@ -290,23 +256,10 @@ function filterByMonth(jobs, year, month) {
 // ===== Invoice helpers =====
 
 /**
- * Build a copy-pasteable tab-separated table for one department's monthly invoice.
- *
- * The result is wrapped in a Discord code block (``` … ```) so users can
- * select-all and paste it directly into Google Sheets, Excel, or any document.
- * Tabs act as column separators when pasted into a spreadsheet.
- *
- * If the data would exceed COPY_TEXT_LIMIT characters the table is trimmed and
- * a truncation notice is appended; totals always reflect all jobs.
- *
- * @param {string} dept       - Department name (e.g. "BCSO").
- * @param {string} monthLabel - Human-readable month label.
- * @param {Array}  jobs       - Filtered job rows for this dept + month.
- * @returns {{ text: string, truncated: boolean }}
+ * Build a CSV string for the invoice, one row per job.
  */
-function buildInvoiceCopyText(dept, monthLabel, jobs) {
-  const header = 'Date\tMechanic\tOfficer\tLicense Plate\tRepairs\tEngine Replacements\tJob Total ($)';
-
+function buildInvoiceCsv(jobs) {
+  const header = 'Date,Mechanic,Officer,License Plate,Repairs,Engine Replacements,Job Total ($)';
   const rows = jobs.map(j => {
     const jobTotal = (j.across || 0) * PAY_PER_REPAIR + (j.engineReplacements || 0) * ENGINE_REIMBURSEMENT;
     return [
@@ -317,83 +270,31 @@ function buildInvoiceCopyText(dept, monthLabel, jobs) {
       j.across || 0,
       j.engineReplacements || 0,
       jobTotal,
-    ].join('\t');
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
   });
-
-  let totalLine = '';
-  if (jobs.length > 0) {
-    const totalRepairs = jobs.reduce((s, j) => s + (j.across || 0), 0);
-    const totalEngines = jobs.reduce((s, j) => s + (j.engineReplacements || 0), 0);
-    const grandTotal   = totalRepairs * PAY_PER_REPAIR + totalEngines * ENGINE_REIMBURSEMENT;
-    totalLine = ['', 'TOTALS', '', '', totalRepairs, totalEngines, grandTotal].join('\t');
-  }
-
-  // Fit as many job rows as possible within the character limit.
-  // The overhead constant (50) covers: two newlines + code-block markers (8 chars)
-  // + a worst-case truncation notice (~40 chars).
-  const OVERHEAD = 50;
-  let body = header;
-  let visibleCount = 0;
-  for (const row of rows) {
-    const needed = 1 + row.length + (totalLine ? 1 + totalLine.length : 0) + OVERHEAD;
-    if (body.length + needed > COPY_TEXT_LIMIT) break;
-    body += '\n' + row;
-    visibleCount++;
-  }
-
-  const truncated = visibleCount < rows.length;
-  if (truncated) {
-    const hidden = rows.length - visibleCount;
-    body += `\n… (${hidden} more job${hidden !== 1 ? 's' : ''} — totals cover all ${jobs.length})`;
-  } else if (totalLine) {
-    body += '\n' + totalLine;
-  }
-
-  return { text: '```\n' + body + '\n```', truncated };
+  return [header, ...rows].join('\n');
 }
 
 /**
  * Build a Discord embed summarising the monthly invoice for one department.
- * The embed description contains a copy-pasteable tab-separated table so
- * users can paste the full job list directly into a spreadsheet or document.
  */
-function buildDeptInvoiceEmbed(dept, monthLabel, jobs) {
+function buildInvoiceEmbed(dept, monthLabel, jobs) {
   const totalRepairs = jobs.reduce((s, j) => s + (j.across || 0), 0);
   const totalEngines = jobs.reduce((s, j) => s + (j.engineReplacements || 0), 0);
-  const repairCost   = totalRepairs * PAY_PER_REPAIR;
-  const engineCost   = totalEngines * ENGINE_REIMBURSEMENT;
-  const grandTotal   = repairCost + engineCost;
-
-  const deptUpper = dept.toUpperCase();
-  const color = deptUpper === 'BCSO' ? 0xd4a017 : deptUpper === 'LSPD' ? 0x1e90ff : 0x22c55e;
-
-  const fields = [
-    { name: '📅 Month Ending',        value: monthLabel,            inline: true  },
-    { name: '🧾 Total Jobs',          value: String(jobs.length),   inline: true  },
-    { name: '🔧 Total Repairs',       value: String(totalRepairs),  inline: true  },
-    { name: '🔩 Engine Replacements', value: String(totalEngines),  inline: true  },
-    { name: '💰 Repair Cost',         value: fmtMoney(repairCost),  inline: true  },
-    { name: '⚙️ Engine Cost',         value: fmtMoney(engineCost),  inline: true  },
-    { name: '💵 Total Owed',          value: fmtMoney(grandTotal),  inline: false },
-  ];
-
-  let description;
-  if (jobs.length === 0) {
-    description = `_No jobs recorded for **${dept}** in ${monthLabel}._`;
-  } else {
-    const { text, truncated } = buildInvoiceCopyText(dept, monthLabel, jobs);
-    description = (truncated
-      ? `_Showing first rows — totals above cover all ${jobs.length} jobs._\n\n`
-      : '') + text;
-  }
-
+  const grandTotal   = totalRepairs * PAY_PER_REPAIR + totalEngines * ENGINE_REIMBURSEMENT;
+  const color = dept.toUpperCase() === 'BCSO' ? 0xd4a017 : dept.toUpperCase() === 'LSPD' ? 0x1e90ff : 0x22c55e;
   return {
-    title:       `📋 ${dept} — Monthly Invoice`,
-    description,
+    title:     `📋 ${dept} — Monthly Invoice`,
     color,
-    fields,
-    footer:      { text: 'Kintsugi Motorworks · Invoice' },
-    timestamp:   new Date().toISOString(),
+    fields: [
+      { name: '📅 Month Ending',        value: monthLabel,            inline: true  },
+      { name: '🧾 Total Jobs',          value: String(jobs.length),   inline: true  },
+      { name: '🔧 Total Repairs',       value: String(totalRepairs),  inline: true  },
+      { name: '🔩 Engine Replacements', value: String(totalEngines),  inline: true  },
+      { name: '💵 Total Owed',          value: fmtMoney(grandTotal),  inline: false },
+    ],
+    footer:    { text: 'Kintsugi Motorworks · Invoice' },
+    timestamp: new Date().toISOString(),
   };
 }
 
@@ -1135,21 +1036,10 @@ async function handleWeekSelect(interaction, ctx) {
 }
 
 // ===== Invoice panel handlers =====
-//
-// These three handlers mirror the job-logs flow exactly:
-//   handleStartButton  → handleInvoicePanelButton  (button press → dept select)
-//   handleMechSelect   → handleInvoiceDeptSelect    (dept select → month select)
-//   handleWeekSelect   → handleInvoiceMonthSelect   (month select → invoice embed)
-//
-// Each handler defers immediately (so Discord never times out) and does all
-// work in ctx.waitUntil, then edits the original message with the result.
 
 /**
- * "Generate Monthly Invoice" button pressed on the permanent billing panel.
- *
- * Step 1 of 3: Mirrors handleStartButton exactly.
- * Defers with an ephemeral message, fetches departments from the sheet, and
- * edits the private message with the department select menu.
+ * "Generate Monthly Invoice" button pressed — step 1 of 3.
+ * Defers with an ephemeral message then loads available departments from the sheet.
  */
 async function handleInvoicePanelButton(interaction, env, ctx) {
   const { application_id: appId, token } = interaction;
@@ -1160,15 +1050,15 @@ async function handleInvoicePanelButton(interaction, env, ctx) {
       const allJobs = parseJobsSheet(jobRows);
 
       const depts = [...new Set(
-        allJobs.map(j => j.department).filter(d => d && DEPT_NAME_PATTERN.test(d))
+        allJobs.map(j => j.department).filter(Boolean)
       )].sort((a, b) => a.localeCompare(b));
 
       // Fall back to the two known departments when the sheet lacks a dept column
       const deptList = depts.length > 0 ? depts : ['BCSO', 'LSPD'];
       const options = deptList.map(d => ({
-        label:  d,
-        value:  d,
-        emoji:  { name: d === 'BCSO' ? '🟡' : d === 'LSPD' ? '🔵' : '🏢' },
+        label: d,
+        value: d,
+        emoji: { name: d === 'BCSO' ? '🟡' : d === 'LSPD' ? '🔵' : '🏢' },
       }));
 
       await editOriginalMessage(appId, token, {
@@ -1185,7 +1075,7 @@ async function handleInvoicePanelButton(interaction, env, ctx) {
       });
     } catch (err) {
       await editOriginalMessage(appId, token, {
-        content:    `❌ Failed to load department selector.\n\`${err.message}\``,
+        content:    `❌ Failed to load department list.\n\`${err.message}\``,
         components: [],
       }).catch(() => {});
     }
@@ -1199,41 +1089,29 @@ async function handleInvoicePanelButton(interaction, env, ctx) {
 }
 
 /**
- * Department selected from the billing panel dropdown.
- *
- * Step 2 of 3: Mirrors handleMechSelect exactly.
- * Fetches available month-ending dates for the chosen department and edits
- * the ephemeral message with a month-ending select menu.
+ * Department selected — step 2 of 3.
+ * Loads available billing month-ending dates for the chosen department.
  */
 async function handleInvoiceDeptSelect(interaction, env, ctx) {
   const { application_id: appId, token } = interaction;
-  const dept = interaction.data.values[0]; // 'BCSO' or 'LSPD'
-
-  // Reject unexpected department values immediately (type 7 = no defer needed)
-  if (!dept || !DEPT_NAME_PATTERN.test(dept)) {
-    return jsonResponse({
-      type: InteractionResponseType.UPDATE_MESSAGE,
-      data: { content: '❌ Invalid department value received. Please try again.', components: [] },
-    });
-  }
+  const dept = interaction.data.values[0];
 
   ctx.waitUntil((async () => {
     try {
       const jobRows = await fetchSheet(JOBS_SHEET);
       const allJobs = parseJobsSheet(jobRows);
 
-      // Collect distinct month-ending dates for the chosen department
-      const monthEndMap = new Map(); // "YYYY-MM-DD" -> Date
+      const monthEndMap = new Map();
       for (const j of allJobs) {
-        if (j.monthEnd && new RegExp(dept, 'i').test(j.department)) {
-          const iso = j.monthEnd.toISOString().slice(0, 10);
-          if (!monthEndMap.has(iso)) monthEndMap.set(iso, j.monthEnd);
-        }
+        if (!j.monthEnd) continue;
+        if (j.department && j.department.toLowerCase() !== dept.toLowerCase()) continue;
+        const iso = j.monthEnd.toISOString().slice(0, 10);
+        if (!monthEndMap.has(iso)) monthEndMap.set(iso, j.monthEnd);
       }
 
       if (monthEndMap.size === 0) {
         await editOriginalMessage(appId, token, {
-          content:    `❌ No job data found for **${dept}** in the sheet.`,
+          content:    `❌ No billing data found for **${dept}**. Make sure the sheet has a "Month Ending" column.`,
           components: [],
         });
         return;
@@ -1244,16 +1122,16 @@ async function handleInvoiceDeptSelect(interaction, env, ctx) {
         .sort((a, b) => b[0].localeCompare(a[0]))
         .slice(0, 25);
 
-      const options = entries.map(([iso, date]) => {
-        const label = date.toLocaleDateString('en-US', {
+      const options = entries.map(([iso, date]) => ({
+        label: date.toLocaleDateString('en-US', {
           month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC',
-        });
-        return { label, value: iso };
-      });
+        }),
+        value: iso,
+      }));
 
       // Encode dept in custom_id so the month handler knows which dept was chosen
       await editOriginalMessage(appId, token, {
-        content:    `📋 **${dept} — Step 2 of 3 — Select a month ending:**`,
+        content:    `📋 **${dept} — Step 2 of 3 — Select a billing month:**`,
         components: [{
           type: 1,
           components: [{
@@ -1266,7 +1144,7 @@ async function handleInvoiceDeptSelect(interaction, env, ctx) {
       });
     } catch (err) {
       await editOriginalMessage(appId, token, {
-        content:    `❌ Failed to load job data.\n\`${err.message}\``,
+        content:    `❌ Failed to load billing months.\n\`${err.message}\``,
         components: [],
       }).catch(() => {});
     }
@@ -1276,50 +1154,16 @@ async function handleInvoiceDeptSelect(interaction, env, ctx) {
 }
 
 /**
- * Month ending selected from the billing panel dropdown.
- *
- * Final step: Mirrors handleWeekSelect exactly.
- * Fetches all jobs for the chosen department and month, then edits the
- * ephemeral message with the invoice embed (copy-pasteable tab-separated table).
- * A KV lock prevents duplicate generation for the same user/dept/month.
- *
- * The department is read from the select menu's custom_id
- * (format: `billing_month_select:<dept>`).
+ * Month ending selected — final step.
+ * Generates the invoice embed and CSV file for the selected department and month.
+ * The department is read from the select menu's custom_id (format: `billing_month_select:<dept>`).
  */
 async function handleInvoiceMonthSelect(interaction, env, ctx) {
   const { application_id: appId, token } = interaction;
   const monthValue = interaction.data.values[0]; // e.g. "2026-03-31"
-  const dept = (interaction.data.custom_id || '').split(':')[1] || 'BCSO';
-
-  // Input validation — use UPDATE_MESSAGE (type 7) so Discord shows the error inline
-  // instead of deferring with no follow-up (which causes "This interaction failed").
-  if (!dept || !DEPT_NAME_PATTERN.test(dept)) {
-    return jsonResponse({
-      type: InteractionResponseType.UPDATE_MESSAGE,
-      data: { content: '❌ Invalid department. Please restart the invoice flow.', components: [] },
-    });
-  }
-  if (!monthValue || !/^\d{4}-\d{2}-\d{2}$/.test(monthValue)) {
-    return jsonResponse({
-      type: InteractionResponseType.UPDATE_MESSAGE,
-      data: { content: '❌ Invalid month value. Please restart the invoice flow.', components: [] },
-    });
-  }
-
-  // KV-based in-flight guard — prevents duplicate invoice generation for the same user
-  const userId  = interaction.member?.user?.id || interaction.user?.id || 'anon';
-  const lockKey = `invoice:${userId}:${dept}:${monthValue}`;
+  const dept       = (interaction.data.custom_id || '').split(':')[1] || '';
 
   ctx.waitUntil((async () => {
-    const locked = await acquireInvoiceLock(env?.KV, lockKey);
-    if (!locked) {
-      await editOriginalMessage(appId, token, {
-        content:    `⏳ An invoice for **${dept}** (${monthValue}) is already being generated. Please wait a moment and try again.`,
-        components: [],
-      }).catch(() => {});
-      return;
-    }
-
     try {
       const selectedDate = new Date(monthValue + 'T00:00:00Z');
       const monthLabel   = selectedDate.toLocaleDateString('en-US', {
@@ -1329,23 +1173,28 @@ async function handleInvoiceMonthSelect(interaction, env, ctx) {
       const jobRows  = await fetchSheet(JOBS_SHEET);
       const allJobs  = parseJobsSheet(jobRows);
       const deptJobs = allJobs.filter(j => {
-        if (!new RegExp(dept, 'i').test(j.department)) return false;
         if (!j.monthEnd) return false;
-        return j.monthEnd.toISOString().slice(0, 10) === monthValue;
+        if (j.monthEnd.toISOString().slice(0, 10) !== monthValue) return false;
+        if (dept && j.department && j.department.toLowerCase() !== dept.toLowerCase()) return false;
+        return true;
       });
 
-      await editOriginalMessage(appId, token, {
-        content:    `📋 **${dept} Invoice — Month Ending: ${monthLabel}**\n${deptJobs.length} job${deptJobs.length !== 1 ? 's' : ''} · Select the table below to copy it.`,
-        embeds:     [buildDeptInvoiceEmbed(dept, monthLabel, deptJobs)],
-        components: [],
-      });
+      const safeDept   = dept.replace(/[^a-zA-Z0-9_-]/g, '_') || 'invoice';
+      const csvContent = buildInvoiceCsv(deptJobs);
+      const filename   = `${safeDept}-${monthValue}.csv`;
+
+      await editOriginalMessageWithFile(
+        appId, token,
+        `📋 **${dept} Invoice — Month Ending ${monthLabel}** · ${deptJobs.length} job${deptJobs.length !== 1 ? 's' : ''}`,
+        [buildInvoiceEmbed(dept, monthLabel, deptJobs)],
+        filename,
+        csvContent,
+      );
     } catch (err) {
       await editOriginalMessage(appId, token, {
         content:    `❌ Invoice generation failed.\n\`${err.message}\``,
         components: [],
       }).catch(() => {});
-    } finally {
-      await releaseInvoiceLock(env?.KV, lockKey);
     }
   })());
 

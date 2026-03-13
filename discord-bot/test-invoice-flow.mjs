@@ -223,11 +223,10 @@ await runTest('Step 2 — billing_dept_select (BCSO) → month ending select', a
   console.log(`     ℹ️  Month value for step 3: ${globalThis._testMonthValue}`);
 });
 
-// ── Test 3: Month selected → invoice embed (PATCH) with copy-pasteable table ─
-// The handler now delivers everything in a single plain-JSON PATCH:
-// the embed description contains a copy-pasteable tab-separated code block
-// so users can paste the job list directly into a spreadsheet — no file needed.
-await runTest('Step 3 — billing_month_select:BCSO → invoice embed with copy-pasteable table (no file)', async () => {
+// ── Test 3: Month selected → invoice embed + CSV file attachment ───────
+// The handler delivers everything in a single multipart PATCH:
+// an embed with the invoice summary and a CSV file attachment.
+await runTest('Step 3 — billing_month_select:BCSO → invoice embed + CSV file attachment', async () => {
   const monthValue = globalThis._testMonthValue ?? '2026-03-31';
 
   const { ctx, flush } = makeCtx();
@@ -242,10 +241,10 @@ await runTest('Step 3 — billing_month_select:BCSO → invoice embed with copy-
 
   await flush();
 
-  // Single plain-JSON PATCH — no multipart upload, no follow-up file
-  assert(capturedPatch !== null, 'editOriginalMessage (PATCH) was called with the invoice embed');
-  assert(!capturedPatchIsFile, 'Response is a plain JSON PATCH — NOT a multipart upload');
-  assert(capturedFollowup === null, 'No follow-up file message — everything is in the embed');
+  // Multipart PATCH with CSV file attachment
+  assert(capturedPatch !== null, 'editOriginalMessageWithFile (PATCH) was called');
+  assert(capturedPatchIsFile, 'Response is a multipart upload (CSV file attached)');
+  assert(capturedFollowup === null, 'No follow-up message — everything in the PATCH');
 
   const content = capturedPatch.content || '';
   assert(content.includes('BCSO'), 'Invoice content references "BCSO"');
@@ -254,11 +253,10 @@ await runTest('Step 3 — billing_month_select:BCSO → invoice embed with copy-
   const embeds = capturedPatch.embeds ?? [];
   assert(embeds.length > 0, 'At least one embed is included in the response');
 
-  // Embed description must contain a code block with copy-pasteable tab-separated data
-  const description = embeds[0].description ?? '';
-  assert(description.includes('```'), 'Embed description contains a code block for copy-paste');
-  assert(description.includes('Mechanic'), 'Code block includes "Mechanic" column header');
-  assert(description.includes('\t'), 'Code block uses tabs (paste-friendly for spreadsheets)');
+  // Embed must have invoice summary fields (no description needed — CSV has all data)
+  const fields = embeds[0].fields ?? [];
+  assert(fields.length > 0, 'Embed has summary fields');
+  assert(fields.some(f => f.name.includes('Total Owed')), 'Embed has "Total Owed" field');
 
   // Confirm there is NO mechanic-select component in the final response
   const components = capturedPatch.components ?? [];
@@ -383,7 +381,7 @@ await runTest('Backward compat — invoice_dept_select routes to month-ending se
   assert(selects.length > 0, 'A month-ending select is present');
 });
 
-await runTest('Backward compat — invoice_month_select:BCSO routes to invoice generation (embed with copy-paste table)', async () => {
+await runTest('Backward compat — invoice_month_select:BCSO routes to invoice generation (embed + CSV file)', async () => {
   const monthValue = globalThis._testMonthValue ?? '2026-03-31';
   const { ctx, flush } = makeCtx();
   const res  = await worker.fetch(
@@ -397,13 +395,14 @@ await runTest('Backward compat — invoice_month_select:BCSO routes to invoice g
 
   await flush();
 
-  // Single plain-JSON PATCH with embed containing copy-pasteable table; no file follow-up
-  assert(capturedPatch !== null, 'editOriginalMessage (PATCH) was called');
-  assert(!capturedPatchIsFile, 'Primary PATCH is plain JSON (not multipart)');
+  // Multipart PATCH with CSV file attachment
+  assert(capturedPatch !== null, 'editOriginalMessageWithFile (PATCH) was called');
+  assert(capturedPatchIsFile, 'Primary PATCH is multipart (CSV file attached)');
   assert(capturedPatch.content?.includes('BCSO'), 'Invoice content references "BCSO"');
-  assert(capturedFollowup === null, 'No follow-up file — everything in the embed');
-  const desc = (capturedPatch.embeds?.[0]?.description ?? '');
-  assert(desc.includes('```'), 'Embed description contains a code block');
+  assert(capturedFollowup === null, 'No follow-up file — everything in the PATCH');
+  const embeds = capturedPatch.embeds ?? [];
+  assert(embeds.length > 0, 'Embed is included in the response');
+  assert((embeds[0].fields ?? []).some(f => f.name.includes('Total Owed')), 'Embed has "Total Owed" field');
 });
 
 // ── Test: unrecognized component → ephemeral error (NOT "This interaction failed") ────
@@ -501,28 +500,10 @@ await runTest('Unknown interaction type → ephemeral error (type 4), not HTTP 4
 
 // ── Additional reliability tests ───────────────────────────────────────────
 //
-// These tests exercise the new reliability layer added to the invoice handlers:
-//   • fetchSheetWithRetry  — timeout via AbortController, 500 retry, backoff
-//   • acquireInvoiceLock   — KV-based concurrent-run guard
-//   • Input validation     — malformed dept / monthValue rejected early
-//   • Empty result set     — 0-job month produces a valid 0-row invoice
-
-// Shared in-memory KV mock (exposes _store for manual seeding in tests)
-const fakekv = (() => {
-  const store = new Map();
-  return {
-    get:    async (k)    => store.get(k) ?? null,
-    put:    async (k, v) => store.set(k, v),
-    delete: async (k)    => store.delete(k),
-    _store: store,
-  };
-})();
-
-const FAKE_ENV_WITH_KV = {
-  DISCORD_PUBLIC_KEY: '0'.repeat(64),
-  DISCORD_BOT_TOKEN:  'Bot.fake-token-for-testing',
-  KV: fakekv,
-};
+// These tests exercise the invoice handlers' error handling:
+//   • Network failure      — sheet fetch throws → error message shown to user
+//   • Upstream HTTP 500    — sheet returns 500 → error message shown to user
+//   • Empty result set     — 0-job month produces a valid 0-row invoice + CSV
 
 // Helper: override the Google Sheets portion of globalThis.fetch temporarily.
 // Calls the provided `sheetFn(url, opts)` instead of the default mock.
@@ -607,39 +588,8 @@ await runTest('Upstream HTTP 500 → error message shown to user', async () => {
   );
 });
 
-// ── Test: KV in-flight lock prevents concurrent invoice for same user ────────
-await runTest('KV in-flight lock → concurrent generation blocked with user-friendly message', async () => {
-  // Seed the lock that a previous (still-running) request would have set
-  const lockKey = 'invoice:anon:BCSO:2026-03-31';
-  await fakekv.put(lockKey, '1');
-
-  const { ctx, flush } = makeCtx();
-  const res  = await worker.fetch(
-    makeRequest('billing_month_select:BCSO', ['2026-03-31']),
-    FAKE_ENV_WITH_KV,
-    ctx
-  );
-  const data = await res.json();
-
-  assert(data.type === 6, 'Response type is DEFERRED_UPDATE_MESSAGE (6)');
-
-  await flush();
-
-  assert(capturedPatch !== null, 'editOriginalMessage was called');
-  const content = capturedPatch.content || '';
-  assert(
-    content.toLowerCase().includes('already') || content.toLowerCase().includes('in progress'),
-    `Lock message mentions "already" or "in progress" (got: "${content}")`
-  );
-  assert(!(capturedPatch.embeds?.length > 0), 'No invoice embed when locked');
-  assert(!capturedPatchIsFile, 'No CSV attachment when locked');
-
-  // Clean up the seeded lock
-  await fakekv.delete(lockKey);
-});
-
-// ── Test: month with no matching jobs → 0-row invoice (not an error) ────────
-await runTest('Month with 0 matching jobs → valid 0-row invoice (no crash)', async () => {
+// ── Test: month with no matching jobs → 0-row invoice + CSV (not an error) ──
+await runTest('Month with 0 matching jobs → valid 0-row invoice + CSV file (no crash)', async () => {
   // "2026-01-31" has no data in the fake sheet → 0 deptJobs for LSPD
   const { ctx, flush } = makeCtx();
   const res  = await worker.fetch(
@@ -653,121 +603,14 @@ await runTest('Month with 0 matching jobs → valid 0-row invoice (no crash)', a
 
   await flush();
 
-  // Single plain-JSON PATCH — no file, no follow-up
-  assert(capturedPatch !== null, 'editOriginalMessage (PATCH) was called');
-  assert(!capturedPatchIsFile, 'Primary PATCH is plain JSON (not multipart) even for 0-job month');
+  // Multipart PATCH with CSV file — still delivered even for 0-job months
+  assert(capturedPatch !== null, 'editOriginalMessageWithFile (PATCH) was called');
+  assert(capturedPatchIsFile, 'Primary PATCH is multipart (CSV attached) even for 0-job month');
   assert(capturedFollowup === null, 'No follow-up file for 0-job month');
   const embeds = capturedPatch.embeds ?? [];
   assert(embeds.length > 0, 'At least one embed in the 0-job invoice');
-  const description = (embeds[0].description ?? '').toLowerCase();
-  assert(
-    description.includes('no jobs') || description.includes('_no jobs'),
-    `Embed description notes no jobs recorded (got: "${embeds[0].description}")`
-  );
-});
-
-// ── Test: INVOICE_DEBUG=true → does not crash and invoice still delivered ────
-await runTest('INVOICE_DEBUG=true → invoice delivered normally (no crash from debug mode)', async () => {
-  const debugEnv = { ...FAKE_ENV, INVOICE_DEBUG: 'true' };
-  const { ctx, flush } = makeCtx();
-  const monthValue = '2026-03-31';
-  const res  = await worker.fetch(
-    makeRequest('billing_month_select:BCSO', [monthValue]),
-    debugEnv,
-    ctx
-  );
-  const data = await res.json();
-
-  assert(data.type === 6, 'Response type is DEFERRED_UPDATE_MESSAGE (6)');
-
-  await flush();
-
-  // Plain JSON PATCH with embed; no file follow-up
-  assert(capturedPatch !== null, 'editOriginalMessage (PATCH) was called in debug mode');
-  assert(!capturedPatchIsFile, 'Primary PATCH is plain JSON in debug mode');
-  assert(capturedPatch.content?.includes('BCSO'), 'Invoice content references BCSO');
-  assert(capturedFollowup === null, 'No follow-up file in debug mode');
-  const desc = (capturedPatch.embeds?.[0]?.description ?? '');
-  assert(desc.includes('```'), 'Embed description contains a code block in debug mode');
-});
-
-// ── Test: invalid dept value in billing_month_select → UPDATE_MESSAGE error (no "This interaction failed") ──
-await runTest('Invalid dept ("INVALID DEPT!" — spaces/special chars) → UPDATE_MESSAGE error, no sheet fetch', async () => {
-  let sheetFetched = false;
-  await withSheetFetch(
-    async () => { sheetFetched = true; return { ok: true, text: async () => '' }; },
-    async () => {
-      const { ctx, flush } = makeCtx();
-      // Inject an invalid dept value (would only be possible with a crafted request)
-      const res  = await worker.fetch(makeRequest('billing_month_select:INVALID DEPT!', ['2026-03-31']), FAKE_ENV, ctx);
-      const data = await res.json();
-
-      // Must respond with UPDATE_MESSAGE (type 7) so Discord immediately shows the error
-      // inline — NOT with DEFERRED_UPDATE_MESSAGE (type 6) which would leave the user
-      // with a stale deferred state and eventually "This interaction failed".
-      assert(data.type === 7, `Response type is UPDATE_MESSAGE (7) — got ${data.type}`);
-      assert(data.data?.content?.includes('❌'), 'Error message starts with ❌');
-      assert((data.data?.components ?? []).length === 0, 'No stale components in error response');
-
-      // NOTE: The custom_id split(':')[1] returns "INVALID DEPT!" — validation rejects it
-      await flush();
-
-      // Validation short-circuits before the sheet is fetched
-      // (DEPT_NAME_PATTERN blocks values with spaces or special chars)
-      assert(!sheetFetched, 'Sheet was NOT fetched when dept validation failed');
-      // No background edit needed — the error was delivered inline via UPDATE_MESSAGE
-      assert(capturedPatch === null, 'No background editOriginalMessage call — error was inline');
-    }
-  );
-});
-
-// ── Test: invalid dept value in billing_dept_select → UPDATE_MESSAGE error (no "This interaction failed") ──
-await runTest('Invalid dept in billing_dept_select → UPDATE_MESSAGE error (not DEFERRED + no follow-up)', async () => {
-  let sheetFetched = false;
-  await withSheetFetch(
-    async () => { sheetFetched = true; return { ok: true, text: async () => '' }; },
-    async () => {
-      const { ctx, flush } = makeCtx();
-      // Crafted request with an invalid dept value in the select menu values
-      const res  = await worker.fetch(makeRequest('billing_dept_select', ['INVALID DEPT!']), FAKE_ENV, ctx);
-      const data = await res.json();
-
-      // Must respond with UPDATE_MESSAGE (type 7) so Discord shows the error inline
-      // instead of deferring with no follow-up (which causes "This interaction failed").
-      assert(data.type === 7, `Response type is UPDATE_MESSAGE (7) — got ${data.type}`);
-      assert(data.data?.content?.includes('❌'), 'Error message starts with ❌');
-      assert((data.data?.components ?? []).length === 0, 'No stale components in error response');
-
-      await flush();
-
-      assert(!sheetFetched, 'Sheet was NOT fetched when dept validation failed');
-      assert(capturedPatch === null, 'No background editOriginalMessage call — error was inline');
-    }
-  );
-});
-
-// ── Test: invalid monthValue in billing_month_select → UPDATE_MESSAGE error (no "This interaction failed") ──
-await runTest('Invalid monthValue in billing_month_select → UPDATE_MESSAGE error (not DEFERRED + no follow-up)', async () => {
-  let sheetFetched = false;
-  await withSheetFetch(
-    async () => { sheetFetched = true; return { ok: true, text: async () => '' }; },
-    async () => {
-      const { ctx, flush } = makeCtx();
-      // Crafted request with an invalid month value (not an ISO date)
-      const res  = await worker.fetch(makeRequest('billing_month_select:BCSO', ['not-a-date']), FAKE_ENV, ctx);
-      const data = await res.json();
-
-      // Must respond with UPDATE_MESSAGE (type 7) so Discord shows the error inline
-      assert(data.type === 7, `Response type is UPDATE_MESSAGE (7) — got ${data.type}`);
-      assert(data.data?.content?.includes('❌'), 'Error message starts with ❌');
-      assert((data.data?.components ?? []).length === 0, 'No stale components in error response');
-
-      await flush();
-
-      assert(!sheetFetched, 'Sheet was NOT fetched when monthValue validation failed');
-      assert(capturedPatch === null, 'No background editOriginalMessage call — error was inline');
-    }
-  );
+  const fields = embeds[0].fields ?? [];
+  assert(fields.some(f => f.name.includes('Total Jobs')), 'Embed has "Total Jobs" field');
 });
 
 // ── Summary ────────────────────────────────────────────────────────────
