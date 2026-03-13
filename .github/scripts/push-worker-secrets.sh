@@ -40,6 +40,9 @@ const keys = [
   'TRIGGER_TOKEN', 'DEBUG_CHANNEL_ID', 'BOT_APP_ID',
 ];
 
+// PUT /secrets — standard script-level secrets endpoint.
+// Fails with error 10215 when the Worker uses Worker Versions and the latest
+// uploaded version is not yet the active/deployed version.
 function putSecret(name, value) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({ name, text: value, type: 'secret_text' });
@@ -59,7 +62,10 @@ function putSecret(name, value) {
         try {
           const parsed = JSON.parse(data);
           if (parsed.success) resolve(parsed);
-          else reject(new Error(`API error for ${name}: ${JSON.stringify(parsed.errors)}`));
+          else reject(Object.assign(
+            new Error(`API error for ${name}: ${JSON.stringify(parsed.errors)}`),
+            { errors: parsed.errors || [] },
+          ));
         } catch (e) {
           reject(new Error(`Failed to parse response for ${name}: ${data}`));
         }
@@ -71,17 +77,94 @@ function putSecret(name, value) {
   });
 }
 
+// PATCH /settings — versions-compatible secrets endpoint.
+// Works even when Worker Versions is enabled and the latest version is not
+// yet deployed (avoids error 10215).  Accepts multiple secrets at once as
+// "secret_text" bindings and merges them with existing settings.
+function patchSettings(secrets) {
+  return new Promise((resolve, reject) => {
+    const bindings = secrets.map(({ name, value }) => ({
+      type: 'secret_text',
+      name,
+      text: value,
+    }));
+    const body = JSON.stringify({ bindings });
+    const req = https.request({
+      hostname: 'api.cloudflare.com',
+      path: `/client/v4/accounts/${accountId}/workers/scripts/${workerName}/settings`,
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${apiToken}`,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.success) resolve(parsed);
+          else reject(new Error(`Settings API error: ${JSON.stringify(parsed.errors)}`));
+        } catch (e) {
+          reject(new Error(`Failed to parse settings response: ${data}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
 async function main() {
-  let pushed = 0;
+  // Collect secrets to push, skipping any that are not set.
+  const allSecrets = [];
   let skipped = 0;
   for (const key of keys) {
     const val = process.env[key];
-    // Skip secrets that are not set (undefined or empty string).
     if (!val) { skipped++; continue; }
-    await putSecret(key, val);
-    console.log(`✓ ${key}`);
-    pushed++;
+    allSecrets.push({ name: key, value: val });
   }
+
+  let pushed = 0;
+  let useSettingsApi = false;
+  const pendingForSettings = [];
+
+  for (const secret of allSecrets) {
+    // Once error 10215 is encountered, queue all remaining secrets for the
+    // PATCH /settings call rather than trying PUT again.
+    if (useSettingsApi) {
+      pendingForSettings.push(secret);
+      continue;
+    }
+    try {
+      await putSecret(secret.name, secret.value);
+      console.log(`✓ ${secret.name}`);
+      pushed++;
+    } catch (err) {
+      const has10215 = (err.errors || []).some(e => e.code === 10215);
+      if (has10215) {
+        // Worker Versions detected: the latest deployed version does not match
+        // the uploaded version, so PUT /secrets is blocked.  Fall back to the
+        // PATCH /settings endpoint for this and all remaining secrets.
+        console.log(`⚠ Worker Versions detected (10215) — switching to settings API for remaining secrets.`);
+        useSettingsApi = true;
+        pendingForSettings.push(secret);
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  if (pendingForSettings.length > 0) {
+    await patchSettings(pendingForSettings);
+    for (const { name } of pendingForSettings) {
+      console.log(`✓ ${name} (via settings API)`);
+      pushed++;
+    }
+  }
+
   console.log(`Done: ${pushed} secret(s) pushed to "${workerName}", ${skipped} skipped.`);
 }
 
