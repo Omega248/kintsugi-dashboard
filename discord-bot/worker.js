@@ -60,6 +60,7 @@ const InteractionResponseType = {
   CHANNEL_MESSAGE_WITH_SOURCE: 4,
   DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE: 5,
   DEFERRED_UPDATE_MESSAGE: 6, // Acknowledge a component interaction, update later
+  UPDATE_MESSAGE: 7,          // Immediately update the component's message (no follow-up needed)
 };
 
 // ===== Invoice reliability & observability settings =====
@@ -1356,11 +1357,12 @@ async function handleInvoiceDeptSelect(interaction, env, ctx) {
   // Input validation — reject unexpected department values to surface data problems early
   if (!dept || !DEPT_NAME_PATTERN.test(dept)) {
     invoiceLog('warn', { correlationId, event: 'invoice_dept_invalid', userId, dept });
-    await editOriginalMessage(appId, token, {
-      content:    `❌ Invalid department value received. Please try again.`,
-      components: [],
-    }).catch(() => {});
-    return jsonResponse({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
+    // Use UPDATE_MESSAGE (type 7) to immediately replace the component message with the
+    // error inline — no follow-up edit required, so Discord never shows "This interaction failed".
+    return jsonResponse({
+      type: InteractionResponseType.UPDATE_MESSAGE,
+      data: { content: '❌ Invalid department value received. Please try again.', components: [] },
+    });
   }
 
   ctx.waitUntil((async () => {
@@ -1476,17 +1478,19 @@ async function handleInvoiceMonthSelect(interaction, env, ctx) {
   // Input validation
   if (!dept || !DEPT_NAME_PATTERN.test(dept)) {
     invoiceLog('warn', { correlationId, event: 'invoice_month_dept_invalid', userId, dept });
-    await editOriginalMessage(appId, token, {
-      content: `❌ Invalid department. Please restart the invoice flow.`, components: [],
-    }).catch(() => {});
-    return jsonResponse({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
+    // Use UPDATE_MESSAGE (type 7) to immediately replace the component message with the
+    // error — no follow-up edit required, so Discord never shows "This interaction failed".
+    return jsonResponse({
+      type: InteractionResponseType.UPDATE_MESSAGE,
+      data: { content: '❌ Invalid department. Please restart the invoice flow.', components: [] },
+    });
   }
   if (!monthValue || !/^\d{4}-\d{2}-\d{2}$/.test(monthValue)) {
     invoiceLog('warn', { correlationId, event: 'invoice_month_value_invalid', userId, monthValue });
-    await editOriginalMessage(appId, token, {
-      content: `❌ Invalid month value. Please restart the invoice flow.`, components: [],
-    }).catch(() => {});
-    return jsonResponse({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
+    return jsonResponse({
+      type: InteractionResponseType.UPDATE_MESSAGE,
+      data: { content: '❌ Invalid month value. Please restart the invoice flow.', components: [] },
+    });
   }
 
   // KV-based in-flight guard — prevents concurrent invoice generation for the same user

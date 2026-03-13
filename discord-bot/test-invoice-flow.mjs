@@ -694,8 +694,8 @@ await runTest('INVOICE_DEBUG=true → invoice delivered normally (no crash from 
   assert(desc.includes('```'), 'Embed description contains a code block in debug mode');
 });
 
-// ── Test: invalid dept value → early validation error, no sheet fetch ────────
-await runTest('Invalid dept ("INVALID DEPT!" — spaces/special chars) → validation error before sheet fetch', async () => {
+// ── Test: invalid dept value in billing_month_select → UPDATE_MESSAGE error (no "This interaction failed") ──
+await runTest('Invalid dept ("INVALID DEPT!" — spaces/special chars) → UPDATE_MESSAGE error, no sheet fetch', async () => {
   let sheetFetched = false;
   await withSheetFetch(
     async () => { sheetFetched = true; return { ok: true, text: async () => '' }; },
@@ -705,18 +705,70 @@ await runTest('Invalid dept ("INVALID DEPT!" — spaces/special chars) → valid
       const res  = await worker.fetch(makeRequest('billing_month_select:INVALID DEPT!', ['2026-03-31']), FAKE_ENV, ctx);
       const data = await res.json();
 
-      assert(data.type === 6, 'Response type is DEFERRED_UPDATE_MESSAGE (6)');
+      // Must respond with UPDATE_MESSAGE (type 7) so Discord immediately shows the error
+      // inline — NOT with DEFERRED_UPDATE_MESSAGE (type 6) which would leave the user
+      // with a stale deferred state and eventually "This interaction failed".
+      assert(data.type === 7, `Response type is UPDATE_MESSAGE (7) — got ${data.type}`);
+      assert(data.data?.content?.includes('❌'), 'Error message starts with ❌');
+      assert((data.data?.components ?? []).length === 0, 'No stale components in error response');
 
       // NOTE: The custom_id split(':')[1] returns "INVALID DEPT!" — validation rejects it
       await flush();
 
-      // Validation should have short-circuited before the sheet was fetched
+      // Validation short-circuits before the sheet is fetched
       // (DEPT_NAME_PATTERN blocks values with spaces or special chars)
-      if (capturedPatch !== null) {
-        // If editOriginalMessage was called, it must be an error response, not an invoice
-        assert(!capturedPatchIsFile, 'No CSV attachment for invalid dept input');
-      }
       assert(!sheetFetched, 'Sheet was NOT fetched when dept validation failed');
+      // No background edit needed — the error was delivered inline via UPDATE_MESSAGE
+      assert(capturedPatch === null, 'No background editOriginalMessage call — error was inline');
+    }
+  );
+});
+
+// ── Test: invalid dept value in billing_dept_select → UPDATE_MESSAGE error (no "This interaction failed") ──
+await runTest('Invalid dept in billing_dept_select → UPDATE_MESSAGE error (not DEFERRED + no follow-up)', async () => {
+  let sheetFetched = false;
+  await withSheetFetch(
+    async () => { sheetFetched = true; return { ok: true, text: async () => '' }; },
+    async () => {
+      const { ctx, flush } = makeCtx();
+      // Crafted request with an invalid dept value in the select menu values
+      const res  = await worker.fetch(makeRequest('billing_dept_select', ['INVALID DEPT!']), FAKE_ENV, ctx);
+      const data = await res.json();
+
+      // Must respond with UPDATE_MESSAGE (type 7) so Discord shows the error inline
+      // instead of deferring with no follow-up (which causes "This interaction failed").
+      assert(data.type === 7, `Response type is UPDATE_MESSAGE (7) — got ${data.type}`);
+      assert(data.data?.content?.includes('❌'), 'Error message starts with ❌');
+      assert((data.data?.components ?? []).length === 0, 'No stale components in error response');
+
+      await flush();
+
+      assert(!sheetFetched, 'Sheet was NOT fetched when dept validation failed');
+      assert(capturedPatch === null, 'No background editOriginalMessage call — error was inline');
+    }
+  );
+});
+
+// ── Test: invalid monthValue in billing_month_select → UPDATE_MESSAGE error (no "This interaction failed") ──
+await runTest('Invalid monthValue in billing_month_select → UPDATE_MESSAGE error (not DEFERRED + no follow-up)', async () => {
+  let sheetFetched = false;
+  await withSheetFetch(
+    async () => { sheetFetched = true; return { ok: true, text: async () => '' }; },
+    async () => {
+      const { ctx, flush } = makeCtx();
+      // Crafted request with an invalid month value (not an ISO date)
+      const res  = await worker.fetch(makeRequest('billing_month_select:BCSO', ['not-a-date']), FAKE_ENV, ctx);
+      const data = await res.json();
+
+      // Must respond with UPDATE_MESSAGE (type 7) so Discord shows the error inline
+      assert(data.type === 7, `Response type is UPDATE_MESSAGE (7) — got ${data.type}`);
+      assert(data.data?.content?.includes('❌'), 'Error message starts with ❌');
+      assert((data.data?.components ?? []).length === 0, 'No stale components in error response');
+
+      await flush();
+
+      assert(!sheetFetched, 'Sheet was NOT fetched when monthValue validation failed');
+      assert(capturedPatch === null, 'No background editOriginalMessage call — error was inline');
     }
   );
 });
