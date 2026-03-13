@@ -1538,25 +1538,15 @@ async function handleInvoiceMonthSelect(interaction, env, ctx) {
         invoiceLog('warn', { correlationId, event: 'invoice_csv_oversized', csvBytes, dept, monthValue });
       }
 
-      // Step 1: Update the original deferred message with the invoice embed summary.
-      // Uses editOriginalMessage (plain JSON PATCH) — identical to how handleWeekSelect
-      // updates the original message with the job-log embed.  No file attachment here.
-      const tEmbed = Date.now();
-      await editOriginalMessage(appId, token, {
-        content:    `📋 **${dept} Invoice — Month Ending: ${monthLabel}**\n${deptJobs.length} job${deptJobs.length !== 1 ? 's' : ''} · CSV attached below ↓`,
-        embeds:     [buildDeptInvoiceEmbed(dept, monthLabel, deptJobs)],
-        components: [],
-      });
-      timings.embedMs = Date.now() - tEmbed;
-
-      // Step 2: Send the CSV as a separate ephemeral follow-up.
-      // Splitting the file into a follow-up keeps the primary response simple
-      // (plain JSON PATCH) and the file delivery reliable.
+      // Update the original deferred message with the invoice embed and attach the
+      // CSV file directly — a single multipart PATCH replaces the two-step approach
+      // (plain JSON PATCH for the embed + a separate follow-up POST for the file)
+      // that was causing "This interaction failed" when the follow-up was rejected.
       const tFile = Date.now();
-      await postFollowupWithFile(
+      await editOriginalMessageWithFile(
         appId, token,
-        `📎 **${dept} Invoice CSV** — Month Ending: ${monthLabel}`,
-        [],
+        `📋 **${dept} Invoice — Month Ending: ${monthLabel}**\n${deptJobs.length} job${deptJobs.length !== 1 ? 's' : ''} · CSV file attached`,
+        [buildDeptInvoiceEmbed(dept, monthLabel, deptJobs)],
         csvFilename,
         csvContent
       );
