@@ -62,6 +62,22 @@ const InteractionResponseType = {
   DEFERRED_UPDATE_MESSAGE: 6, // Acknowledge a component interaction, update later
 };
 
+// ===== Invoice reliability & observability settings =====
+// These can be overridden at runtime by the INVOICE_* env vars (see README).
+const INVOICE_FETCH_TIMEOUT_MS = 12_000;   // Per-attempt fetch timeout (12 s)
+const INVOICE_MAX_RETRIES       = 2;        // Retries after the first attempt (3 total)
+const INVOICE_RETRY_BACKOFF_MS  = 800;      // Initial back-off; doubles each retry
+const INVOICE_INFLIGHT_TTL_S    = 90;       // KV lock TTL: max expected generation time
+const WORKER_VERSION            = '2.0.0';  // Bumped with the reliability update
+
+// Department name must be 2–10 ASCII letters (e.g. "BCSO", "LSPD").
+// Used in two places: step-1 filtering and step-3 input validation.
+const DEPT_NAME_PATTERN = /^[A-Za-z]{2,10}$/;
+
+// Discord's max attachment size is 25 MB; we warn in logs when approaching it
+// so admins can act before uploads silently fail.
+const MAX_CSV_BYTES = 24 * 1024 * 1024; // 24 MB — leave 1 MB headroom
+
 // ===== Utility helpers =====
 
 /** Convert a hex string to a Uint8Array. */
@@ -102,6 +118,145 @@ function jsonResponse(data, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json' },
   });
+}
+
+// ===== Invoice observability & reliability utilities =====
+
+/** Generate a short random correlation ID for tracing a single invoice interaction. */
+function generateCorrelationId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID().slice(0, 8);
+  }
+  return Math.random().toString(36).slice(2, 10);
+}
+
+/** Generate a short uppercase error ID from the current timestamp. */
+function generateErrorId() {
+  return Date.now().toString(36).toUpperCase().slice(-6);
+}
+
+/**
+ * Emit a structured JSON log line.
+ * Cloudflare Workers stream console output to the Workers Logs dashboard.
+ */
+function invoiceLog(level, data) {
+  const entry = {
+    ts:      new Date().toISOString(),
+    svc:     'kintsugi-invoice',
+    version: WORKER_VERSION,
+    level,
+    ...data,
+  };
+  if (level === 'error') {
+    console.error(JSON.stringify(entry));
+  } else if (level === 'warn') {
+    console.warn(JSON.stringify(entry));
+  } else {
+    console.log(JSON.stringify(entry));
+  }
+}
+
+/** Promisified setTimeout — usable inside waitUntil background tasks. */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Fetch a Google Sheet CSV with an explicit timeout and automatic retry for
+ * transient failures (429, 5xx, network errors).
+ *
+ * Replaces the bare `fetchSheet()` call in invoice handlers so users are
+ * never left with a stuck "loading" state due to a slow or flaky upstream.
+ *
+ * @param {string} sheetName - Google Sheets tab name to fetch.
+ * @param {object} [opts]
+ * @param {number} [opts.timeoutMs=INVOICE_FETCH_TIMEOUT_MS]  - Per-attempt wall-clock timeout.
+ * @param {number} [opts.maxRetries=INVOICE_MAX_RETRIES]       - Max retries after first attempt.
+ * @param {string} [opts.correlationId='']                     - For structured log context.
+ */
+async function fetchSheetWithRetry(sheetName, {
+  timeoutMs    = INVOICE_FETCH_TIMEOUT_MS,
+  maxRetries   = INVOICE_MAX_RETRIES,
+  correlationId = '',
+} = {}) {
+  let lastErr;
+  const url = sheetCsvUrl(sheetName);
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const t0 = Date.now();
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
+      const durMs = Date.now() - t0;
+
+      if (res.status === 429) {
+        const retryAfterS = parseInt(res.headers.get('Retry-After') || '2', 10);
+        invoiceLog('warn', { correlationId, step: 'fetchSheet', sheet: sheetName, attempt, status: 429, retryAfterS, durMs });
+        if (attempt < maxRetries) { await sleep(retryAfterS * 1000); continue; }
+        throw new Error(`Sheet "${sheetName}" rate-limited (HTTP 429)`);
+      }
+
+      if (!res.ok) {
+        const snippet = await res.text().catch(() => '');
+        const msg = `Failed to fetch sheet "${sheetName}": HTTP ${res.status}`;
+        invoiceLog('warn', { correlationId, step: 'fetchSheet', sheet: sheetName, attempt, status: res.status, snippet: snippet.slice(0, 200), durMs });
+        if (res.status >= 500 && attempt < maxRetries) {
+          lastErr = new Error(msg);
+          await sleep(INVOICE_RETRY_BACKOFF_MS * (2 ** attempt));
+          continue;
+        }
+        throw new Error(msg);
+      }
+
+      const text = await res.text();
+      if (!text.trim() || text.trim().startsWith('<')) {
+        throw new Error(
+          `Sheet "${sheetName}" returned no usable data. ` +
+          'Check that the spreadsheet is shared publicly.'
+        );
+      }
+
+      invoiceLog('info', { correlationId, step: 'fetchSheet', sheet: sheetName, attempt, durMs, rows: text.split('\n').length });
+      return parseCSV(text);
+    } catch (err) {
+      clearTimeout(timer);
+      const durMs = Date.now() - t0;
+      const isAbort = err.name === 'AbortError';
+      invoiceLog('warn', {
+        correlationId, step: 'fetchSheet', sheet: sheetName, attempt, durMs,
+        error: isAbort ? `Timeout after ${timeoutMs}ms` : err.message,
+      });
+      lastErr = isAbort
+        ? new Error(`Fetching sheet "${sheetName}" timed out after ${timeoutMs / 1000}s — the spreadsheet may be unreachable`)
+        : err;
+      if (attempt < maxRetries) await sleep(INVOICE_RETRY_BACKOFF_MS * (2 ** attempt));
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * Acquire an exclusive KV lock for an invoice generation job.
+ * Returns true if the lock was obtained (proceed), false if already in progress.
+ * Silently allows the job when KV is unavailable.
+ */
+async function acquireInvoiceLock(kv, key) {
+  if (!kv) return true;
+  try {
+    if (await kv.get(key)) return false;
+    await kv.put(key, '1', { expirationTtl: INVOICE_INFLIGHT_TTL_S });
+    return true;
+  } catch {
+    return true; // KV errors must not block invoice generation
+  }
+}
+
+/** Release the KV invoice lock (called after the job completes or errors). */
+async function releaseInvoiceLock(kv, key) {
+  if (!kv) return;
+  await kv.delete(key).catch(() => {});
 }
 
 // ===== Google Sheets CSV fetch + parse =====
@@ -1085,14 +1240,46 @@ async function handleWeekSelect(interaction, ctx) {
 /**
  * "Generate Monthly Invoice" button pressed on the permanent billing panel.
  *
- * Step 1 of 3: Responds immediately with an ephemeral deferral, then edits
- * the private message with a department select menu (BCSO / LSPD).
+ * Step 1 of 3: Mirrors handleStartButton from the job-logs flow.
+ * Responds immediately with an ephemeral deferral, then fetches the sheet to
+ * collect distinct departments, and edits the private message with the
+ * department select menu.  Departments come from the sheet so the list is
+ * always up to date — no hardcoded values.
  */
-async function handleInvoicePanelButton(interaction, ctx) {
+async function handleInvoicePanelButton(interaction, env, ctx) {
   const { application_id: appId, token } = interaction;
+  const correlationId = generateCorrelationId();
+  const userId = interaction.member?.user?.id || interaction.user?.id || 'anon';
+
+  invoiceLog('info', {
+    correlationId,
+    event:         'invoice_button_pressed',
+    userId,
+    guildId:       interaction.guild_id,
+    channelId:     interaction.channel_id,
+    interactionId: interaction.id,
+  });
 
   ctx.waitUntil((async () => {
     try {
+      // Fetch the sheet to get departments dynamically — mirrors handleStartButton
+      // fetching the mechanic list so the options are always live.
+      const jobRows = await fetchSheetWithRetry(JOBS_SHEET, { correlationId });
+      const allJobs = parseJobsSheet(jobRows);
+
+      // Collect unique, non-empty department values; filter to simple word-like values
+      const depts = [...new Set(
+        allJobs.map(j => j.department).filter(d => d && DEPT_NAME_PATTERN.test(d))
+      )].sort((a, b) => a.localeCompare(b));
+
+      // Fall back to the two known departments when the sheet lacks a dept column
+      const deptList = depts.length > 0 ? depts : ['BCSO', 'LSPD'];
+      const options = deptList.map(d => ({
+        label:  d,
+        value:  d,
+        emoji:  { name: d === 'BCSO' ? '🟡' : d === 'LSPD' ? '🔵' : '🏢' },
+      }));
+
       await editOriginalMessage(appId, token, {
         content:    '📋 **Step 1 of 3 — Select a department:**',
         components: [{
@@ -1101,14 +1288,13 @@ async function handleInvoicePanelButton(interaction, ctx) {
             type:        3,
             custom_id:   'billing_dept_select',
             placeholder: 'Choose a department…',
-            options: [
-              { label: 'BCSO', value: 'BCSO', emoji: { name: '🟡' } },
-              { label: 'LSPD', value: 'LSPD', emoji: { name: '🔵' } },
-            ],
+            options,
           }],
         }],
       });
+      invoiceLog('info', { correlationId, event: 'invoice_dept_select_shown', userId, depts: deptList });
     } catch (err) {
+      invoiceLog('error', { correlationId, event: 'invoice_button_error', userId, error: err.message, stack: err.stack });
       await editOriginalMessage(appId, token, {
         content:    `❌ Failed to load department selector.\n\`${err.message}\``,
         components: [],
@@ -1131,14 +1317,44 @@ async function handleInvoicePanelButton(interaction, ctx) {
  * "Month Ending" column.  The department is encoded in the custom_id so the
  * next handler can read it.
  */
-async function handleInvoiceDeptSelect(interaction, ctx) {
+async function handleInvoiceDeptSelect(interaction, env, ctx) {
   const { application_id: appId, token } = interaction;
   const dept = interaction.data.values[0]; // 'BCSO' or 'LSPD'
+  const correlationId = generateCorrelationId();
+  const userId = interaction.member?.user?.id || interaction.user?.id || 'anon';
+
+  invoiceLog('info', {
+    correlationId,
+    event:         'invoice_dept_selected',
+    userId,
+    guildId:       interaction.guild_id,
+    channelId:     interaction.channel_id,
+    interactionId: interaction.id,
+    dept,
+  });
+
+  // Input validation — reject unexpected department values to surface data problems early
+  if (!dept || !DEPT_NAME_PATTERN.test(dept)) {
+    invoiceLog('warn', { correlationId, event: 'invoice_dept_invalid', userId, dept });
+    await editOriginalMessage(appId, token, {
+      content:    `❌ Invalid department value received. Please try again.`,
+      components: [],
+    }).catch(() => {});
+    return jsonResponse({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
+  }
 
   ctx.waitUntil((async () => {
     try {
-      const jobRows = await fetchSheet(JOBS_SHEET);
+      // Show a progress message before the (potentially slow) sheet fetch
+      await editOriginalMessage(appId, token, {
+        content:    `⏳ Loading **${dept}** billing data… this may take a few seconds.`,
+        components: [],
+      }).catch(() => {});
+
+      const t0 = Date.now();
+      const jobRows = await fetchSheetWithRetry(JOBS_SHEET, { correlationId });
       const allJobs = parseJobsSheet(jobRows);
+      invoiceLog('info', { correlationId, event: 'invoice_sheet_fetched', dept, durMs: Date.now() - t0, jobCount: allJobs.length });
 
       // Collect distinct month-ending dates from the sheet's "Month Ending"
       // column for the chosen department.  Key by ISO date so duplicates merge.
@@ -1151,6 +1367,7 @@ async function handleInvoiceDeptSelect(interaction, ctx) {
       }
 
       if (monthEndMap.size === 0) {
+        invoiceLog('warn', { correlationId, event: 'invoice_no_months_found', dept });
         await editOriginalMessage(appId, token, {
           content:    `❌ No job data found for **${dept}** in the sheet.`,
           components: [],
@@ -1183,7 +1400,9 @@ async function handleInvoiceDeptSelect(interaction, ctx) {
           }],
         }],
       });
+      invoiceLog('info', { correlationId, event: 'invoice_month_select_shown', dept, monthCount: entries.length });
     } catch (err) {
+      invoiceLog('error', { correlationId, event: 'invoice_dept_select_error', dept, error: err.message, stack: err.stack });
       await editOriginalMessage(appId, token, {
         content:    `❌ Failed to load job data.\n\`${err.message}\``,
         components: [],
@@ -1197,50 +1416,195 @@ async function handleInvoiceDeptSelect(interaction, ctx) {
 /**
  * Month ending selected from the billing panel dropdown.
  *
- * Final step: Fetches all jobs for the chosen department whose "Month Ending"
- * matches the selected date, then edits the ephemeral message with an invoice
- * embed and a CSV file attachment.
+ * Final step: Mirrors handleWeekSelect from the job-logs flow.
+ * Fetches all jobs for the chosen department whose "Month Ending" matches the
+ * selected date, then:
+ *   1. editOriginalMessage  — updates the ephemeral message with the invoice embed
+ *                             (simple JSON PATCH, same as handleWeekSelect)
+ *   2. postFollowupWithFile — sends a separate ephemeral follow-up with the CSV
+ *                             (keeps the primary response simple and reliable)
+ *
+ * Splitting the response (embed + CSV) this way mirrors exactly how handleWeekSelect
+ * works and avoids the complex multipart PATCH that was causing "This interaction failed".
  *
  * The department is read from the select menu's custom_id
  * (format: `billing_month_select:<dept>`).
  * The selected value is an ISO date string (YYYY-MM-DD) taken from the sheet's
  * "Month Ending" column.
  */
-async function handleInvoiceMonthSelect(interaction, ctx) {
+async function handleInvoiceMonthSelect(interaction, env, ctx) {
   const { application_id: appId, token } = interaction;
   const monthValue = interaction.data.values[0]; // e.g. "2026-03-31"
   // Parse department encoded in the custom_id (e.g. "billing_month_select:BCSO")
   const dept = (interaction.data.custom_id || '').split(':')[1] || 'BCSO';
+  const correlationId = generateCorrelationId();
+  const userId = interaction.member?.user?.id || interaction.user?.id || 'anon';
+  const debugMode = env?.INVOICE_DEBUG === 'true';
+
+  invoiceLog('info', {
+    correlationId,
+    event:         'invoice_month_selected',
+    userId,
+    guildId:       interaction.guild_id,
+    channelId:     interaction.channel_id,
+    interactionId: interaction.id,
+    dept,
+    monthValue,
+    debugMode,
+  });
+
+  // Input validation
+  if (!dept || !DEPT_NAME_PATTERN.test(dept)) {
+    invoiceLog('warn', { correlationId, event: 'invoice_month_dept_invalid', userId, dept });
+    await editOriginalMessage(appId, token, {
+      content: `❌ Invalid department. Please restart the invoice flow.`, components: [],
+    }).catch(() => {});
+    return jsonResponse({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
+  }
+  if (!monthValue || !/^\d{4}-\d{2}-\d{2}$/.test(monthValue)) {
+    invoiceLog('warn', { correlationId, event: 'invoice_month_value_invalid', userId, monthValue });
+    await editOriginalMessage(appId, token, {
+      content: `❌ Invalid month value. Please restart the invoice flow.`, components: [],
+    }).catch(() => {});
+    return jsonResponse({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
+  }
+
+  // KV-based in-flight guard — prevents concurrent invoice generation for the same user
+  const lockKey = `invoice:${userId}:${dept}:${monthValue}`;
 
   ctx.waitUntil((async () => {
+    const locked = await acquireInvoiceLock(env?.KV, lockKey);
+    if (!locked) {
+      invoiceLog('warn', { correlationId, event: 'invoice_already_in_progress', userId, dept, monthValue });
+      await editOriginalMessage(appId, token, {
+        content:    `⏳ An invoice for **${dept}** (${monthValue}) is already being generated. Please wait a moment and try again.`,
+        components: [],
+      }).catch(() => {});
+      return;
+    }
+
+    const timings = {};
+    const t0Total = Date.now();
+
     try {
       const selectedDate = new Date(monthValue + 'T00:00:00Z');
       const monthLabel   = selectedDate.toLocaleDateString('en-US', {
         month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC',
       });
 
-      const jobRows  = await fetchSheet(JOBS_SHEET);
-      const allJobs  = parseJobsSheet(jobRows);
+      // Progress message — keeps the user informed while the sheet is fetched.
+      // Uses editOriginalMessage (simple JSON PATCH) just like handleWeekSelect.
+      const tProgress = Date.now();
+      await editOriginalMessage(appId, token, {
+        content:    `⏳ **Generating invoice for ${dept} — Month Ending: ${monthLabel}…**\nFetching job data from the sheet. This may take a moment.`,
+        components: [],
+      }).catch(() => {});
+      timings.progressMs = Date.now() - tProgress;
+
+      // Fetch sheet data with timeout + retry — mirrors handleWeekSelect's fetchSheet call
+      const tFetch = Date.now();
+      const jobRows = await fetchSheetWithRetry(JOBS_SHEET, { correlationId });
+      const allJobs = parseJobsSheet(jobRows);
+      timings.fetchMs = Date.now() - tFetch;
+      invoiceLog('info', { correlationId, event: 'invoice_sheet_fetched', dept, monthValue, durMs: timings.fetchMs, jobCount: allJobs.length });
 
       // Filter by dept AND by matching monthEnd date from the "Month Ending" column
+      const tTransform = Date.now();
       const deptJobs = allJobs.filter(j => {
         if (!new RegExp(dept, 'i').test(j.department)) return false;
         if (!j.monthEnd) return false;
         return j.monthEnd.toISOString().slice(0, 10) === monthValue;
       });
+      timings.transformMs = Date.now() - tTransform;
 
-      await editOriginalMessageWithFile(
-        appId, token,
-        `📋 **${dept} Invoice — Month Ending: ${monthLabel}**`,
-        [buildDeptInvoiceEmbed(dept, monthLabel, deptJobs)],
-        `kintsugi-invoice-${dept.toLowerCase()}-${monthValue}.csv`,
-        buildInvoiceCsv(dept, monthLabel, deptJobs)
-      );
-    } catch (err) {
+      invoiceLog('info', {
+        correlationId,
+        event:     'invoice_jobs_filtered',
+        dept,
+        monthValue,
+        totalJobs: allJobs.length,
+        deptJobs:  deptJobs.length,
+        durMs:     timings.transformMs,
+      });
+
+      // Build CSV content
+      const tCsv = Date.now();
+      const csvContent = buildInvoiceCsv(dept, monthLabel, deptJobs);
+      const csvFilename = `kintsugi-invoice-${dept.toLowerCase()}-${monthValue}.csv`;
+      const csvBytes   = new TextEncoder().encode(csvContent).length;
+      timings.csvMs    = Date.now() - tCsv;
+
+      if (csvBytes > MAX_CSV_BYTES) {
+        invoiceLog('warn', { correlationId, event: 'invoice_csv_oversized', csvBytes, dept, monthValue });
+      }
+
+      // Step 1: Update the original deferred message with the invoice embed summary.
+      // Uses editOriginalMessage (plain JSON PATCH) — identical to how handleWeekSelect
+      // updates the original message with the job-log embed.  No file attachment here.
+      const tEmbed = Date.now();
       await editOriginalMessage(appId, token, {
-        content:    `❌ Failed to generate invoice.\n\`${err.message}\``,
+        content:    `📋 **${dept} Invoice — Month Ending: ${monthLabel}**\n${deptJobs.length} job${deptJobs.length !== 1 ? 's' : ''} · CSV attached below ↓`,
+        embeds:     [buildDeptInvoiceEmbed(dept, monthLabel, deptJobs)],
         components: [],
-      }).catch(() => {});
+      });
+      timings.embedMs = Date.now() - tEmbed;
+
+      // Step 2: Send the CSV as a separate ephemeral follow-up.
+      // Splitting the file into a follow-up keeps the primary response simple
+      // (plain JSON PATCH) and the file delivery reliable.
+      const tFile = Date.now();
+      await postFollowupWithFile(
+        appId, token,
+        `📎 **${dept} Invoice CSV** — Month Ending: ${monthLabel}`,
+        [],
+        csvFilename,
+        csvContent
+      );
+      timings.fileMs  = Date.now() - tFile;
+      timings.totalMs = Date.now() - t0Total;
+
+      invoiceLog('info', {
+        correlationId,
+        event:     'invoice_generated',
+        userId,
+        dept,
+        monthValue,
+        deptJobs:  deptJobs.length,
+        csvBytes,
+        timings,
+      });
+
+      if (debugMode) {
+        invoiceLog('debug', {
+          correlationId,
+          event:       'invoice_debug_info',
+          timings,
+          memoryUsage: typeof process !== 'undefined' ? process.memoryUsage() : null,
+          csvBytes,
+        });
+      }
+    } catch (err) {
+      timings.totalMs = Date.now() - t0Total;
+      const errorId = generateErrorId();
+      invoiceLog('error', {
+        correlationId,
+        event:     'invoice_generation_failed',
+        userId,
+        dept,
+        monthValue,
+        errorId,
+        error:     err.message,
+        stack:     err.stack,
+        timings,
+      });
+      await editOriginalMessage(appId, token, {
+        content:    `❌ Invoice generation failed (Error ID: \`${errorId}\`).\n\`${err.message}\`\n\n_If this keeps happening, share the Error ID with an admin._`,
+        components: [],
+      }).catch(editErr => {
+        invoiceLog('error', { correlationId, event: 'invoice_error_reply_failed', errorId, error: editErr.message });
+      });
+    } finally {
+      await releaseInvoiceLock(env?.KV, lockKey);
     }
   })());
 
@@ -2065,13 +2429,13 @@ export default {
         // Invoice panel button + dept + month select (permanent billing panel)
         // Also handle legacy custom_ids from panels posted before the billing_ prefix rename (PR #81).
         if (customId === 'billing_generate_invoice' || customId === 'payouts_panel_start') {
-          return handleInvoicePanelButton(interaction, ctx);
+          return handleInvoicePanelButton(interaction, env, ctx);
         }
         if (customId === 'billing_dept_select' || customId === 'invoice_dept_select') {
-          return handleInvoiceDeptSelect(interaction, ctx);
+          return handleInvoiceDeptSelect(interaction, env, ctx);
         }
         if (customId.startsWith('billing_month_select:') || customId.startsWith('invoice_month_select:')) {
-          return handleInvoiceMonthSelect(interaction, ctx);
+          return handleInvoiceMonthSelect(interaction, env, ctx);
         }
 
         // Week-specific payouts button + mechanic select (posted by post-payouts workflow)
@@ -2171,3 +2535,30 @@ export default {
     }
   },
 };
+
+// ===== Global error handlers (Node.js / local test runtime only) =====
+// In Cloudflare Workers `process` is undefined — the guards below prevent
+// runtime errors.  In local Node.js runs (e.g. test-invoice-flow.mjs or
+// running the bot with `node worker.js`) these handlers surface hidden
+// promise rejections and synchronous exceptions that would otherwise be
+// swallowed or crash the process silently.
+if (typeof process !== 'undefined') {
+  process.on('unhandledRejection', (reason) => {
+    invoiceLog('error', {
+      event:  'unhandledRejection',
+      reason: String(reason),
+      stack:  reason instanceof Error ? reason.stack : undefined,
+    });
+  });
+
+  process.on('uncaughtException', (err) => {
+    invoiceLog('error', {
+      event: 'uncaughtException',
+      error: err.message,
+      stack: err.stack,
+    });
+    // Log and continue — a Worker process may be handling concurrent requests,
+    // so forced termination would drop them.  CI pipelines detect non-zero exit
+    // through test failures rather than uncaughtException.
+  });
+}
