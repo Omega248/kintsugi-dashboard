@@ -134,9 +134,9 @@ async function runTest(name, fn) {
 }
 
 // ── Test 1: "Generate Monthly Invoice" button → department select ────────
-await runTest('Step 1 — payouts_panel_start → department select (NOT mechanic list)', async () => {
+await runTest('Step 1 — billing_generate_invoice → department select (NOT mechanic list)', async () => {
   const { ctx, flush } = makeCtx();
-  const res  = await worker.fetch(makeRequest('payouts_panel_start'), FAKE_ENV, ctx);
+  const res  = await worker.fetch(makeRequest('billing_generate_invoice'), FAKE_ENV, ctx);
   const data = await res.json();
 
   // Immediate response must be a deferred ephemeral (type 5, flags 64)
@@ -158,8 +158,8 @@ await runTest('Step 1 — payouts_panel_start → department select (NOT mechani
   assert(components.length > 0, 'Response includes at least one component row');
   const selects = components.flatMap(row => row.components ?? []).filter(c => c.type === 3);
   assert(selects.length > 0, 'At least one select menu is present');
-  const deptSelect = selects.find(s => s.custom_id === 'invoice_dept_select');
-  assert(deptSelect !== undefined, 'Select menu custom_id is "invoice_dept_select"');
+  const deptSelect = selects.find(s => s.custom_id === 'billing_dept_select');
+  assert(deptSelect !== undefined, 'Select menu custom_id is "billing_dept_select"');
 
   const optionValues = (deptSelect.options ?? []).map(o => o.value);
   assert(optionValues.includes('BCSO'), 'BCSO option is present');
@@ -168,9 +168,9 @@ await runTest('Step 1 — payouts_panel_start → department select (NOT mechani
 });
 
 // ── Test 2: Department selected → month ending select ─────────────────────
-await runTest('Step 2 — invoice_dept_select (BCSO) → month ending select', async () => {
+await runTest('Step 2 — billing_dept_select (BCSO) → month ending select', async () => {
   const { ctx, flush } = makeCtx();
-  const res  = await worker.fetch(makeRequest('invoice_dept_select', ['BCSO']), FAKE_ENV, ctx);
+  const res  = await worker.fetch(makeRequest('billing_dept_select', ['BCSO']), FAKE_ENV, ctx);
   const data = await res.json();
 
   // Must acknowledge the component interaction without creating a new message
@@ -191,8 +191,8 @@ await runTest('Step 2 — invoice_dept_select (BCSO) → month ending select', a
 
   const monthSelect = selects[0];
   assert(
-    monthSelect.custom_id.startsWith('invoice_month_select:BCSO'),
-    `Select menu custom_id starts with "invoice_month_select:BCSO" (got "${monthSelect.custom_id}")`
+    monthSelect.custom_id.startsWith('billing_month_select:BCSO'),
+    `Select menu custom_id starts with "billing_month_select:BCSO" (got "${monthSelect.custom_id}")`
   );
   assert((monthSelect.options ?? []).length > 0, 'At least one month-ending option is available');
 
@@ -202,12 +202,12 @@ await runTest('Step 2 — invoice_dept_select (BCSO) → month ending select', a
 });
 
 // ── Test 3: Month selected → invoice embed + CSV file ─────────────────────
-await runTest('Step 3 — invoice_month_select:BCSO → invoice embed + CSV (no mechanic dropdown)', async () => {
+await runTest('Step 3 — billing_month_select:BCSO → invoice embed + CSV (no mechanic dropdown)', async () => {
   const monthValue = globalThis._testMonthValue ?? '2026-03-31';
 
   const { ctx, flush } = makeCtx();
   const res  = await worker.fetch(
-    makeRequest(`invoice_month_select:BCSO`, [monthValue]),
+    makeRequest(`billing_month_select:BCSO`, [monthValue]),
     FAKE_ENV,
     ctx
   );
@@ -238,9 +238,11 @@ await runTest('Step 3 — invoice_month_select:BCSO → invoice embed + CSV (no 
     .flatMap(row => row.components ?? [])
     .filter(c => c.type === 3 && (
       c.custom_id === 'joblogs_mech_select' ||
-      c.custom_id?.startsWith('payouts_week_mech:')
+      c.custom_id?.startsWith('payouts_week_mech:') ||
+      c.custom_id === 'billing_dept_select' ||
+      c.custom_id?.startsWith('billing_month_select:')
     ));
-  assert(mechanicSelects.length === 0, 'No mechanic-select dropdown in the final invoice response');
+  assert(mechanicSelects.length === 0, 'No mechanic-select or billing-flow dropdown in the final invoice response');
 });
 
 // ── Guard test: joblogs_start still shows mechanic select (unchanged) ───────
