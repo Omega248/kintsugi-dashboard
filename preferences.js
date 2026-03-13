@@ -13,9 +13,7 @@ const DEFAULT_PREFS = {
   showTax: false,
   defaultView: 'weekly',
   itemsPerPage: 50,
-  lastVisitedPage: '',
-  favoriteFilters: {},
-  recentSearches: []
+  lastVisitedPage: ''
 };
 
 /**
@@ -69,87 +67,11 @@ function kResetPreferences() {
 }
 
 /**
- * Add a search term to recent searches
- * @param {string} term - Search term
- * @param {number} [maxItems=10] - Maximum recent searches to keep
- */
-function kAddRecentSearch(term) {
-  if (!term || typeof term !== 'string') return;
-  
-  const prefs = kGetPreferences();
-  let recent = prefs.recentSearches || [];
-  
-  // Remove duplicates and add to front
-  recent = recent.filter(t => t !== term);
-  recent.unshift(term);
-  
-  // Keep only last 10
-  recent = recent.slice(0, 10);
-  
-  kSavePreferences({ recentSearches: recent });
-}
-
-/**
- * Get recent searches
- * @returns {string[]} Array of recent search terms
- */
-function kGetRecentSearches() {
-  const prefs = kGetPreferences();
-  return prefs.recentSearches || [];
-}
-
-/**
  * Clear recent searches
  * @returns {boolean} Success status
  */
 function kClearRecentSearches() {
   return kSavePreferences({ recentSearches: [] });
-}
-
-/**
- * Save a favorite filter configuration
- * @param {string} name - Filter name
- * @param {Object} filters - Filter configuration
- * @returns {boolean} Success status
- */
-function kSaveFavoriteFilter(name, filters) {
-  if (!name || !filters) return false;
-  
-  const prefs = kGetPreferences();
-  const favorites = prefs.favoriteFilters || {};
-  
-  favorites[name] = {
-    ...filters,
-    savedAt: new Date().toISOString()
-  };
-  
-  return kSavePreferences({ favoriteFilters: favorites });
-}
-
-/**
- * Get all favorite filters
- * @returns {Object} Map of filter names to configurations
- */
-function kGetFavoriteFilters() {
-  const prefs = kGetPreferences();
-  return prefs.favoriteFilters || {};
-}
-
-/**
- * Delete a favorite filter
- * @param {string} name - Filter name
- * @returns {boolean} Success status
- */
-function kDeleteFavoriteFilter(name) {
-  const prefs = kGetPreferences();
-  const favorites = prefs.favoriteFilters || {};
-  
-  if (favorites[name]) {
-    delete favorites[name];
-    return kSavePreferences({ favoriteFilters: favorites });
-  }
-  
-  return false;
 }
 
 /**

@@ -1,7 +1,7 @@
-// ===== Config =====
-const JOBS_SHEET = "Form responses 1";
-const CONFIG_SHEET = "Config";
-const PAY_PER_REPAIR = 700;
+// ===== Config (values sourced from constants.js) =====
+const JOBS_SHEET    = KINTSUGI_CONFIG.SHEETS.JOBS;
+const CONFIG_SHEET  = KINTSUGI_CONFIG.SHEETS.CONFIG;
+const PAY_PER_REPAIR = PAYMENT_RATES.PAY_PER_REPAIR;
 
 const AUTO_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -178,7 +178,7 @@ async function loadOverview() {
     kSetText("tileSub-manualRedBins", "");
     kSetText(
       "tileSub-latestWeek",
-      lastActivity ? "Last job: " + kFmtDate(lastActivity) : ""
+      lastActivity ? "Last job: " + kFmtRelativeDate(lastActivity) : ""
     );
 
     // ---- This Week Live Panel ----

@@ -82,12 +82,6 @@ let resizeInfo = null;
 
 // ================== URL STATE HELPERS ==================
 
-// ================== NAV SYNC (using kintsugi-core.js) ==================
-function syncNavLinksWithCurrentSearch() {
-  kSyncNavLinksWithCurrentSearch();
-}
-
-
 function applyStateFromUrl() {
   try {
     const params = new URLSearchParams(window.location.search);
@@ -182,7 +176,7 @@ function updateUrlFromState() {
     window.history.replaceState(null, "", newUrl);
 
     // 🔹 keep nav tabs in sync
-    syncNavLinksWithCurrentSearch();
+    kSyncNavLinksWithCurrentSearch();
   } catch (e) {
     console.warn("updateUrlFromState failed:", e);
   }
@@ -1240,7 +1234,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   applyStateFromUrl();
 
   // make sure nav tabs use whatever query we started with
-  syncNavLinksWithCurrentSearch();
+  kSyncNavLinksWithCurrentSearch();
 
   await loadManualFromSheet(); // optional, safe if sheet missing
   await loadBankFromSheet();

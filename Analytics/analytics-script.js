@@ -1,6 +1,6 @@
-// ===== Config =====
-const JOBS_SHEET = "Form responses 1";
-const PAY_PER_REPAIR = 700;
+// ===== Config (values sourced from constants.js) =====
+const JOBS_SHEET    = KINTSUGI_CONFIG.SHEETS.JOBS;
+const PAY_PER_REPAIR = PAYMENT_RATES.PAY_PER_REPAIR;
 
 // ===== Chart instances =====
 let repairsChartInst = null;
@@ -22,10 +22,6 @@ async function ensureChartJs() {
 }
 
 // ===== Helpers =====
-
-function parseDateLike(raw) {
-  return kParseDateLike(raw);
-}
 
 function getFilterDates(range) {
   const now = new Date();
@@ -206,13 +202,14 @@ function renderLeaderboard(mechTotals) {
   const rankClasses = ["leaderboard-rank--gold", "leaderboard-rank--silver", "leaderboard-rank--bronze"];
 
   el.innerHTML = sorted.map(([name, reps], i) => {
+    const safeName = kEscapeHtml(name);
     const pct = maxReps > 0 ? Math.round((reps / maxReps) * 100) : 0;
     const rankCls = i < 3 ? rankClasses[i] : "";
     const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : String(i + 1);
     return `
       <div class="leaderboard-row" style="position:relative;overflow:hidden;">
         <div class="leaderboard-rank ${rankCls}">${medal}</div>
-        <div class="leaderboard-name" title="${name}">${name}</div>
+        <div class="leaderboard-name" title="${safeName}">${safeName}</div>
         <div class="leaderboard-stats">${reps.toLocaleString()} repairs · ${kFmtMoney(reps * PAY_PER_REPAIR)}</div>
         <div class="leaderboard-bar-wrap">
           <div class="leaderboard-bar" style="width:${pct}%"></div>
@@ -268,8 +265,8 @@ async function loadAnalytics() {
 
       // Determine date
       let jobDate = null;
-      if (tsKey && r[tsKey]) jobDate = parseDateLike(r[tsKey]);
-      if (!jobDate && weekKey && r[weekKey]) jobDate = parseDateLike(r[weekKey]);
+      if (tsKey && r[tsKey]) jobDate = kParseDateLike(r[tsKey]);
+      if (!jobDate && weekKey && r[weekKey]) jobDate = kParseDateLike(r[weekKey]);
 
       if (cutoff && jobDate && jobDate < cutoff) return;
       if (selectedMech !== "all" && mech !== selectedMech) return;
