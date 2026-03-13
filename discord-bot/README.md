@@ -305,7 +305,7 @@ discord-bot/
 | "Notify Discord" returns 501 | `TRIGGER_TOKEN` is not set. Add it to GitHub Secrets and redeploy. |
 | "Notify Discord" returns 503 | `DISCORD_BOT_TOKEN` or `PAYOUTS_CHANNEL_ID` is missing. Add both and redeploy. |
 | Invoice shows "This interaction failed" | Check Cloudflare logs for `svc:"kintsugi-invoice"` entries. Look for `"event":"invoice_generation_failed"` lines which include an `errorId`, full stack trace, and per-step timings. Enable `INVOICE_DEBUG=true` for extra detail. |
-| Invoice generates but no CSV arrives | The CSV is sent as a **separate ephemeral follow-up message** — scroll up in the private ephemeral thread. If no follow-up appears, check logs for `postFollowupWithFile` errors. |
+| Invoice generates but no CSV arrives | The CSV is attached directly to the invoice embed message. If it is missing, check Cloudflare logs for `editOriginalMessageWithFile` errors. Confirm the Google Sheet is publicly readable. |
 | Departments missing from invoice panel | The button now reads departments **live from the sheet**. Ensure the **Department** column is filled in for recent jobs and the sheet is publicly readable. |
 
 ---
@@ -379,14 +379,14 @@ Select chosen (dept / mechanic)
 
 Final select chosen (month / week)
   → Immediate DEFERRED_UPDATE_MESSAGE (type 6)
-  → Background: fetch sheet → editOriginalMessage with result embed
-                            → postFollowupWithFile with attachment (invoice only)
+  → Background: fetch sheet → editOriginalMessageWithFile with embed + CSV (invoice)
+                            → editOriginalMessage with result embed (job logs)
 ```
 
 The key reliability properties:
 - The **deferred acknowledgement** is always returned within milliseconds — no slow I/O before the `return jsonResponse(...)`.
 - All slow work (sheet fetches, CSV generation) runs in `ctx.waitUntil`, so it never blocks the acknowledgement.
-- The final step uses a **plain JSON PATCH** (`editOriginalMessage`) for the embed and a **separate follow-up POST** (`postFollowupWithFile`) for the CSV — identical to how the job logs handler works and avoiding the more complex multipart PATCH that was causing "This interaction failed".
+- The invoice final step uses a **single multipart PATCH** (`editOriginalMessageWithFile`) that delivers the embed and the CSV attachment together, eliminating the unreliable two-step approach that was causing "This interaction failed".
 - Sheet fetches use `fetchSheetWithRetry` with a 12-second per-attempt timeout and up to 2 retries with exponential back-off.
 
 ---
