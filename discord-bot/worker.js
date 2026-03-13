@@ -2007,70 +2007,115 @@ export default {
       return new Response('Invalid signature', { status: 401 });
     }
 
-    const interaction = JSON.parse(rawBody);
+    let interaction;
+    try {
+      interaction = JSON.parse(rawBody);
+    } catch {
+      return new Response('Bad Request: invalid JSON', { status: 400 });
+    }
 
-    // Discord PING — required for Interactions Endpoint URL verification
+    // Discord PING — required for Interactions Endpoint URL verification.
+    // Handled outside the main try-catch so a PONG is always returned correctly.
     if (interaction.type === InteractionType.PING) {
       return jsonResponse({ type: InteractionResponseType.PONG });
     }
 
-    // Slash commands
-    if (interaction.type === InteractionType.APPLICATION_COMMAND) {
-      if (interaction.data?.name === 'payouts') {
-        return handlePayoutsCommand(interaction, ctx);
-      }
-      if (interaction.data?.name === 'update-analytics') {
-        return handleUpdateAnalyticsCommand(interaction, env, ctx);
-      }
-    }
-
-    // Component interactions (button + select menus)
-    if (interaction.type === InteractionType.MESSAGE_COMPONENT) {
-      const customId = interaction.data.custom_id || '';
-
-      if (customId === 'joblogs_start') {
-        return handleStartButton(interaction, ctx);
-      }
-      if (customId === 'joblogs_mech_select') {
-        return handleMechSelect(interaction, ctx);
-      }
-      if (customId.startsWith('joblogs_week_select:')) {
-        return handleWeekSelect(interaction, ctx);
+    // All other interaction types are handled inside a try-catch so that any
+    // unexpected exception produces a user-friendly ephemeral error in Discord
+    // rather than an HTTP 500 that Discord surfaces as "This interaction failed".
+    try {
+      // Slash commands
+      if (interaction.type === InteractionType.APPLICATION_COMMAND) {
+        if (interaction.data?.name === 'payouts') {
+          return handlePayoutsCommand(interaction, ctx);
+        }
+        if (interaction.data?.name === 'update-analytics') {
+          return handleUpdateAnalyticsCommand(interaction, env, ctx);
+        }
+        // Unknown slash command — return an ephemeral error instead of HTTP 400.
+        return jsonResponse({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: `❌ Unknown command \`/${interaction.data?.name ?? 'unknown'}\`.`,
+            flags: 64,
+          },
+        });
       }
 
-      // Invoice panel button + dept + month select (permanent billing panel)
-      // Also handle legacy custom_ids from panels posted before the billing_ prefix rename (PR #81).
-      if (customId === 'billing_generate_invoice' || customId === 'payouts_panel_start') {
-        return handleInvoicePanelButton(interaction, ctx);
-      }
-      if (customId === 'billing_dept_select' || customId === 'invoice_dept_select') {
-        return handleInvoiceDeptSelect(interaction, ctx);
-      }
-      if (customId.startsWith('billing_month_select:') || customId.startsWith('invoice_month_select:')) {
-        return handleInvoiceMonthSelect(interaction, ctx);
+      // Component interactions (button + select menus)
+      if (interaction.type === InteractionType.MESSAGE_COMPONENT) {
+        const customId = interaction.data?.custom_id;
+        if (!customId) {
+          return jsonResponse({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Malformed interaction: missing custom_id.', flags: 64 },
+          });
+        }
+
+        if (customId === 'joblogs_start') {
+          return handleStartButton(interaction, ctx);
+        }
+        if (customId === 'joblogs_mech_select') {
+          return handleMechSelect(interaction, ctx);
+        }
+        if (customId.startsWith('joblogs_week_select:')) {
+          return handleWeekSelect(interaction, ctx);
+        }
+
+        // Invoice panel button + dept + month select (permanent billing panel)
+        // Also handle legacy custom_ids from panels posted before the billing_ prefix rename (PR #81).
+        if (customId === 'billing_generate_invoice' || customId === 'payouts_panel_start') {
+          return handleInvoicePanelButton(interaction, ctx);
+        }
+        if (customId === 'billing_dept_select' || customId === 'invoice_dept_select') {
+          return handleInvoiceDeptSelect(interaction, ctx);
+        }
+        if (customId.startsWith('billing_month_select:') || customId.startsWith('invoice_month_select:')) {
+          return handleInvoiceMonthSelect(interaction, ctx);
+        }
+
+        // Week-specific payouts button + mechanic select (posted by post-payouts workflow)
+        if (customId.startsWith('payouts_week_view:')) {
+          return handlePayoutsWeekButton(interaction, ctx);
+        }
+        if (customId.startsWith('payouts_week_mech:')) {
+          return handlePayoutsWeekMechSelect(interaction, ctx);
+        }
+
+        // Unrecognized component — return a proper ephemeral error so Discord
+        // shows a user-friendly message instead of "This interaction failed".
+        // This handles stale panels whose custom_ids were renamed in old deploys.
+        return jsonResponse({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: '❌ This button or menu is no longer active. An admin may need to re-post the panel.',
+            flags: 64, // ephemeral — only the clicking user sees it
+          },
+        });
       }
 
-      // Week-specific payouts button + mechanic select (posted by post-payouts workflow)
-      if (customId.startsWith('payouts_week_view:')) {
-        return handlePayoutsWeekButton(interaction, ctx);
-      }
-      if (customId.startsWith('payouts_week_mech:')) {
-        return handlePayoutsWeekMechSelect(interaction, ctx);
-      }
-
-      // Unrecognized component — return a proper ephemeral error so Discord
-      // shows a user-friendly message instead of "This interaction failed".
-      // This handles stale panels whose custom_ids were renamed in old deploys.
+      // Unknown interaction type — return a graceful ephemeral response so
+      // Discord never shows "This interaction failed" on any code path.
       return jsonResponse({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
-          content: '❌ This button or menu is no longer active. An admin may need to re-post the panel.',
-          flags: 64, // ephemeral — only the clicking user sees it
+          content: '❌ This interaction is not supported.',
+          flags: 64,
+        },
+      });
+    } catch (err) {
+      // Last-resort catch: any unexpected exception in the routing or handler
+      // code is converted to a proper ephemeral Discord error so the user sees
+      // a helpful message rather than Discord's generic "This interaction failed".
+      console.error('Unhandled error in interaction handler:', err);
+      return jsonResponse({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          content: `❌ An unexpected error occurred. Please try again.\n\`${err?.message ?? 'Unknown error'}\``,
+          flags: 64,
         },
       });
     }
-
-    return new Response('Unknown interaction type', { status: 400 });
   },
 
   /**
