@@ -168,6 +168,7 @@ jobs:
           RIPTIDE_USER_ID:       ${{ secrets.RIPTIDE_USER_ID }}
           TRIGGER_TOKEN:         ${{ secrets.TRIGGER_TOKEN }}
           DEBUG_CHANNEL_ID:      ${{ secrets.DEBUG_CHANNEL_ID }}
+          BOT_APP_ID:            ${{ secrets.DISCORD_APP_ID }}
         run: bash "$GITHUB_WORKSPACE/.github/scripts/push-worker-secrets.sh" kintsugi
 
       # ---- Deploy the alias "kintsugi-discord-bot" Worker ----
@@ -197,6 +198,7 @@ jobs:
           RIPTIDE_USER_ID:       ${{ secrets.RIPTIDE_USER_ID }}
           TRIGGER_TOKEN:         ${{ secrets.TRIGGER_TOKEN }}
           DEBUG_CHANNEL_ID:      ${{ secrets.DEBUG_CHANNEL_ID }}
+          BOT_APP_ID:            ${{ secrets.DISCORD_APP_ID }}
         run: bash "$GITHUB_WORKSPACE/.github/scripts/push-worker-secrets.sh" kintsugi-discord-bot
 
       # ---- Register slash commands ----

@@ -16,7 +16,25 @@
   //   ANALYTICS_CHANNEL_ID, JOBS_CHANNEL_ID, PAYOUTS_CHANNEL_ID
   //
   // Optional secrets:
-  //   RIPTIDE_USER_ID, TRIGGER_TOKEN, DEBUG_CHANNEL_ID
+  //   RIPTIDE_USER_ID    — Numeric Discord user ID to @mention on payday
+  //   TRIGGER_TOKEN      — Bearer token for dashboard buttons / gateway-start
+  //   DEBUG_CHANNEL_ID   — Discord channel for bot error embeds
+  //   BOT_APP_ID         — Discord Application ID (same value as DISCORD_APP_ID).
+  //                        Required for @mention detection in the Gateway listener.
+  //                        Pushed automatically by CI from the DISCORD_APP_ID secret.
+  //
+  // @mention support — DiscordGateway Durable Object:
+  //   The DiscordGateway DO holds a persistent outgoing WebSocket to Discord's
+  //   Gateway API so the bot receives MESSAGE_CREATE events in real time and can
+  //   reply when @mentioned.  Durable Objects are available on the Cloudflare
+  //   free plan (https://developers.cloudflare.com/durable-objects/).
+  //   After deploying, start the gateway once:
+  //     POST /api/gateway-start  (Authorization: Bearer <TRIGGER_TOKEN>)
+  //   The DO then self-heals via alarms — no manual restarts needed.
+  //
+  //   Discord Developer Portal setup required:
+  //     Bot → Privileged Gateway Intents → "Message Content Intent" — enable this.
+  //     Without it, message content is empty for non-mention messages.
   // =======================================
   "name": "kintsugi",
   "compatibility_date": "2026-03-10",
@@ -31,8 +49,13 @@
   },
   "ai": {
     "binding": "AI"
-  }
-  // @mention responses are handled via the /ask slash command (Workers AI).
-  // The DiscordGateway Durable Object was removed because Durable Objects
-  // require the Cloudflare Workers Paid plan; the free tier cannot use them.
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "DISCORD_GATEWAY", "class_name": "DiscordGateway" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_classes": ["DiscordGateway"] }
+  ]
 }
