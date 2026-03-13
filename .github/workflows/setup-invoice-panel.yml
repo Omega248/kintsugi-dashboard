@@ -1,0 +1,64 @@
+# =======================================
+# Post (or update) the permanent Invoice Panel in a Discord channel
+#
+# Runs `discord-bot/setup-invoice-panel.js` using secrets stored in GitHub
+# so you never need to paste a bot token into a terminal.
+#
+# Trigger: manual only (Actions tab → "Post Invoice Panel" → Run workflow)
+#
+# Required GitHub repository secrets:
+#   DISCORD_BOT_TOKEN  — Bot token from the Discord Developer Portal
+#   INVOICE_CHANNEL_ID — Default channel to post the panel in (#invoice)
+#
+# Optional workflow inputs:
+#   channel_id        — Override the target channel ID at run time.
+#                       Leave blank to use the INVOICE_CHANNEL_ID secret.
+#   panel_message_id  — Discord message ID of the existing panel to edit.
+#                       When provided the script PATCHes the existing message
+#                       instead of POSTing a new one, keeping the pinned
+#                       message in place and avoiding stale duplicate panels.
+# =======================================
+name: Post Invoice Panel
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel_id:
+        description: >
+          Discord channel ID to post the panel in.
+          Leave blank to use the INVOICE_CHANNEL_ID secret (your #invoice channel).
+        required: false
+        default: ''
+      panel_message_id:
+        description: >
+          Discord message ID of the existing panel to edit instead of posting a new one.
+          Leave blank to post a fresh panel (get the ID from the first run's output).
+        required: false
+        default: ''
+
+jobs:
+  post-panel:
+    name: Post Invoice panel to Discord
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Post Invoice panel
+        working-directory: discord-bot
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          # Use the manually-supplied channel_id if provided, otherwise fall
+          # back to the INVOICE_CHANNEL_ID secret.
+          DISCORD_CHANNEL_ID: ${{ inputs.channel_id != '' && inputs.channel_id || secrets.INVOICE_CHANNEL_ID }}
+          # When panel_message_id is supplied the script edits the existing
+          # message instead of posting a new one.
+          PANEL_MESSAGE_ID: ${{ inputs.panel_message_id }}
+        run: node setup-invoice-panel.js

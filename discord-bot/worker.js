@@ -1088,21 +1088,28 @@ async function handleInvoicePanelButton(interaction, ctx) {
   const { application_id: appId, token } = interaction;
 
   ctx.waitUntil((async () => {
-    await editOriginalMessage(appId, token, {
-      content:    '📋 **Step 1 of 3 — Select a department:**',
-      components: [{
-        type: 1,
+    try {
+      await editOriginalMessage(appId, token, {
+        content:    '📋 **Step 1 of 3 — Select a department:**',
         components: [{
-          type:        3,
-          custom_id:   'billing_dept_select',
-          placeholder: 'Choose a department…',
-          options: [
-            { label: 'BCSO', value: 'BCSO', emoji: { name: '🟡' } },
-            { label: 'LSPD', value: 'LSPD', emoji: { name: '🔵' } },
-          ],
+          type: 1,
+          components: [{
+            type:        3,
+            custom_id:   'billing_dept_select',
+            placeholder: 'Choose a department…',
+            options: [
+              { label: 'BCSO', value: 'BCSO', emoji: { name: '🟡' } },
+              { label: 'LSPD', value: 'LSPD', emoji: { name: '🔵' } },
+            ],
+          }],
         }],
-      }],
-    }).catch(() => {});
+      });
+    } catch (err) {
+      await editOriginalMessage(appId, token, {
+        content:    `❌ Failed to load department selector.\n\`${err.message}\``,
+        components: [],
+      }).catch(() => {});
+    }
   })());
 
   return jsonResponse({
@@ -2028,13 +2035,14 @@ export default {
       }
 
       // Invoice panel button + dept + month select (permanent billing panel)
-      if (customId === 'billing_generate_invoice') {
+      // Also handle legacy custom_ids from panels posted before the billing_ prefix rename (PR #81).
+      if (customId === 'billing_generate_invoice' || customId === 'payouts_panel_start') {
         return handleInvoicePanelButton(interaction, ctx);
       }
-      if (customId === 'billing_dept_select') {
+      if (customId === 'billing_dept_select' || customId === 'invoice_dept_select') {
         return handleInvoiceDeptSelect(interaction, ctx);
       }
-      if (customId.startsWith('billing_month_select:')) {
+      if (customId.startsWith('billing_month_select:') || customId.startsWith('invoice_month_select:')) {
         return handleInvoiceMonthSelect(interaction, ctx);
       }
 
