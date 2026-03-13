@@ -1,0 +1,14 @@
+{
+  "name": "kintsugi",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Kintsugi Motorworks dashboard and Discord bot — single unified Cloudflare Worker",
+  "scripts": {
+    "start": "wrangler dev",
+    "deploy": "wrangler deploy --config wrangler.jsonc"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

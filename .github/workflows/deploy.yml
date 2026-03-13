@@ -1,0 +1,236 @@
+# =======================================
+# Deploy Kintsugi — Unified Cloudflare Worker
+#
+# Deploys the single root worker.js that serves both the web dashboard
+# (static assets) and the Discord bot (interactions + cron).
+#
+# Triggers:
+#   - Any push to `main` (all source files are now in one worker)
+#   - Manual dispatch from the Actions tab
+#
+# Required GitHub repository secrets:
+#   CLOUDFLARE_API_TOKEN   — API token with Workers Scripts:Edit AND Workers KV Storage:Edit
+#   CLOUDFLARE_ACCOUNT_ID  — Your Cloudflare account ID
+#
+# Optional GitHub repository secrets (pushed to the Worker when set):
+#   DISCORD_PUBLIC_KEY     — From Discord Developer Portal → "Public Key"
+#   DISCORD_BOT_TOKEN      — From Discord Developer Portal → Bot → "Reset Token"
+#   DISCORD_APP_ID         — From Discord Developer Portal → "Application ID"
+#   ANALYTICS_CHANNEL_ID   — Discord channel ID for the #analytics channel
+#   JOBS_CHANNEL_ID        — Discord channel ID for the #jobs channel
+#   PAYOUTS_CHANNEL_ID     — Discord channel ID for the #payouts channel
+#   RIPTIDE_USER_ID        — Numeric Discord user ID to @mention on payday
+#   TRIGGER_TOKEN          — Secret token for dashboard "Notify Discord" button
+#
+# After deployment, copy the worker URL
+#   (e.g. https://kintsugi-discord-bot.<subdomain>.workers.dev)
+# and paste it into:
+#   Discord Developer Portal → General Information → Interactions Endpoint URL
+# =======================================
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Cloudflare Workers
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ---- Automatically provision the Workers KV namespace ----
+      # NOTE: CLOUDFLARE_API_TOKEN must have "Workers KV Storage:Edit" permission.
+      # Creates a KV namespace named "KINTSUGI_BOT" if it doesn't exist, then
+      # injects its ID into wrangler.jsonc for the deploy step.
+      # Retries up to 5 times with exponential back-off on transient failures.
+      - name: Provision KV namespace (KINTSUGI_BOT)
+        id: kv
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          # shellcheck source=.github/scripts/with_retry.sh
+          . "$GITHUB_WORKSPACE/.github/scripts/with_retry.sh"
+
+          fetch_namespaces() {
+            NAMESPACES=$(curl -sf \
+              "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces?per_page=100" \
+              -H "Authorization: Bearer ${CF_API_TOKEN}")
+          }
+          with_retry fetch_namespaces
+
+          KV_ID=$(echo "${NAMESPACES}" | python3 -c '
+          import json, sys
+          raw = sys.stdin.read()
+          try:
+              data = json.loads(raw)
+          except ValueError as e:
+              print("ERROR: Cloudflare API returned non-JSON response: " + str(e), file=sys.stderr)
+              print("Response was: " + raw[:500], file=sys.stderr)
+              sys.exit(1)
+          if not data.get("success"):
+              print("ERROR: Cloudflare API call failed: " + str(data.get("errors", [])), file=sys.stderr)
+              sys.exit(1)
+          for ns in (data.get("result") or []):
+              if ns.get("title") == "KINTSUGI_BOT":
+                  print(ns["id"])
+                  break
+          ')
+
+          if [ -z "${KV_ID}" ]; then
+            echo "KV namespace 'KINTSUGI_BOT' not found — creating it..."
+
+            create_namespace() {
+              CREATED=$(curl -sf -X POST \
+                "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces" \
+                -H "Authorization: Bearer ${CF_API_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d '{"title":"KINTSUGI_BOT"}')
+            }
+            with_retry create_namespace
+
+            KV_ID=$(echo "${CREATED}" | python3 -c '
+          import json, sys
+          raw = sys.stdin.read()
+          try:
+              data = json.loads(raw)
+          except ValueError as e:
+              print("ERROR: Cloudflare API returned non-JSON response: " + str(e), file=sys.stderr)
+              print("Response was: " + raw[:500], file=sys.stderr)
+              sys.exit(1)
+          if not data.get("success"):
+              print("ERROR: Cloudflare API call failed: " + str(data.get("errors", [])), file=sys.stderr)
+              print("Ensure CLOUDFLARE_API_TOKEN has Workers KV Storage:Edit permission.", file=sys.stderr)
+              sys.exit(1)
+          print(data["result"]["id"])
+          ')
+            echo "Created KV namespace 'KINTSUGI_BOT'."
+          else
+            echo "Found existing KV namespace 'KINTSUGI_BOT'."
+          fi
+
+          echo "kv_namespace_id=${KV_ID}" >> "${GITHUB_OUTPUT}"
+
+      # ---- Append the KV binding to wrangler.jsonc and wrangler-bot.jsonc ----
+      # This modifies the checked-out copies; they are never committed to the repo.
+      - name: Inject KV binding into wrangler configs
+        run: |
+          # Uses node for JSON-safe editing.  Both configs share the same KV namespace.
+          node - "${{ steps.kv.outputs.kv_namespace_id }}" << 'EOF'
+          const fs   = require('fs');
+          const kvId = process.argv[1];
+          for (const file of ['wrangler.jsonc', 'wrangler-bot.jsonc']) {
+            const raw      = fs.readFileSync(file, 'utf8');
+            // Strip single-line // comments so JSON.parse works
+            const stripped = raw.replace(/\/\/[^\n]*/g, '');
+            const cfg      = JSON.parse(stripped);
+            cfg.kv_namespaces = [{ binding: 'KV', id: kvId }];
+            // Write back as standard JSON (wrangler accepts both jsonc and json)
+            fs.writeFileSync(file, JSON.stringify(cfg, null, 2));
+            console.log(`KV binding injected into ${file}`);
+          }
+          EOF
+
+      # ---- Deploy the primary "kintsugi" Worker + push secrets ----
+      # Uses the official Cloudflare Wrangler Action which handles installing
+      # Wrangler, deploying the worker, and bulk-pushing secrets in one step.
+      - name: Deploy Worker (kintsugi)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.72.0'
+          command: deploy --config wrangler.jsonc
+          secrets: |
+            DISCORD_PUBLIC_KEY
+            DISCORD_BOT_TOKEN
+            ANALYTICS_CHANNEL_ID
+            JOBS_CHANNEL_ID
+            PAYOUTS_CHANNEL_ID
+            RIPTIDE_USER_ID
+            TRIGGER_TOKEN
+        env:
+          DISCORD_PUBLIC_KEY:    ${{ secrets.DISCORD_PUBLIC_KEY }}
+          DISCORD_BOT_TOKEN:     ${{ secrets.DISCORD_BOT_TOKEN }}
+          ANALYTICS_CHANNEL_ID:  ${{ secrets.ANALYTICS_CHANNEL_ID }}
+          JOBS_CHANNEL_ID:       ${{ secrets.JOBS_CHANNEL_ID }}
+          PAYOUTS_CHANNEL_ID:    ${{ secrets.PAYOUTS_CHANNEL_ID }}
+          RIPTIDE_USER_ID:       ${{ secrets.RIPTIDE_USER_ID }}
+          TRIGGER_TOKEN:         ${{ secrets.TRIGGER_TOKEN }}
+
+      # ---- Deploy the alias "kintsugi-discord-bot" Worker + push secrets ----
+      # Deploys the same worker.js under the legacy name so that existing Discord
+      # Developer Portal Interactions Endpoint URLs pointing to kintsugi-discord-bot
+      # continue to work alongside the primary kintsugi worker.
+      # The DiscordGateway Durable Object is referenced as a foreign namespace from
+      # the primary worker, so both URLs share the same gateway connection.
+      - name: Deploy Worker (kintsugi-discord-bot)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.72.0'
+          command: deploy --config wrangler-bot.jsonc
+          secrets: |
+            DISCORD_PUBLIC_KEY
+            DISCORD_BOT_TOKEN
+            ANALYTICS_CHANNEL_ID
+            JOBS_CHANNEL_ID
+            PAYOUTS_CHANNEL_ID
+            RIPTIDE_USER_ID
+            TRIGGER_TOKEN
+        env:
+          DISCORD_PUBLIC_KEY:    ${{ secrets.DISCORD_PUBLIC_KEY }}
+          DISCORD_BOT_TOKEN:     ${{ secrets.DISCORD_BOT_TOKEN }}
+          ANALYTICS_CHANNEL_ID:  ${{ secrets.ANALYTICS_CHANNEL_ID }}
+          JOBS_CHANNEL_ID:       ${{ secrets.JOBS_CHANNEL_ID }}
+          PAYOUTS_CHANNEL_ID:    ${{ secrets.PAYOUTS_CHANNEL_ID }}
+          RIPTIDE_USER_ID:       ${{ secrets.RIPTIDE_USER_ID }}
+          TRIGGER_TOKEN:         ${{ secrets.TRIGGER_TOKEN }}
+
+      # ---- Register slash commands ----
+      - name: Register slash commands
+        env:
+          DISCORD_APP_ID:    ${{ secrets.DISCORD_APP_ID }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${DISCORD_APP_ID:-}" ]; then
+            echo "DISCORD_APP_ID not set — skipping slash command registration."
+            echo "Add DISCORD_APP_ID to GitHub Secrets and redeploy, or run the 'Register Slash Commands' workflow manually."
+          else
+            . "$GITHUB_WORKSPACE/.github/scripts/with_retry.sh"
+            with_retry node scripts/register-commands.js
+          fi
+
+      # ---- Start the Discord Gateway Durable Object ----
+      # Pings /api/gateway-start on the deployed Worker so the bot connects to
+      # Discord's Gateway immediately after deploy (no need to wait for the cron).
+      # The bot will not respond to @mentions until this step succeeds.
+      # Requires WORKER_URL to be set as a GitHub repository secret — set it to:
+      #   https://kintsugi-discord-bot.<subdomain>.workers.dev
+      - name: Start Discord Gateway
+        env:
+          WORKER_URL: ${{ secrets.WORKER_URL }}
+        run: |
+          if [ -z "${WORKER_URL:-}" ]; then
+            echo "WORKER_URL not set — skipping gateway start."
+            echo "Set WORKER_URL in GitHub Secrets to the deployed Worker URL so the gateway"
+            echo "starts automatically after each deploy. The cron will start it within 5 minutes anyway."
+          else
+            echo "Signalling gateway start at ${WORKER_URL}/api/gateway-start …"
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${WORKER_URL}/api/gateway-start" || echo "000")
+            echo "Response status: ${STATUS}"
+            if [ "${STATUS}" != "200" ]; then
+              echo "Warning: gateway start returned HTTP ${STATUS}. The cron will retry within 5 minutes."
+            fi
+          fi

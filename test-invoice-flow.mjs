@@ -7,7 +7,7 @@
 // button is pressed.
 //
 // Run:
-//   node discord-bot/test-invoice-flow.mjs
+//   node test-invoice-flow.mjs
 // =====================================================================
 
 // ── Fake sheet CSV (mirrors the real Google Sheet column headers) ────────
@@ -46,8 +46,8 @@ Object.defineProperty(globalThis.crypto, 'subtle', {
 
 // ── Mock global fetch ─────────────────────────────────────────────────
 globalThis.fetch = async (url, opts = {}) => {
-  // Google Sheets requests
-  if (typeof url === 'string' && url.includes('docs.google.com')) {
+  // Google Sheets requests — match the exact domain used by sheetCsvUrl()
+  if (typeof url === 'string' && /^https:\/\/docs\.google\.com\//.test(url)) {
     const isState = url.includes(encodeURIComponent("State ID's"));
     const csv = isState ? FAKE_STATE_CSV : FAKE_JOBS_CSV;
     return {
@@ -589,7 +589,7 @@ await runTest('Upstream HTTP 500 → error message shown to user', async () => {
 });
 
 // ── Test: month with no matching jobs → 0-row invoice + CSV (not an error) ──
-await runTest('Month with 0 matching jobs → valid 0-row invoice + CSV file (no crash)', async () => {
+await runTest('Month with 0 matching jobs → ephemeral error (no empty invoice)', async () => {
   // "2026-01-31" has no data in the fake sheet → 0 deptJobs for LSPD
   const { ctx, flush } = makeCtx();
   const res  = await worker.fetch(
@@ -603,14 +603,13 @@ await runTest('Month with 0 matching jobs → valid 0-row invoice + CSV file (no
 
   await flush();
 
-  // Multipart PATCH with CSV file — still delivered even for 0-job months
-  assert(capturedPatch !== null, 'editOriginalMessageWithFile (PATCH) was called');
-  assert(capturedPatchIsFile, 'Primary PATCH is multipart (CSV attached) even for 0-job month');
+  // The empty-invoice guard sends a plain JSON error rather than a CSV file.
+  assert(capturedPatch !== null, 'editOriginalMessage was called');
+  assert(!capturedPatchIsFile, 'Response is a plain JSON error (no CSV), not a multipart upload');
   assert(capturedFollowup === null, 'No follow-up file for 0-job month');
-  const embeds = capturedPatch.embeds ?? [];
-  assert(embeds.length > 0, 'At least one embed in the 0-job invoice');
-  const fields = embeds[0].fields ?? [];
-  assert(fields.some(f => f.name.includes('Total Jobs')), 'Embed has "Total Jobs" field');
+  const content = capturedPatch.content ?? '';
+  assert(content.startsWith('❌'), 'Error message starts with ❌');
+  assert(content.includes('No jobs found'), 'Error mentions "No jobs found"');
 });
 
 // ── Summary ────────────────────────────────────────────────────────────

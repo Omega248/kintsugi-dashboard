@@ -42,10 +42,9 @@ jobs:
           node-version: '20'
 
       - name: Post Job Logs panel
-        working-directory: discord-bot
         env:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           # Use the manually-supplied channel_id if provided, otherwise fall
           # back to the JOBS_CHANNEL_ID secret.
           DISCORD_CHANNEL_ID: ${{ inputs.channel_id != '' && inputs.channel_id || secrets.JOBS_CHANNEL_ID }}
-        run: node setup-panel.js
+        run: node scripts/setup-panel.js

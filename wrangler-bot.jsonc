@@ -1,0 +1,45 @@
+{
+  // =======================================
+  // kintsugi-discord-bot — alias Worker
+  //
+  // Deploys the same worker.js under the legacy "kintsugi-discord-bot" name so
+  // that both URLs remain active:
+  //   https://kintsugi.<subdomain>.workers.dev          (primary, Cloudflare Builds)
+  //   https://kintsugi-discord-bot.<subdomain>.workers.dev  (alias, Discord Portal)
+  //
+  // The DiscordGateway Durable Object is *owned* by the primary "kintsugi" worker.
+  // This config references it as a foreign namespace (script_name: "kintsugi") so
+  // both worker names share the same gateway connection and state.
+  //
+  // Required secrets (same set as wrangler.jsonc — pushed by the deploy workflow):
+  //   DISCORD_PUBLIC_KEY, DISCORD_BOT_TOKEN,
+  //   ANALYTICS_CHANNEL_ID, JOBS_CHANNEL_ID, PAYOUTS_CHANNEL_ID
+  //
+  // Optional secrets:
+  //   RIPTIDE_USER_ID, TRIGGER_TOKEN
+  // =======================================
+  "name": "kintsugi-discord-bot",
+  "compatibility_date": "2026-03-10",
+  "main": "worker.js",
+  "assets": {
+    "directory": "./",
+    "binding": "ASSETS"
+  },
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+  "ai": {
+    "binding": "AI"
+  },
+  // References the Durable Object owned by the primary "kintsugi" worker.
+  // No "migrations" block needed here — migrations are managed by the owner.
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "DISCORD_GATEWAY",
+        "class_name": "DiscordGateway",
+        "script_name": "kintsugi"
+      }
+    ]
+  }
+}

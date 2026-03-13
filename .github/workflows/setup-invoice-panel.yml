@@ -64,7 +64,6 @@ jobs:
           node-version: '20'
 
       - name: Post Invoice panel
-        working-directory: discord-bot
         env:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           # Use the manually-supplied channel_id if provided, otherwise fall
@@ -76,5 +75,5 @@ jobs:
           # When true (and PANEL_MESSAGE_ID is set) the script deletes the old
           # message and posts a fresh panel instead of patching in place.
           DELETE_EXISTING: ${{ inputs.delete_existing }}
-        run: node setup-invoice-panel.js
+        run: node scripts/setup-invoice-panel.js
 
