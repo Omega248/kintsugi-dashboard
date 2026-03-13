@@ -1227,28 +1227,31 @@ async function handleInvoiceMonthSelect(interaction, ctx) {
 /**
  * Build a payout embed for one mechanic covering a specific set of jobs.
  * Used by the week-specific payouts messages posted by the post-payouts workflow.
+ *
+ * @param {string} mechanic      - Mechanic display name.
+ * @param {string} stateId       - Mechanic's in-game State ID (or empty string).
+ * @param {Array}  filteredJobs  - Job rows for this mechanic in the period.
+ * @param {Date}   weekEndDate   - The Sunday that closes the week being displayed.
  */
-function buildMechanicPayoutEmbed(mechanic, stateId, filteredJobs, period) {
+function buildMechanicPayoutEmbed(mechanic, stateId, filteredJobs, weekEndDate) {
   let repairs = 0, engines = 0;
   for (const j of filteredJobs) {
     repairs += j.across || 0;
     engines += j.engineReplacements || 0;
   }
-  const jobCount = filteredJobs.length;
-  const payout   = repairs * PAY_PER_REPAIR + engines * ENGINE_PAY_DEFAULT;
-  const color    = repairs > 0 ? 0x22c55e : 0xef4444;
+  const jobCount   = filteredJobs.length;
+  const payout     = repairs * PAY_PER_REPAIR + engines * ENGINE_PAY_DEFAULT;
+  const color      = repairs > 0 ? 0x22c55e : 0xef4444;
+  const dateLabel  = fmtDate(weekEndDate);
 
   const fields = [
-    { name: '📅 Period',             value: period,           inline: true },
-    { name: '🧾 Jobs',               value: String(jobCount), inline: true },
-    { name: '🔧 Repairs (Across)',   value: String(repairs),  inline: true },
-    { name: '💰 Payout',             value: fmtMoney(payout), inline: true },
+    { name: '📅 Week Ending',  value: dateLabel,        inline: true },
+    { name: '🔧 Repairs',      value: String(repairs),  inline: true },
+    { name: '💰 Payout',       value: fmtMoney(payout), inline: true },
+    { name: '🪪 State ID',     value: stateId || 'N/A', inline: true },
   ];
   if (engines > 0) {
     fields.push({ name: '🔩 Engines', value: String(engines), inline: true });
-  }
-  if (stateId && stateId !== 'N/A') {
-    fields.push({ name: '🪪 State ID', value: stateId, inline: true });
   }
 
   if (jobCount > 0) {
@@ -1268,7 +1271,7 @@ function buildMechanicPayoutEmbed(mechanic, stateId, filteredJobs, period) {
   }
 
   const notice = repairs === 0
-    ? `No jobs were recorded for **${mechanic}** in the selected period.`
+    ? `No jobs were recorded for **${mechanic}** in the week ending **${dateLabel}**.`
     : '';
 
   return {
@@ -1383,11 +1386,10 @@ async function handlePayoutsWeekMechSelect(interaction, ctx) {
       const mechJobs = weekJobs.filter(j => j.mechanic === mechanic);
 
       const stateId = stateMap.get(mechanic) || 'N/A';
-      const period  = `Week ending ${fmtDate(weekEndDate)}`;
 
       await editOriginalMessage(
         appId, token,
-        buildMechanicPayoutEmbed(mechanic, stateId, mechJobs, period)
+        buildMechanicPayoutEmbed(mechanic, stateId, mechJobs, weekEndDate)
       );
     } catch (err) {
       await editOriginalMessage(appId, token, {
