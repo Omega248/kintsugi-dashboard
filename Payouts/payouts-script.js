@@ -313,10 +313,12 @@ async function loadPayouts() {
           weekEnd,
           weekISO,
           mKey,
+          jobCount: 0,
           repairs: 0,
           engineReplacements: 0,
           engineReplacementsByDept: {}, // track engine replacements by department
         };
+      w.jobCount++;
       w.repairs += across;
       w.engineReplacements += engineCount;
       if (engineCount > 0 && dept) {
@@ -467,10 +469,12 @@ function renderWeekly() {
       weekEnd: j.weekEnd,
       weekISO: j.weekISO,
       mKey: j.mKey,
+      jobCount: 0,
       repairs: 0,
       engineReplacements: 0,
       engineReplacementsByDept: {},
     };
+    w.jobCount++;
     w.repairs += j.across;
     w.engineReplacements += j.engineReplacements;
     if (j.engineReplacements > 0 && j.department) {
@@ -484,7 +488,7 @@ function renderWeekly() {
 
   if (!filtered.length) {
     weeklyBody.innerHTML =
-      '<tr><td colspan="5" style="padding:8px; color:#6b7280;">No weekly records for this selection.</td></tr>';
+      '<tr><td colspan="7" style="padding:8px; color:#6b7280;">No weekly records for this selection.</td></tr>';
     if (weeklySummaryEl) weeklySummaryEl.textContent = "";
     return;
   }
@@ -526,7 +530,7 @@ function renderWeekly() {
     headerRow.dataset.groupId = groupId;
 
     const headerTd = document.createElement("td");
-    headerTd.colSpan = 5;
+    headerTd.colSpan = 7;
 
     const toggleBtn = document.createElement("button");
     toggleBtn.className = "week-group-toggle";
@@ -552,6 +556,7 @@ function renderWeekly() {
       const enginePay = calculateEnginePayment(r.engineReplacementsByDept);
       const pay = r.repairs * PAY_PER_REPAIR + enginePay;
       const comment = commentForWeek(r.weekEnd);
+      const engineReps = r.engineReplacements || 0;
 
       const mechLabel = labelWithStateId(r.mechanic);
 
@@ -561,7 +566,9 @@ function renderWeekly() {
       tr.innerHTML = `
         <td><button class="mech-link" data-mech="${r.mechanic}">${mechLabel}</button></td>
         <td>${fmtDate(r.weekEnd)}</td>
+        <td class="col-count">${r.jobCount || 0}</td>
         <td class="col-count">${r.repairs}</td>
+        <td class="col-count">${engineReps > 0 ? engineReps : 0}</td>
         <td class="col-amount amount-in">
           ${fmtMoney(pay)}
           <div class="payout-comment">${comment}</div>
