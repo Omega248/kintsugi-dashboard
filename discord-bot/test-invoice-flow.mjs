@@ -263,6 +263,61 @@ await runTest('Guard — joblogs_start still routes to mechanic selector (unchan
   assert(hasMechSelect, 'joblogs_start correctly shows the mechanic select menu');
 });
 
+// ── Test: payouts_week_view button → mechanic select ─────────────────────
+await runTest('payouts_week_view:2026-03-07 → mechanic select (View My Payout flow)', async () => {
+  const weekEndISO = '2026-03-07';
+  const { ctx, flush } = makeCtx();
+  const res  = await worker.fetch(makeRequest(`payouts_week_view:${weekEndISO}`), FAKE_ENV, ctx);
+  const data = await res.json();
+
+  // Immediate response must be a deferred ephemeral (type 5, flags 64)
+  assert(data.type === 5, 'payouts_week_view responds with DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE (5)');
+  assert(data.data?.flags === 64, 'payouts_week_view response is ephemeral (flags=64)');
+
+  await flush();
+
+  assert(capturedPatch !== null, 'editOriginalMessage was called after defer');
+
+  // Must show a mechanic select dropdown
+  const selects = (capturedPatch.components ?? [])
+    .flatMap(row => row.components ?? [])
+    .filter(c => c.type === 3);
+  assert(selects.length > 0, 'At least one select menu is present');
+
+  const mechSelect = selects.find(s => s.custom_id === `payouts_week_mech:${weekEndISO}`);
+  assert(mechSelect !== undefined, `Select menu custom_id is "payouts_week_mech:${weekEndISO}"`);
+  assert((mechSelect.options ?? []).length > 0, 'At least one mechanic option is present');
+});
+
+// ── Test: payouts_week_mech → individual payout embed ───────────────────
+await runTest('payouts_week_mech:2026-03-07 → individual payout embed', async () => {
+  const weekEndISO = '2026-03-07';
+  const { ctx, flush } = makeCtx();
+  const res  = await worker.fetch(
+    makeRequest(`payouts_week_mech:${weekEndISO}`, ['John Smith']),
+    FAKE_ENV,
+    ctx
+  );
+  const data = await res.json();
+
+  assert(data.type === 6, 'payouts_week_mech responds with DEFERRED_UPDATE_MESSAGE (6)');
+
+  await flush();
+
+  assert(capturedPatch !== null, 'editOriginalMessage was called');
+
+  const embeds = capturedPatch.embeds ?? [];
+  assert(embeds.length > 0, 'At least one embed in the response');
+  assert(
+    embeds[0].title?.includes('John Smith'),
+    `Embed title includes mechanic name "John Smith" (got "${embeds[0].title}")`
+  );
+
+  // Must NOT include any follow-up selects
+  const components = capturedPatch.components ?? [];
+  assert(components.length === 0, 'No components in final payout embed (no follow-up dropdowns)');
+});
+
 // ── Summary ────────────────────────────────────────────────────────────
 console.log('');
 console.log('─────────────────────────────────────────────────────');
