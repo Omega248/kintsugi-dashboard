@@ -26,8 +26,10 @@ const FAKE_STATE_CSV = [
 ].join('\n');
 
 // ── Spy state ─────────────────────────────────────────────────────────
-let capturedPatch = null;   // last PATCH @original payload (or FormData for file uploads)
+let capturedPatch = null;   // last PATCH @original payload
 let capturedPatchIsFile = false;
+let capturedFollowup = null;      // last POST (follow-up) payload — used by postFollowupWithFile
+let capturedFollowupIsFile = false;
 
 // ── Mock global crypto (bypass Ed25519 signature verification) ─────────
 // Node 24 makes globalThis.crypto a getter-only property, so we must use
@@ -55,16 +57,30 @@ globalThis.fetch = async (url, opts = {}) => {
     };
   }
 
-  // Discord webhook PATCH @original (editOriginalMessage / editOriginalMessageWithFile)
+  // Discord webhook PATCH @original — used by editOriginalMessage (plain JSON PATCH).
+  // The new invoice flow always uses plain JSON here; multipart file upload moved to POST.
   if (typeof url === 'string' && url.includes('webhooks') && opts.method === 'PATCH') {
     if (opts.body instanceof FormData) {
-      // File upload (multipart) — used by editOriginalMessageWithFile
       const payloadJson = opts.body.get('payload_json');
       capturedPatch = payloadJson ? JSON.parse(payloadJson) : {};
       capturedPatchIsFile = true;
     } else {
       capturedPatch = JSON.parse(opts.body || '{}');
       capturedPatchIsFile = false;
+    }
+    return { ok: true, json: async () => ({}), text: async () => '' };
+  }
+
+  // Discord webhook POST — used by postFollowupWithFile (CSV as separate follow-up).
+  // The URL does NOT end with "/messages/@original" for follow-ups.
+  if (typeof url === 'string' && url.includes('webhooks') && opts.method === 'POST') {
+    if (opts.body instanceof FormData) {
+      const payloadJson = opts.body.get('payload_json');
+      capturedFollowup = payloadJson ? JSON.parse(payloadJson) : {};
+      capturedFollowupIsFile = true;
+    } else {
+      capturedFollowup = JSON.parse(opts.body || '{}');
+      capturedFollowupIsFile = false;
     }
     return { ok: true, json: async () => ({}), text: async () => '' };
   }
@@ -122,8 +138,10 @@ let passed = 0;
 let failed = 0;
 
 async function runTest(name, fn) {
-  capturedPatch     = null;
-  capturedPatchIsFile = false;
+  capturedPatch        = null;
+  capturedPatchIsFile  = false;
+  capturedFollowup     = null;
+  capturedFollowupIsFile = false;
   try {
     await fn();
     passed++;
@@ -134,7 +152,10 @@ async function runTest(name, fn) {
 }
 
 // ── Test 1: "Generate Monthly Invoice" button → department select ────────
-await runTest('Step 1 — billing_generate_invoice → department select (NOT mechanic list)', async () => {
+// The handler now fetches the sheet (mirrors handleStartButton) to discover
+// departments dynamically.  The fake sheet has BCSO + LSPD jobs, so both
+// options will appear in the select menu.
+await runTest('Step 1 — billing_generate_invoice → department select from sheet (NOT mechanic list)', async () => {
   const { ctx, flush } = makeCtx();
   const res  = await worker.fetch(makeRequest('billing_generate_invoice'), FAKE_ENV, ctx);
   const data = await res.json();
@@ -143,7 +164,7 @@ await runTest('Step 1 — billing_generate_invoice → department select (NOT me
   assert(data.type === 5, 'Response type is DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE (5)');
   assert(data.data?.flags === 64, 'Response is ephemeral (flags=64)');
 
-  // Wait for the background edit to fire
+  // Wait for the background sheet fetch + edit to fire
   await flush();
 
   assert(capturedPatch !== null, 'editOriginalMessage was called after defer');
@@ -153,7 +174,7 @@ await runTest('Step 1 — billing_generate_invoice → department select (NOT me
   assert(!content.toLowerCase().includes('mechanic'), 'Response does NOT mention "mechanic"');
   assert(!content.toLowerCase().includes('payout'),   'Response does NOT mention "payout"');
 
-  // Must show a department selector
+  // Must show a department selector sourced from the sheet
   const components = capturedPatch.components ?? [];
   assert(components.length > 0, 'Response includes at least one component row');
   const selects = components.flatMap(row => row.components ?? []).filter(c => c.type === 3);
@@ -162,9 +183,10 @@ await runTest('Step 1 — billing_generate_invoice → department select (NOT me
   assert(deptSelect !== undefined, 'Select menu custom_id is "billing_dept_select"');
 
   const optionValues = (deptSelect.options ?? []).map(o => o.value);
-  assert(optionValues.includes('BCSO'), 'BCSO option is present');
-  assert(optionValues.includes('LSPD'), 'LSPD option is present');
-  assert(optionValues.length === 2,     'Exactly two department options (BCSO + LSPD)');
+  assert(optionValues.includes('BCSO'), 'BCSO option is present (sourced from sheet)');
+  assert(optionValues.includes('LSPD'), 'LSPD option is present (sourced from sheet)');
+  // Departments come from the sheet — the fake sheet has exactly BCSO + LSPD
+  assert(optionValues.length === 2, 'Exactly two department options from the fake sheet (BCSO + LSPD)');
 });
 
 // ── Test 2: Department selected → month ending select ─────────────────────
@@ -201,8 +223,11 @@ await runTest('Step 2 — billing_dept_select (BCSO) → month ending select', a
   console.log(`     ℹ️  Month value for step 3: ${globalThis._testMonthValue}`);
 });
 
-// ── Test 3: Month selected → invoice embed + CSV file ─────────────────────
-await runTest('Step 3 — billing_month_select:BCSO → invoice embed + CSV (no mechanic dropdown)', async () => {
+// ── Test 3: Month selected → invoice embed (PATCH) + CSV follow-up (POST) ─────
+// The new flow mirrors handleWeekSelect: editOriginalMessage (plain JSON PATCH)
+// updates the ephemeral message with the embed; postFollowupWithFile (POST) sends
+// the CSV as a separate ephemeral follow-up — no complex multipart PATCH.
+await runTest('Step 3 — billing_month_select:BCSO → invoice embed via PATCH + CSV via follow-up POST', async () => {
   const monthValue = globalThis._testMonthValue ?? '2026-03-31';
 
   const { ctx, flush } = makeCtx();
@@ -217,24 +242,26 @@ await runTest('Step 3 — billing_month_select:BCSO → invoice embed + CSV (no 
 
   await flush();
 
-  assert(capturedPatch !== null, 'editOriginalMessageWithFile was called');
-  assert(capturedPatchIsFile, 'Response is a multipart file upload (CSV attached)');
+  // Primary response: editOriginalMessage (plain JSON PATCH) with the invoice embed
+  assert(capturedPatch !== null, 'editOriginalMessage (PATCH) was called with the invoice embed');
+  assert(!capturedPatchIsFile, 'Primary response is a plain JSON PATCH — NOT a multipart upload');
 
   const content = capturedPatch.content || '';
   assert(content.includes('BCSO'), 'Invoice content references "BCSO"');
   assert(content.includes('Invoice') || content.includes('invoice'), 'Content labels result as an invoice');
 
   const embeds = capturedPatch.embeds ?? [];
-  assert(embeds.length > 0, 'At least one embed is included in the invoice');
+  assert(embeds.length > 0, 'At least one embed is included in the primary response');
 
-  const hasAttachment = (capturedPatch.attachments ?? []).some(
-    a => (a.filename ?? '').endsWith('.csv')
-  );
-  assert(hasAttachment, 'A CSV attachment is declared in the payload');
+  // CSV follow-up: postFollowupWithFile (POST) sends the file separately
+  assert(capturedFollowup !== null, 'postFollowupWithFile (POST) was called with the CSV');
+  assert(capturedFollowupIsFile, 'CSV is delivered as a multipart follow-up POST');
+  const csvFilename = (capturedFollowup.attachments ?? [])[0]?.filename ?? '';
+  assert(csvFilename.endsWith('.csv'), `CSV follow-up has a .csv filename (got: "${csvFilename}")`);
 
   // Confirm there is NO mechanic-select component in the final response
   const components = capturedPatch.components ?? [];
-  const mechanicSelects = components
+  const billingSelects = components
     .flatMap(row => row.components ?? [])
     .filter(c => c.type === 3 && (
       c.custom_id === 'joblogs_mech_select' ||
@@ -242,7 +269,7 @@ await runTest('Step 3 — billing_month_select:BCSO → invoice embed + CSV (no 
       c.custom_id === 'billing_dept_select' ||
       c.custom_id?.startsWith('billing_month_select:')
     ));
-  assert(mechanicSelects.length === 0, 'No mechanic-select or billing-flow dropdown in the final invoice response');
+  assert(billingSelects.length === 0, 'No mechanic-select or billing-flow dropdown in the final invoice response');
 });
 
 // ── Guard test: joblogs_start still shows mechanic select (unchanged) ───────
@@ -355,7 +382,7 @@ await runTest('Backward compat — invoice_dept_select routes to month-ending se
   assert(selects.length > 0, 'A month-ending select is present');
 });
 
-await runTest('Backward compat — invoice_month_select:BCSO routes to invoice generation', async () => {
+await runTest('Backward compat — invoice_month_select:BCSO routes to invoice generation (embed+followup)', async () => {
   const monthValue = globalThis._testMonthValue ?? '2026-03-31';
   const { ctx, flush } = makeCtx();
   const res  = await worker.fetch(
@@ -369,9 +396,13 @@ await runTest('Backward compat — invoice_month_select:BCSO routes to invoice g
 
   await flush();
 
-  assert(capturedPatch !== null, 'editOriginalMessageWithFile was called');
-  assert(capturedPatchIsFile, 'Response is a multipart file upload (CSV attached)');
+  // Primary: plain JSON PATCH with embed
+  assert(capturedPatch !== null, 'editOriginalMessage (PATCH) was called');
+  assert(!capturedPatchIsFile, 'Primary PATCH is plain JSON (not multipart)');
   assert(capturedPatch.content?.includes('BCSO'), 'Invoice content references "BCSO"');
+  // CSV follow-up
+  assert(capturedFollowup !== null, 'postFollowupWithFile (POST) was called');
+  assert(capturedFollowupIsFile, 'CSV delivered as follow-up POST');
 });
 
 // ── Test: unrecognized component → ephemeral error (NOT "This interaction failed") ────
@@ -498,7 +529,9 @@ const FAKE_ENV_WITH_KV = {
 async function withSheetFetch(sheetFn, testFn) {
   const orig = globalThis.fetch;
   globalThis.fetch = async (url, opts = {}) => {
-    if (typeof url === 'string' && url.includes('docs.google.com')) {
+    // Use startsWith so only actual Google Sheets requests are intercepted —
+    // avoids matching 'docs.google.com' appearing elsewhere in a URL.
+    if (typeof url === 'string' && url.startsWith('https://docs.google.com/')) {
       return sheetFn(url, opts);
     }
     return orig(url, opts); // Discord webhook calls use the original mock
@@ -622,8 +655,9 @@ await runTest('Month with 0 matching jobs → valid 0-row invoice (no crash)', a
 
   await flush();
 
-  assert(capturedPatch !== null, 'editOriginalMessageWithFile was called');
-  assert(capturedPatchIsFile, 'CSV attachment present even for 0-job month');
+  // Primary: plain JSON PATCH with the invoice embed
+  assert(capturedPatch !== null, 'editOriginalMessage (PATCH) was called');
+  assert(!capturedPatchIsFile, 'Primary PATCH is plain JSON (not multipart) even for 0-job month');
   const embeds = capturedPatch.embeds ?? [];
   assert(embeds.length > 0, 'At least one embed in the 0-job invoice');
   const description = (embeds[0].description ?? '').toLowerCase();
@@ -631,6 +665,9 @@ await runTest('Month with 0 matching jobs → valid 0-row invoice (no crash)', a
     description.includes('no jobs') || description.includes('_no jobs'),
     `Embed description notes no jobs recorded (got: "${embeds[0].description}")`
   );
+  // CSV follow-up still sent (empty CSV with just headers)
+  assert(capturedFollowup !== null, 'postFollowupWithFile (POST) was called for 0-job month');
+  assert(capturedFollowupIsFile, 'CSV follow-up is a multipart POST');
 });
 
 // ── Test: INVOICE_DEBUG=true → does not crash and invoice still delivered ────
@@ -649,35 +686,36 @@ await runTest('INVOICE_DEBUG=true → invoice delivered normally (no crash from 
 
   await flush();
 
-  assert(capturedPatch !== null, 'editOriginalMessageWithFile was called in debug mode');
-  assert(capturedPatchIsFile, 'CSV attached in debug mode');
+  // Plain JSON PATCH with embed
+  assert(capturedPatch !== null, 'editOriginalMessage (PATCH) was called in debug mode');
+  assert(!capturedPatchIsFile, 'Primary PATCH is plain JSON in debug mode');
   assert(capturedPatch.content?.includes('BCSO'), 'Invoice content references BCSO');
+  // CSV follow-up
+  assert(capturedFollowup !== null, 'postFollowupWithFile (POST) was called in debug mode');
+  assert(capturedFollowupIsFile, 'CSV follow-up is multipart in debug mode');
 });
 
 // ── Test: invalid dept value → early validation error, no sheet fetch ────────
-await runTest('Invalid dept (SQL-like) → validation error before sheet fetch', async () => {
+await runTest('Invalid dept ("INVALID DEPT!" — spaces/special chars) → validation error before sheet fetch', async () => {
   let sheetFetched = false;
   await withSheetFetch(
     async () => { sheetFetched = true; return { ok: true, text: async () => '' }; },
     async () => {
       const { ctx, flush } = makeCtx();
       // Inject an invalid dept value (would only be possible with a crafted request)
-      const res  = await worker.fetch(makeRequest('billing_month_select:DROP TABLE jobs--', ['2026-03-31']), FAKE_ENV, ctx);
+      const res  = await worker.fetch(makeRequest('billing_month_select:INVALID DEPT!', ['2026-03-31']), FAKE_ENV, ctx);
       const data = await res.json();
 
       assert(data.type === 6, 'Response type is DEFERRED_UPDATE_MESSAGE (6)');
 
-      // NOTE: The custom_id split(':')[1] returns "DROP TABLE jobs--" — validation rejects it
+      // NOTE: The custom_id split(':')[1] returns "INVALID DEPT!" — validation rejects it
       await flush();
 
       // Validation should have short-circuited before the sheet was fetched
-      // (the dept regex /^[A-Za-z]{2,10}$/ blocks values with spaces or special chars)
-      // editOriginalMessage is called by the validation path, not fetchSheetWithRetry
-      // Since the validation fires inside the waitUntil, capturedPatch gets the error msg
-      // Note: 'DROP TABLE jobs--' fails /^[A-Za-z]{2,10}$/ due to spaces
+      // (DEPT_NAME_PATTERN blocks values with spaces or special chars)
       if (capturedPatch !== null) {
         // If editOriginalMessage was called, it must be an error response, not an invoice
-        assert(!capturedPatchIsFile, 'No CSV attachment for invalid input');
+        assert(!capturedPatchIsFile, 'No CSV attachment for invalid dept input');
       }
       assert(!sheetFetched, 'Sheet was NOT fetched when dept validation failed');
     }

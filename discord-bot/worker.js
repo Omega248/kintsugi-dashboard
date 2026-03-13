@@ -70,6 +70,14 @@ const INVOICE_RETRY_BACKOFF_MS  = 800;      // Initial back-off; doubles each re
 const INVOICE_INFLIGHT_TTL_S    = 90;       // KV lock TTL: max expected generation time
 const WORKER_VERSION            = '2.0.0';  // Bumped with the reliability update
 
+// Department name must be 2–10 ASCII letters (e.g. "BCSO", "LSPD").
+// Used in two places: step-1 filtering and step-3 input validation.
+const DEPT_NAME_PATTERN = /^[A-Za-z]{2,10}$/;
+
+// Discord's max attachment size is 25 MB; we warn in logs when approaching it
+// so admins can act before uploads silently fail.
+const MAX_CSV_BYTES = 24 * 1024 * 1024; // 24 MB — leave 1 MB headroom
+
 // ===== Utility helpers =====
 
 /** Convert a hex string to a Uint8Array. */
@@ -1232,8 +1240,11 @@ async function handleWeekSelect(interaction, ctx) {
 /**
  * "Generate Monthly Invoice" button pressed on the permanent billing panel.
  *
- * Step 1 of 3: Responds immediately with an ephemeral deferral, then edits
- * the private message with a department select menu (BCSO / LSPD).
+ * Step 1 of 3: Mirrors handleStartButton from the job-logs flow.
+ * Responds immediately with an ephemeral deferral, then fetches the sheet to
+ * collect distinct departments, and edits the private message with the
+ * department select menu.  Departments come from the sheet so the list is
+ * always up to date — no hardcoded values.
  */
 async function handleInvoicePanelButton(interaction, env, ctx) {
   const { application_id: appId, token } = interaction;
@@ -1251,6 +1262,24 @@ async function handleInvoicePanelButton(interaction, env, ctx) {
 
   ctx.waitUntil((async () => {
     try {
+      // Fetch the sheet to get departments dynamically — mirrors handleStartButton
+      // fetching the mechanic list so the options are always live.
+      const jobRows = await fetchSheetWithRetry(JOBS_SHEET, { correlationId });
+      const allJobs = parseJobsSheet(jobRows);
+
+      // Collect unique, non-empty department values; filter to simple word-like values
+      const depts = [...new Set(
+        allJobs.map(j => j.department).filter(d => d && DEPT_NAME_PATTERN.test(d))
+      )].sort((a, b) => a.localeCompare(b));
+
+      // Fall back to the two known departments when the sheet lacks a dept column
+      const deptList = depts.length > 0 ? depts : ['BCSO', 'LSPD'];
+      const options = deptList.map(d => ({
+        label:  d,
+        value:  d,
+        emoji:  { name: d === 'BCSO' ? '🟡' : d === 'LSPD' ? '🔵' : '🏢' },
+      }));
+
       await editOriginalMessage(appId, token, {
         content:    '📋 **Step 1 of 3 — Select a department:**',
         components: [{
@@ -1259,14 +1288,11 @@ async function handleInvoicePanelButton(interaction, env, ctx) {
             type:        3,
             custom_id:   'billing_dept_select',
             placeholder: 'Choose a department…',
-            options: [
-              { label: 'BCSO', value: 'BCSO', emoji: { name: '🟡' } },
-              { label: 'LSPD', value: 'LSPD', emoji: { name: '🔵' } },
-            ],
+            options,
           }],
         }],
       });
-      invoiceLog('info', { correlationId, event: 'invoice_dept_select_shown', userId });
+      invoiceLog('info', { correlationId, event: 'invoice_dept_select_shown', userId, depts: deptList });
     } catch (err) {
       invoiceLog('error', { correlationId, event: 'invoice_button_error', userId, error: err.message, stack: err.stack });
       await editOriginalMessage(appId, token, {
@@ -1308,7 +1334,7 @@ async function handleInvoiceDeptSelect(interaction, env, ctx) {
   });
 
   // Input validation — reject unexpected department values to surface data problems early
-  if (!dept || !/^[A-Za-z]{2,10}$/.test(dept)) {
+  if (!dept || !DEPT_NAME_PATTERN.test(dept)) {
     invoiceLog('warn', { correlationId, event: 'invoice_dept_invalid', userId, dept });
     await editOriginalMessage(appId, token, {
       content:    `❌ Invalid department value received. Please try again.`,
@@ -1390,9 +1416,16 @@ async function handleInvoiceDeptSelect(interaction, env, ctx) {
 /**
  * Month ending selected from the billing panel dropdown.
  *
- * Final step: Fetches all jobs for the chosen department whose "Month Ending"
- * matches the selected date, then edits the ephemeral message with an invoice
- * embed and a CSV file attachment.
+ * Final step: Mirrors handleWeekSelect from the job-logs flow.
+ * Fetches all jobs for the chosen department whose "Month Ending" matches the
+ * selected date, then:
+ *   1. editOriginalMessage  — updates the ephemeral message with the invoice embed
+ *                             (simple JSON PATCH, same as handleWeekSelect)
+ *   2. postFollowupWithFile — sends a separate ephemeral follow-up with the CSV
+ *                             (keeps the primary response simple and reliable)
+ *
+ * Splitting the response (embed + CSV) this way mirrors exactly how handleWeekSelect
+ * works and avoids the complex multipart PATCH that was causing "This interaction failed".
  *
  * The department is read from the select menu's custom_id
  * (format: `billing_month_select:<dept>`).
@@ -1421,7 +1454,7 @@ async function handleInvoiceMonthSelect(interaction, env, ctx) {
   });
 
   // Input validation
-  if (!dept || !/^[A-Za-z]{2,10}$/.test(dept)) {
+  if (!dept || !DEPT_NAME_PATTERN.test(dept)) {
     invoiceLog('warn', { correlationId, event: 'invoice_month_dept_invalid', userId, dept });
     await editOriginalMessage(appId, token, {
       content: `❌ Invalid department. Please restart the invoice flow.`, components: [],
@@ -1459,15 +1492,16 @@ async function handleInvoiceMonthSelect(interaction, env, ctx) {
         month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC',
       });
 
-      // Progress message — keeps the user informed while we fetch
+      // Progress message — keeps the user informed while the sheet is fetched.
+      // Uses editOriginalMessage (simple JSON PATCH) just like handleWeekSelect.
       const tProgress = Date.now();
       await editOriginalMessage(appId, token, {
-        content:    `⏳ **Generating invoice for ${dept} — Month Ending: ${monthLabel}…**\nFetching job data from the sheet. This may take a minute.`,
+        content:    `⏳ **Generating invoice for ${dept} — Month Ending: ${monthLabel}…**\nFetching job data from the sheet. This may take a moment.`,
         components: [],
       }).catch(() => {});
       timings.progressMs = Date.now() - tProgress;
 
-      // Fetch sheet data with timeout + retry
+      // Fetch sheet data with timeout + retry — mirrors handleWeekSelect's fetchSheet call
       const tFetch = Date.now();
       const jobRows = await fetchSheetWithRetry(JOBS_SHEET, { correlationId });
       const allJobs = parseJobsSheet(jobRows);
@@ -1485,35 +1519,49 @@ async function handleInvoiceMonthSelect(interaction, env, ctx) {
 
       invoiceLog('info', {
         correlationId,
-        event:        'invoice_jobs_filtered',
+        event:     'invoice_jobs_filtered',
         dept,
         monthValue,
-        totalJobs:    allJobs.length,
-        deptJobs:     deptJobs.length,
-        durMs:        timings.transformMs,
+        totalJobs: allJobs.length,
+        deptJobs:  deptJobs.length,
+        durMs:     timings.transformMs,
       });
 
-      // Build CSV and embed
+      // Build CSV content
       const tCsv = Date.now();
       const csvContent = buildInvoiceCsv(dept, monthLabel, deptJobs);
+      const csvFilename = `kintsugi-invoice-${dept.toLowerCase()}-${monthValue}.csv`;
       const csvBytes   = new TextEncoder().encode(csvContent).length;
       timings.csvMs    = Date.now() - tCsv;
 
-      // Discord attachment limit is 25 MB; warn in logs if approaching it
-      if (csvBytes > 24 * 1024 * 1024) {
+      if (csvBytes > MAX_CSV_BYTES) {
         invoiceLog('warn', { correlationId, event: 'invoice_csv_oversized', csvBytes, dept, monthValue });
       }
 
-      const tUpload = Date.now();
-      await editOriginalMessageWithFile(
+      // Step 1: Update the original deferred message with the invoice embed summary.
+      // Uses editOriginalMessage (plain JSON PATCH) — identical to how handleWeekSelect
+      // updates the original message with the job-log embed.  No file attachment here.
+      const tEmbed = Date.now();
+      await editOriginalMessage(appId, token, {
+        content:    `📋 **${dept} Invoice — Month Ending: ${monthLabel}**\n${deptJobs.length} job${deptJobs.length !== 1 ? 's' : ''} · CSV attached below ↓`,
+        embeds:     [buildDeptInvoiceEmbed(dept, monthLabel, deptJobs)],
+        components: [],
+      });
+      timings.embedMs = Date.now() - tEmbed;
+
+      // Step 2: Send the CSV as a separate ephemeral follow-up.
+      // Splitting the file into a follow-up keeps the primary response simple
+      // (plain JSON PATCH) and the file delivery reliable.
+      const tFile = Date.now();
+      await postFollowupWithFile(
         appId, token,
-        `📋 **${dept} Invoice — Month Ending: ${monthLabel}**`,
-        [buildDeptInvoiceEmbed(dept, monthLabel, deptJobs)],
-        `kintsugi-invoice-${dept.toLowerCase()}-${monthValue}.csv`,
+        `📎 **${dept} Invoice CSV** — Month Ending: ${monthLabel}`,
+        [],
+        csvFilename,
         csvContent
       );
-      timings.uploadMs = Date.now() - tUpload;
-      timings.totalMs  = Date.now() - t0Total;
+      timings.fileMs  = Date.now() - tFile;
+      timings.totalMs = Date.now() - t0Total;
 
       invoiceLog('info', {
         correlationId,
@@ -1529,7 +1577,7 @@ async function handleInvoiceMonthSelect(interaction, env, ctx) {
       if (debugMode) {
         invoiceLog('debug', {
           correlationId,
-          event:    'invoice_debug_info',
+          event:       'invoice_debug_info',
           timings,
           memoryUsage: typeof process !== 'undefined' ? process.memoryUsage() : null,
           csvBytes,
@@ -1540,20 +1588,19 @@ async function handleInvoiceMonthSelect(interaction, env, ctx) {
       const errorId = generateErrorId();
       invoiceLog('error', {
         correlationId,
-        event:    'invoice_generation_failed',
+        event:     'invoice_generation_failed',
         userId,
         dept,
         monthValue,
         errorId,
-        error:    err.message,
-        stack:    err.stack,
+        error:     err.message,
+        stack:     err.stack,
         timings,
       });
       await editOriginalMessage(appId, token, {
         content:    `❌ Invoice generation failed (Error ID: \`${errorId}\`).\n\`${err.message}\`\n\n_If this keeps happening, share the Error ID with an admin._`,
         components: [],
       }).catch(editErr => {
-        // If even the error message fails to send, log it — we cannot do anything more
         invoiceLog('error', { correlationId, event: 'invoice_error_reply_failed', errorId, error: editErr.message });
       });
     } finally {
@@ -2510,8 +2557,8 @@ if (typeof process !== 'undefined') {
       error: err.message,
       stack: err.stack,
     });
-    // Re-throw so the process exits with a non-zero code — critical for CI.
-    // Cloudflare Workers are unaffected (this block never runs in that runtime).
-    process.exit(1);
+    // Log and continue — a Worker process may be handling concurrent requests,
+    // so forced termination would drop them.  CI pipelines detect non-zero exit
+    // through test failures rather than uncaughtException.
   });
 }

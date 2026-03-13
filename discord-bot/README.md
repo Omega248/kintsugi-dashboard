@@ -304,6 +304,90 @@ discord-bot/
 | "Notify Discord" returns 401 | The token doesn't match `TRIGGER_TOKEN` in the Worker. Re-check the secret and redeploy. |
 | "Notify Discord" returns 501 | `TRIGGER_TOKEN` is not set. Add it to GitHub Secrets and redeploy. |
 | "Notify Discord" returns 503 | `DISCORD_BOT_TOKEN` or `PAYOUTS_CHANNEL_ID` is missing. Add both and redeploy. |
+| Invoice shows "This interaction failed" | Check Cloudflare logs for `svc:"kintsugi-invoice"` entries. Look for `"event":"invoice_generation_failed"` lines which include an `errorId`, full stack trace, and per-step timings. Enable `INVOICE_DEBUG=true` for extra detail. |
+| Invoice generates but no CSV arrives | The CSV is sent as a **separate ephemeral follow-up message** — scroll up in the private ephemeral thread. If no follow-up appears, check logs for `postFollowupWithFile` errors. |
+| Departments missing from invoice panel | The button now reads departments **live from the sheet**. Ensure the **Department** column is filled in for recent jobs and the sheet is publicly readable. |
+
+---
+
+## Invoice panel — observability & debugging
+
+The invoice flow uses structured JSON logging. Every interaction gets a unique `correlationId` you can filter on in Cloudflare Workers Logs.
+
+### Enabling debug mode
+
+Set the `INVOICE_DEBUG` Cloudflare Worker secret to `true` to enable extra log lines including per-step timings and a memory snapshot:
+
+```bash
+wrangler secret put INVOICE_DEBUG
+# enter: true
+```
+
+Remove or set to any other value to disable.
+
+### Environment variables / Worker secrets
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `INVOICE_DEBUG` | _(unset)_ | Set to `true` for verbose invoice logs (timings, memory). |
+| `DISCORD_PUBLIC_KEY` | required | Ed25519 public key from Discord Developer Portal. |
+| `DISCORD_BOT_TOKEN` | required | Bot token used to post and edit messages. |
+| `INVOICE_CHANNEL_ID` | required | Channel where the invoice panel is posted. |
+
+> **Fetch timeouts and retries** are built into the Worker code (`INVOICE_FETCH_TIMEOUT_MS = 12 000 ms`, `INVOICE_MAX_RETRIES = 2`). These are not configurable via secrets — edit the constants in `worker.js` and redeploy to change them.
+
+### How to read logs
+
+1. Go to **Cloudflare Dashboard → Workers & Pages → kintsugi-bot → Logs**.
+2. Filter by `svc:"kintsugi-invoice"` to see only invoice-related lines.
+3. Each log line is JSON. Key fields:
+
+| Field | Meaning |
+|---|---|
+| `correlationId` | Unique 8-char ID per interaction — use to trace one user's full flow |
+| `event` | What happened (`invoice_generated`, `invoice_generation_failed`, etc.) |
+| `errorId` | Short ID included in the user-facing error message — lets admins find the log |
+| `timings` | Per-step durations in ms (`fetchMs`, `embedMs`, `fileMs`, etc.) |
+| `dept` / `monthValue` | Which department and month were requested |
+| `userId` | Discord user ID of the requester |
+
+### Reproducing common failures locally
+
+```bash
+# Run the full test suite (simulates slow sheet, HTTP 500, concurrent lock, missing data)
+node discord-bot/test-invoice-flow.mjs
+
+# Simulate a slow sheet (AbortController timeout)
+# Already covered by the "Network failure (AbortError)" test in test-invoice-flow.mjs
+
+# Check what a real invoice flow produces (replace env vars with real values)
+DISCORD_BOT_TOKEN=... DISCORD_CHANNEL_ID=... node discord-bot/setup-invoice-panel.js
+```
+
+### How the invoice flow mirrors the job logs flow
+
+Both the **Job Logs** and **Invoice** panels use the identical code pattern:
+
+```
+Button pressed
+  → Immediate DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE (type 5, ephemeral)
+  → Background: fetch sheet → editOriginalMessage with select menu
+
+Select chosen (dept / mechanic)
+  → Immediate DEFERRED_UPDATE_MESSAGE (type 6)
+  → Background: fetch sheet → editOriginalMessage with next select menu
+
+Final select chosen (month / week)
+  → Immediate DEFERRED_UPDATE_MESSAGE (type 6)
+  → Background: fetch sheet → editOriginalMessage with result embed
+                            → postFollowupWithFile with attachment (invoice only)
+```
+
+The key reliability properties:
+- The **deferred acknowledgement** is always returned within milliseconds — no slow I/O before the `return jsonResponse(...)`.
+- All slow work (sheet fetches, CSV generation) runs in `ctx.waitUntil`, so it never blocks the acknowledgement.
+- The final step uses a **plain JSON PATCH** (`editOriginalMessage`) for the embed and a **separate follow-up POST** (`postFollowupWithFile`) for the CSV — identical to how the job logs handler works and avoiding the more complex multipart PATCH that was causing "This interaction failed".
+- Sheet fetches use `fetchSheetWithRetry` with a 12-second per-attempt timeout and up to 2 retries with exponential back-off.
 
 ---
 
