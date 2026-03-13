@@ -1081,21 +1081,56 @@ async function handleWeekSelect(interaction, ctx) {
 /**
  * "Generate Monthly Invoice" button pressed on the permanent payouts panel.
  *
- * Responds immediately with an ephemeral deferral, then edits the private
- * message with a month select menu built from the dates present in the sheet.
+ * Step 1 of 2: Responds immediately with an ephemeral deferral, then edits
+ * the private message with a department select menu (BCSO / LSPD).
  */
 async function handleInvoicePanelButton(interaction, ctx) {
   const { application_id: appId, token } = interaction;
+
+  ctx.waitUntil((async () => {
+    await editOriginalMessage(appId, token, {
+      content:    '📋 **Step 1 of 2 — Select a department:**',
+      components: [{
+        type: 1,
+        components: [{
+          type:        3,
+          custom_id:   'invoice_dept_select',
+          placeholder: 'Choose a department…',
+          options: [
+            { label: 'BCSO', value: 'BCSO', emoji: { name: '🟡' } },
+            { label: 'LSPD', value: 'LSPD', emoji: { name: '🔵' } },
+          ],
+        }],
+      }],
+    }).catch(() => {});
+  })());
+
+  return jsonResponse({
+    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+    data: { flags: 64 },
+  });
+}
+
+/**
+ * Department selected from the invoice panel dropdown.
+ *
+ * Step 2 of 2: Fetches the sheet to discover available months for the chosen
+ * department, then edits the ephemeral message with a month select menu.
+ * The department is encoded in the custom_id so the next handler can read it.
+ */
+async function handleInvoiceDeptSelect(interaction, ctx) {
+  const { application_id: appId, token } = interaction;
+  const dept = interaction.data.values[0]; // 'BCSO' or 'LSPD'
 
   ctx.waitUntil((async () => {
     try {
       const jobRows = await fetchSheet(JOBS_SHEET);
       const allJobs = parseJobsSheet(jobRows);
 
-      // Collect distinct months (YYYY-MM) that have job data
+      // Collect distinct months (YYYY-MM) that have job data for the chosen dept
       const monthSet = new Set();
       for (const j of allJobs) {
-        if (j.bestDate) {
+        if (j.bestDate && new RegExp(dept, 'i').test(j.department)) {
           const y = j.bestDate.getUTCFullYear();
           const m = j.bestDate.getUTCMonth() + 1;
           monthSet.add(`${y}-${String(m).padStart(2, '0')}`);
@@ -1104,7 +1139,7 @@ async function handleInvoicePanelButton(interaction, ctx) {
 
       if (monthSet.size === 0) {
         await editOriginalMessage(appId, token, {
-          content:    '❌ No job data found in the sheet.',
+          content:    `❌ No job data found for **${dept}** in the sheet.`,
           components: [],
         });
         return;
@@ -1119,13 +1154,14 @@ async function handleInvoicePanelButton(interaction, ctx) {
         return { label, value: ym };
       });
 
+      // Encode dept in custom_id so the month handler knows which dept was chosen
       await editOriginalMessage(appId, token, {
-        content:    '📋 **Select a month to generate department invoices:**',
+        content:    `📋 **${dept} — Step 2 of 2 — Select a month:**`,
         components: [{
           type: 1,
           components: [{
             type:        3,
-            custom_id:   'invoice_month_select',
+            custom_id:   `invoice_month_select:${dept}`,
             placeholder: 'Choose a month…',
             options,
           }],
@@ -1139,23 +1175,22 @@ async function handleInvoicePanelButton(interaction, ctx) {
     }
   })());
 
-  return jsonResponse({
-    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
-    data: { flags: 64 },
-  });
+  return jsonResponse({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
 }
 
 /**
  * Month selected from the invoice panel dropdown.
  *
- * Fetches all jobs for that month, splits them by department (BCSO / LSPD),
- * then:
- *   1. Edits the original ephemeral message with the BCSO invoice embed + CSV.
- *   2. Posts an ephemeral follow-up message with the LSPD invoice embed + CSV.
+ * Final step: Fetches all jobs for the chosen department + month, then edits
+ * the ephemeral message with an invoice embed and a CSV file attachment.
+ * The department is read from the select menu's custom_id
+ * (format: `invoice_month_select:<dept>`).
  */
 async function handleInvoiceMonthSelect(interaction, ctx) {
   const { application_id: appId, token } = interaction;
   const monthValue = interaction.data.values[0]; // e.g. "2026-01"
+  // Parse department encoded in the custom_id (e.g. "invoice_month_select:BCSO")
+  const dept = (interaction.data.custom_id || '').split(':')[1] || 'BCSO';
 
   ctx.waitUntil((async () => {
     try {
@@ -1163,33 +1198,22 @@ async function handleInvoiceMonthSelect(interaction, ctx) {
       const monthLabel = new Date(Date.UTC(y, m - 1, 1))
         .toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
-      const jobRows   = await fetchSheet(JOBS_SHEET);
-      const allJobs   = parseJobsSheet(jobRows);
+      const jobRows  = await fetchSheet(JOBS_SHEET);
+      const allJobs  = parseJobsSheet(jobRows);
       const monthJobs = filterByMonth(allJobs, y, m - 1); // getUTCMonth() is 0-based
 
-      const bcsoJobs = monthJobs.filter(j => /bcso/i.test(j.department));
-      const lspdJobs = monthJobs.filter(j => /lspd/i.test(j.department));
+      const deptJobs = monthJobs.filter(j => new RegExp(dept, 'i').test(j.department));
 
-      // BCSO invoice — edit the original ephemeral message
       await editOriginalMessageWithFile(
         appId, token,
-        `📋 **BCSO Invoice — ${monthLabel}**`,
-        [buildDeptInvoiceEmbed('BCSO', monthLabel, bcsoJobs)],
-        `kintsugi-invoice-bcso-${monthValue}.csv`,
-        buildInvoiceCsv('BCSO', monthLabel, bcsoJobs)
-      );
-
-      // LSPD invoice — ephemeral follow-up (separate message)
-      await postFollowupWithFile(
-        appId, token,
-        `📋 **LSPD Invoice — ${monthLabel}**`,
-        [buildDeptInvoiceEmbed('LSPD', monthLabel, lspdJobs)],
-        `kintsugi-invoice-lspd-${monthValue}.csv`,
-        buildInvoiceCsv('LSPD', monthLabel, lspdJobs)
+        `📋 **${dept} Invoice — ${monthLabel}**`,
+        [buildDeptInvoiceEmbed(dept, monthLabel, deptJobs)],
+        `kintsugi-invoice-${dept.toLowerCase()}-${monthValue}.csv`,
+        buildInvoiceCsv(dept, monthLabel, deptJobs)
       );
     } catch (err) {
       await editOriginalMessage(appId, token, {
-        content:    `❌ Failed to generate invoices.\n\`${err.message}\``,
+        content:    `❌ Failed to generate invoice.\n\`${err.message}\``,
         components: [],
       }).catch(() => {});
     }
@@ -1987,11 +2011,14 @@ export default {
         return handleWeekSelect(interaction, ctx);
       }
 
-      // Invoice panel button + month select (permanent payouts panel)
+      // Invoice panel button + dept + month select (permanent payouts panel)
       if (customId === 'payouts_panel_start') {
         return handleInvoicePanelButton(interaction, ctx);
       }
-      if (customId === 'invoice_month_select') {
+      if (customId === 'invoice_dept_select') {
+        return handleInvoiceDeptSelect(interaction, ctx);
+      }
+      if (customId.startsWith('invoice_month_select')) {
         return handleInvoiceMonthSelect(interaction, ctx);
       }
 
