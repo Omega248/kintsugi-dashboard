@@ -502,3 +502,56 @@
     justify-content: center;
   }
 }
+
+/* ===== Department Invoice Generator Panel ===== */
+.invoice-panel {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-top: 32px;
+}
+
+.invoice-panel-header {
+  margin-bottom: 16px;
+}
+
+.invoice-panel-title {
+  display: block;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin-bottom: 4px;
+}
+
+.invoice-panel-sub {
+  display: block;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.invoice-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-invoice {
+  background: #1d4ed8;
+  color: #fff;
+  border: 1px solid #2563eb;
+  font-weight: 600;
+}
+
+.btn-invoice:hover {
+  background: #2563eb;
+  border-color: #3b82f6;
+}
+
+@media (max-width: 768px) {
+  .invoice-controls {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

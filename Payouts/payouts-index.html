@@ -28,7 +28,7 @@
         <a href="payouts-index.html" class="nav-pill active">Payouts</a>
         <a href="../Mechanics/mechanics-index.html" class="nav-pill">Mechanics</a>
         <a href="../Bank_Record/bank-index.html" class="nav-pill">Bank</a>
-        <a href="../Analytics/analytics-index.html" class="nav-pill">Analytics</a>
+
       </nav>
     </header>
 
@@ -243,6 +243,28 @@
           </thead>
           <tbody id="jobsBody"></tbody>
         </table>
+      </div>
+
+      <!-- Department Invoice Generator -->
+      <div class="invoice-panel">
+        <div class="invoice-panel-header">
+          <span class="invoice-panel-title">📄 Department Invoice Generator</span>
+          <span class="invoice-panel-sub">Generate a monthly billing invoice (CSV) for BCSO or LSPD. Mechanic payouts are processed separately above.</span>
+        </div>
+        <div class="invoice-controls">
+          <span class="label-soft">Invoice Month:</span>
+          <span class="select-wrap">
+            <select id="invoiceMonthSelect" class="select-pill">
+              <option value="">Select Month…</option>
+            </select>
+          </span>
+          <button id="generateBcsoInvoiceBtn" class="btn btn-invoice">
+            📥 Generate BCSO Invoice
+          </button>
+          <button id="generateLspdInvoiceBtn" class="btn btn-invoice">
+            📥 Generate LSPD Invoice
+          </button>
+        </div>
       </div>
     </main>
   </div>
