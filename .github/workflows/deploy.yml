@@ -262,21 +262,40 @@ jobs:
           WORKER_URL="https://kintsugi.${SUBDOMAIN}.workers.dev"
           echo "Calling gateway-start on ${WORKER_URL} ..."
 
-          # Allow a short settling time for the new worker version to propagate.
-          sleep 5
+          # Allow time for the new worker version to propagate to the edge.
+          sleep 15
 
-          HTTP_STATUS=$(curl -sf -o /tmp/gw_response.json -w "%{http_code}" \
-            -X POST "${WORKER_URL}/api/gateway-start" \
-            -H "Authorization: Bearer ${TRIGGER_TOKEN}" \
-            --max-time 30 2>/dev/null) || HTTP_STATUS="error"
+          # Attempt to start the gateway; retry up to 3 times on transient failures.
+          # -s (silent) without -f so that 4xx/5xx HTTP status codes are still
+          # captured via -w "%{http_code}" rather than being overridden by the
+          # || fallback.  Network-level failures (timeout, connection refused) set
+          # HTTP_STATUS to "000" via the || fallback.
+          attempt=1
+          max_attempts=3
+          HTTP_STATUS="000"
+          while [ "$attempt" -le "$max_attempts" ]; do
+            HTTP_STATUS=$(curl -s -o /tmp/gw_response.json -w "%{http_code}" \
+              -X POST "${WORKER_URL}/api/gateway-start" \
+              -H "Authorization: Bearer ${TRIGGER_TOKEN}" \
+              --max-time 60) || HTTP_STATUS="000"
 
-          BODY=$(cat /tmp/gw_response.json 2>/dev/null || echo "(no response)")
-          echo "Gateway start → HTTP ${HTTP_STATUS}: ${BODY}"
+            BODY=$(cat /tmp/gw_response.json 2>/dev/null || echo "(no response)")
+            echo "Attempt ${attempt}/${max_attempts}: Gateway start → HTTP ${HTTP_STATUS}: ${BODY}"
 
-          # Treat 200 and 'already_connected' as success; anything else is a warning
-          # but must not fail the deploy (the hourly cron will recover it).
-          if [ "${HTTP_STATUS}" = "200" ]; then
-            echo "Gateway started successfully."
-          else
-            echo "Warning: gateway start returned HTTP ${HTTP_STATUS}. The hourly cron will retry."
+            if [ "${HTTP_STATUS}" = "200" ]; then
+              echo "Gateway started successfully."
+              break
+            fi
+
+            if [ "$attempt" -lt "$max_attempts" ]; then
+              echo "Retrying in 15s..."
+              sleep 15
+            fi
+            attempt=$((attempt + 1))
+          done
+
+          # Treat 200 as success; anything else is a warning but must not fail the
+          # deploy — the hourly cron will recover the gateway connection.
+          if [ "${HTTP_STATUS}" != "200" ]; then
+            echo "Warning: gateway start returned HTTP ${HTTP_STATUS} after ${max_attempts} attempt(s). The hourly cron will retry."
           fi
