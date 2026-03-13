@@ -234,10 +234,6 @@ function buildPayload(weekEndDate, payouts) {
     ? `If you think there are any issues with your payout, please contact <@${CONTACT_USER_ID}>`
     : '';
 
-  // Encode the week-ending date in the button's custom_id so the worker can
-  // filter jobs for exactly this week when a mechanic clicks "View My Payout".
-  const weekEndISO = weekEndDate.toISOString().slice(0, 10);
-
   return {
     ...(contactContent ? { content: contactContent } : {}),
     embeds: [{
@@ -255,16 +251,6 @@ function buildPayload(weekEndDate, payouts) {
       ],
       timestamp: new Date().toISOString(),
       footer:    { text: 'Kintsugi Motorworks · Payouts' },
-    }],
-    components: [{
-      type: 1, // ACTION_ROW
-      components: [{
-        type:      2,    // BUTTON
-        custom_id: `payouts_week_view:${weekEndISO}`,
-        label:     'View My Payout',
-        style:     1,    // PRIMARY (blurple)
-        emoji:     { name: '💸' },
-      }],
     }],
   };
 }

@@ -393,6 +393,80 @@ await runTest('Unrecognized component custom_id → ephemeral error message (typ
   await flush();
 });
 
+// ── Test: malformed JSON body → HTTP 400 (not "This interaction failed") ────
+await runTest('Malformed JSON body → HTTP 400, not HTTP 500', async () => {
+  const req = new Request('https://bot.example.com/', {
+    method: 'POST',
+    headers: {
+      'Content-Type':          'application/json',
+      'X-Signature-Ed25519':   'aabbccdd',
+      'X-Signature-Timestamp': '1234567890',
+    },
+    body: 'this is not valid json {{{',
+  });
+  const { ctx } = makeCtx();
+  const res = await worker.fetch(req, FAKE_ENV, ctx);
+
+  // Worker must NOT crash (500). Returns 400 for genuinely malformed bodies.
+  assert(res.status === 400, `Response status is 400 for malformed JSON. Got ${res.status}`);
+});
+
+// ── Test: unknown slash command → ephemeral error (not HTTP 400) ────────────
+await runTest('Unknown slash command → ephemeral error (type 4), not HTTP 400', async () => {
+  const interaction = {
+    type: 2,  // APPLICATION_COMMAND
+    application_id: 'TEST_APP_ID',
+    token:          'FAKE_INTERACTION_TOKEN',
+    data: { name: 'some-unknown-slash-command', id: '9999' },
+  };
+  const body = JSON.stringify(interaction);
+  const req = new Request('https://bot.example.com/', {
+    method: 'POST',
+    headers: {
+      'Content-Type':          'application/json',
+      'X-Signature-Ed25519':   'aabbccdd',
+      'X-Signature-Timestamp': '1234567890',
+    },
+    body,
+  });
+  const { ctx } = makeCtx();
+  const res  = await worker.fetch(req, FAKE_ENV, ctx);
+  const data = await res.json();
+
+  assert(res.status === 200, `Response status is 200. Got ${res.status}`);
+  assert(data.type === 4, `Response type is CHANNEL_MESSAGE_WITH_SOURCE (4). Got ${data.type}`);
+  assert(data.data?.flags === 64, 'Response is ephemeral (flags=64)');
+  assert(data.data?.content?.includes('❌'), 'Error content starts with ❌');
+});
+
+// ── Test: unknown interaction type → ephemeral error (not HTTP 400) ─────────
+await runTest('Unknown interaction type → ephemeral error (type 4), not HTTP 400', async () => {
+  const interaction = {
+    type: 99,   // Completely unknown interaction type
+    application_id: 'TEST_APP_ID',
+    token:          'FAKE_INTERACTION_TOKEN',
+    data: {},
+  };
+  const body = JSON.stringify(interaction);
+  const req = new Request('https://bot.example.com/', {
+    method: 'POST',
+    headers: {
+      'Content-Type':          'application/json',
+      'X-Signature-Ed25519':   'aabbccdd',
+      'X-Signature-Timestamp': '1234567890',
+    },
+    body,
+  });
+  const { ctx } = makeCtx();
+  const res  = await worker.fetch(req, FAKE_ENV, ctx);
+  const data = await res.json();
+
+  assert(res.status === 200, `Response status is 200. Got ${res.status}`);
+  assert(data.type === 4, `Response type is CHANNEL_MESSAGE_WITH_SOURCE (4). Got ${data.type}`);
+  assert(data.data?.flags === 64, 'Response is ephemeral (flags=64)');
+  assert(data.data?.content?.includes('❌'), 'Error content starts with ❌');
+});
+
 // ── Summary ────────────────────────────────────────────────────────────
 console.log('');
 console.log('─────────────────────────────────────────────────────');
