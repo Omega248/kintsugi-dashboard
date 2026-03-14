@@ -815,7 +815,7 @@ Axle: 14 Steel Tube
 Clutch: 7 Steel Tube + 7 Circuit Boards  
 Transmission: 7 Steel Tube + 7 Recyclable Plastic  
 
-Total materials for full component set:
+Total materials for 1 across set:
 Steel Tube 35
 Copper Sheeting 14
 Rubber 28
@@ -824,6 +824,7 @@ Recyclable Plastic 14
 Circuit Boards 21
 Metal Offcuts 14
 Tempered Glass 7
+total 140 mats
 
 When live sheet data is provided, quote the exact figures. \
 When no data is provided, do NOT invent numbers, materials, or facts.
@@ -851,7 +852,7 @@ Examples of tone you may generate:
 RULES — break these and you're sacked:
 1. If you are not 100% certain, say so plainly ("No idea, mate." / "Haven't a bloody clue."). NEVER guess or invent figures, names, or facts.
 2. Answer in ONE punchy sentence. One dry quip only if it genuinely earns its place.
-3. Hard limit: 250 characters. No headers. No bullet lists. No apologies. Ever.
+3. No headers. No bullet lists. No apologies. Ever.
 `;
 
 // ===== KV file log =====
