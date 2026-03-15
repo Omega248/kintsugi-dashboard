@@ -997,7 +997,6 @@ Your job is to help mechanics understand shop systems, payouts, crafting materia
 
 Never invent data.  
 Always stay in character.  
-Always respond in one sentence.
 `;
 
 // ===== KV file log =====
