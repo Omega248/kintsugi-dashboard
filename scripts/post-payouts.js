@@ -135,6 +135,7 @@ function parseJobsSheet(rows) {
   const iTime   = lower.findIndex(h => h.includes('timestamp'));
   const iWeek   = lower.findIndex(h => h.includes('week') && h.includes('end'));
   const iEngine = lower.findIndex(h => h.includes('engine') && h.includes('replacement'));
+  const iDept   = lower.findIndex(h => h.includes('department') || h.includes('dept'));
   if (iMech === -1 || iAcross === -1) return [];
   const jobs = [];
   for (let i = 1; i < rows.length; i++) {
@@ -151,10 +152,11 @@ function parseJobsSheet(rows) {
       if (!isNaN(n) && n > 0) { engineCount = n; }
       else if (/^(yes|y|true)$/i.test(raw)) { engineCount = 1; }
     }
+    const dept     = iDept !== -1 ? (row[iDept] || '').trim() : '';
     const tsDate   = iTime !== -1 ? parseDateLike(row[iTime])  : null;
     const weekEnd  = iWeek !== -1 ? parseDateLike(row[iWeek])  : null;
     const bestDate = tsDate || weekEnd;
-    jobs.push({ mechanic: mech, across, engineReplacements: engineCount, weekEnd, bestDate });
+    jobs.push({ mechanic: mech, across, engineReplacements: engineCount, department: dept, weekEnd, bestDate });
   }
   return jobs;
 }
@@ -314,6 +316,7 @@ async function main() {
         jobs:               0,
         repairs:            0,
         engineReplacements: 0,
+        enginePayTotal:     0,
         totalPayout:        0,
       };
       mechMap.set(j.mechanic, rec);
@@ -321,10 +324,13 @@ async function main() {
     rec.jobs++;
     rec.repairs            += j.across || 0;
     rec.engineReplacements += j.engineReplacements || 0;
+    // Bonus only for LSPD; all other departments get reimbursement only
+    const isLspd = (j.department || '').toUpperCase() === 'LSPD';
+    rec.enginePayTotal     += j.engineReplacements * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
   }
 
   const payouts = Array.from(mechMap.values()).map(m => {
-    m.totalPayout = m.repairs * PAY_PER_REPAIR + m.engineReplacements * ENGINE_PAY_DEFAULT;
+    m.totalPayout = m.repairs * PAY_PER_REPAIR + (m.enginePayTotal || 0);
     return m;
   }).sort((a, b) => b.totalPayout - a.totalPayout);
 

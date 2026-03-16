@@ -144,7 +144,7 @@ function calculateEngineValue(engineReplacementsByDept) {
 // Legacy function kept for backwards-compatible paths.
 // BCSO: $12k reimbursement only (no bonus)
 // LSPD: $12k reimbursement + $1.5k bonus
-// Other: $12k reimbursement + $1.5k bonus
+// Other: $12k reimbursement only (no bonus)
 function calculateEnginePayment(engineReplacementsByDept) {
   let enginePay = 0;
   if (!engineReplacementsByDept) return 0;
@@ -164,8 +164,8 @@ function calculateEnginePayment(engineReplacementsByDept) {
   enginePay += bcsoEngines * ENGINE_REIMBURSEMENT;
   // LSPD: reimbursement + bonus
   enginePay += lspdEngines * (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD);
-  // Other: reimbursement + bonus
-  enginePay += otherEngines * (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD);
+  // Other: reimbursement only (no bonus)
+  enginePay += otherEngines * ENGINE_REIMBURSEMENT;
   
   return enginePay;
 }
@@ -173,28 +173,31 @@ function calculateEnginePayment(engineReplacementsByDept) {
 // Compute mechanic engine pay for a single job row, accounting for who purchased
 // the engine and whether the repair is PD or civilian (CIV).
 //
-// PD engines:
-//   enginePayer === "mechanic"  → mechanic covered engine cost → $13,500 (both LSPD & BCSO)
-//   enginePayer === "kintsugi"  → kintsugi covered cost, mechanic gets bonus only → $1,500
-//   enginePayer === ""          → old data, fall back to dept-based defaults
-//                                  BCSO: $12,000  |  LSPD/other: $13,500
+// The $1,500 bonus is only awarded when the department is LSPD.
 //
-// CIV engines: always paid as ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD = $13,500
+// PD engines:
+//   enginePayer === "mechanic"  → mechanic covered engine cost → $12,000 + $1,500 bonus if LSPD
+//   enginePayer === "kintsugi"  → kintsugi covered cost, mechanic gets $1,500 bonus only if LSPD
+//   enginePayer === ""          → old data, fall back to dept-based defaults
+//                                  LSPD: $13,500  |  all others: $12,000
+//
+// CIV engines: $12,000 reimbursement only (no bonus)
 function computeJobEnginePay(pdEngineCount, dept, enginePayer, civEngineCount) {
   let pay = 0;
+  const isLspd = dept === "LSPD";
 
   if (pdEngineCount > 0) {
     if (enginePayer === "mechanic") {
-      pay += pdEngineCount * (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD);
+      pay += pdEngineCount * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
     } else if (enginePayer === "kintsugi") {
-      pay += pdEngineCount * ENGINE_BONUS_LSPD;
+      pay += pdEngineCount * (isLspd ? ENGINE_BONUS_LSPD : 0);
     } else {
-      // Old data without payer info: keep original dept-based defaults
-      pay += pdEngineCount * (dept === "BCSO" ? ENGINE_REIMBURSEMENT : (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD));
+      // Old data without payer info: bonus only for LSPD
+      pay += pdEngineCount * (isLspd ? (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD) : ENGINE_REIMBURSEMENT);
     }
   }
 
-  pay += (civEngineCount || 0) * (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD);
+  pay += (civEngineCount || 0) * ENGINE_REIMBURSEMENT;
 
   return pay;
 }

@@ -64,10 +64,9 @@ function mechBuildStateIdMap(stateRows) {
 }
 
 // ===== Calculation helpers =====
-function mechCalculateEngineValue(engineCount) {
-  // LSPD/Other: $12k reimbursement + $1.5k bonus
-  // BCSO: $12k reimbursement only (but we don't track dept here, using LSPD rate)
-  return engineCount * (MECH_ENGINE_REIMBURSEMENT + MECH_ENGINE_BONUS_LSPD);
+function mechCalculateEngineValue(engineCount, isLspd) {
+  // LSPD: $12k reimbursement + $1.5k bonus; all others: $12k reimbursement only
+  return engineCount * (MECH_ENGINE_REIMBURSEMENT + (isLspd ? MECH_ENGINE_BONUS_LSPD : 0));
 }
 
 // ===== Date helpers =====
@@ -197,6 +196,7 @@ function mechBuildWeeklyStats(mechanicName, sourceJobs) {
         acrossCiv: 0,
         engineReplacements: 0,
         civEngineReplacements: 0,
+        enginePayTotal: 0,
         jobs: []
       };
       weekMap.set(weekKey, weekRec);
@@ -207,6 +207,10 @@ function mechBuildWeeklyStats(mechanicName, sourceJobs) {
     weekRec.acrossCiv = (weekRec.acrossCiv || 0) + (j.acrossCiv || 0);
     weekRec.engineReplacements += j.engineReplacements || 0;
     weekRec.civEngineReplacements = (weekRec.civEngineReplacements || 0) + (j.civEngineReplacements || 0);
+    // Accumulate engine pay per job, applying the $1,500 bonus only for LSPD
+    const isLspd = (j.department || "").toUpperCase() === "LSPD";
+    weekRec.enginePayTotal += mechCalculateEngineValue(j.engineReplacements || 0, isLspd)
+                            + mechCalculateEngineValue(j.civEngineReplacements || 0, false); // CIV engines never get the bonus
     weekRec.jobs.push(j);
   }
   
@@ -222,9 +226,7 @@ function mechBuildWeeklyStats(mechanicName, sourceJobs) {
   // Calculate payouts (include both PD and CIV engine replacements)
   for (const week of weeklyStats) {
     const basePay = week.totalRepairs * MECH_PAY_PER_REPAIR;
-    const totalEngines = (week.engineReplacements || 0) + (week.civEngineReplacements || 0);
-    const enginePay = mechCalculateEngineValue(totalEngines);
-    week.totalPayout = basePay + enginePay;
+    week.totalPayout = basePay + (week.enginePayTotal || 0);
   }
   
   return weeklyStats;
@@ -524,7 +526,7 @@ function mechRenderWeeklySummary(mechanicName) {
       } else {
         mechAddSummaryRow(card, "Engine Replacements", totalEngines.toString());
       }
-      const engineValue = mechCalculateEngineValue(totalEngines);
+      const engineValue = week.enginePayTotal || 0;
       mechAddSummaryRow(card, "Engine Value", mechFmtMoney(engineValue));
     }
     mechAddSummaryRow(card, "Total Payout", mechFmtMoney(week.totalPayout));
@@ -587,7 +589,7 @@ async function mechCopyWeekSummary(mechanicName, week) {
     } else {
       summary += `Engine Replacements: ${totalEngines}\n`;
     }
-    const engineValue = mechCalculateEngineValue(totalEngines);
+    const engineValue = week.enginePayTotal || 0;
     summary += `Engine Reimbursement: ${mechFmtMoney(engineValue)}\n`;
   }
   summary += `Total Payout: ${mechFmtMoney(week.totalPayout)}\n`;

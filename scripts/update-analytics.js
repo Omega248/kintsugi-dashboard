@@ -148,6 +148,7 @@ function parseJobsSheet(rows) {
   const iEngineCiv = iEnginePD !== -1
     ? lower.findIndex((h, i) => i > iEnginePD && h.includes('engine') && h.includes('replacement'))
     : -1;
+  const iDept = lower.findIndex(h => h.includes('department') || h.includes('dept'));
   if (iMech === -1 || (iAcrossPD === -1 && iAcrossCiv === -1)) return [];
   const jobs = [];
   for (let i = 1; i < rows.length; i++) {
@@ -174,13 +175,14 @@ function parseJobsSheet(rows) {
       else if (/^(yes|y|true)$/i.test(raw)) { civEngineCount = 1; }
     }
     const engineCount = pdEngineCount + civEngineCount;
+    const dept     = iDept !== -1 ? (row[iDept] || '').trim() : '';
     const tsDate   = iTime  !== -1 ? parseDateLike(row[iTime])  : null;
     const weekEnd  = iWeek  !== -1 ? parseDateLike(row[iWeek])  : null;
     const monthEnd = iMonth !== -1 ? parseDateLike(row[iMonth]) : null;
     const bestDate = tsDate || weekEnd || monthEnd;
     jobs.push({ mechanic: mech, across, acrossPD, acrossCiv,
                 engineReplacements: engineCount, pdEngineCount, civEngineCount,
-                tsDate, weekEnd, monthEnd, bestDate });
+                department: dept, tsDate, weekEnd, monthEnd, bestDate });
   }
   return jobs;
 }
@@ -226,11 +228,17 @@ function buildWeeklyStats(jobs) {
     }
     let rec = weekMap.get(weekKey);
     if (!rec) {
-      rec = { weekKey, weekEndDate, totalRepairs: 0, engineReplacements: 0 };
+      rec = { weekKey, weekEndDate, totalRepairs: 0, engineReplacements: 0, enginePayTotal: 0 };
       weekMap.set(weekKey, rec);
     }
     rec.totalRepairs       += j.across || 0;
     rec.engineReplacements += j.engineReplacements || 0;
+    // Bonus only for LSPD; all other departments get reimbursement only
+    // update-analytics.js tracks PD and CIV engine counts separately (matching the
+    // dual-column sheet format), so we apply the LSPD bonus only to PD engines.
+    const isLspd = (j.department || '').toUpperCase() === 'LSPD';
+    rec.enginePayTotal     += j.pdEngineCount * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0))
+                            + j.civEngineCount * ENGINE_REIMBURSEMENT; // CIV engines: reimbursement only
   }
   const weeks = Array.from(weekMap.values());
   weeks.sort((a, b) => {
@@ -238,7 +246,7 @@ function buildWeeklyStats(jobs) {
     return b.weekKey.localeCompare(a.weekKey);
   });
   for (const w of weeks) {
-    w.totalPayout = w.totalRepairs * PAY_PER_REPAIR + w.engineReplacements * ENGINE_PAY_DEFAULT;
+    w.totalPayout = w.totalRepairs * PAY_PER_REPAIR + (w.enginePayTotal || 0);
   }
   return weeks;
 }
