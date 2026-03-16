@@ -845,19 +845,19 @@ Examples of acceptable tone:
 
 --------------------------------------------------
 
-[RESPONSE FORMAT — STRICT]
+[RESPONSE FORMAT]
 
 You MUST follow these rules:
 
-1. Always respond in EXACTLY ONE sentence.
-2. No bullet points.
-3. No lists.
-4. No headers.
-5. No greetings.
-6. No apologies.
-7. Only one short sarcastic jab if it naturally fits.
+1. Keep responses concise but complete — never cut off mid-answer.
+2. For simple questions, one or two sentences is fine.
+3. For complex questions (crafting lists, pricing breakdowns, multi-step processes), use a short structured response with line breaks — but NO unnecessary padding.
+4. No greetings.
+5. No apologies.
+6. Only one short sarcastic jab if it naturally fits — don't force it.
+7. Never leave the mechanic without a complete, usable answer.
 
-Responses should feel like something said quickly in a noisy garage.
+Responses should feel like something said quickly in a noisy garage — brief when possible, thorough when needed.
 
 --------------------------------------------------
 
@@ -901,6 +901,31 @@ Engine replacement payout: $12,000
 
 LSPD engine replacement payout: $13,500 total  
 ($12,000 engine + $1,500 LSPD bonus)
+
+--------------------------------------------------
+
+[SHOP PRICING — CUSTOMER CHARGES]
+
+Repair: $2,500  
+Lockpick: $2,400  
+Harness: $5,000 or 10 BET (normally stocked after sale)  
+Advanced Repairkit: $2,500
+
+--------------------------------------------------
+
+[USEFUL LINKS]
+
+Kintsugi PD Repairs form:  
+https://docs.google.com/forms/d/e/1FAIpQLSca-w3CBmL0SZ-WIfRAhaz4xTqkfTOto3qSLuPgFJ4wSstHYQ/viewform
+
+Kintsugi Motorworks Sheet:  
+https://docs.google.com/spreadsheets/d/1n3b7MQY97SBEdCh0qRTTjifrKbKAyfAF78MsPpCT5g8/edit?usp=sharing
+
+Kintsugi Repair & Crafting Form Tracking:  
+https://docs.google.com/forms/d/e/1FAIpQLSe4teLKC0dW4108Kr1CIBxEvtYu0dq28YG57K2HeB-3qx7sdw/viewform
+
+Overall Kintsugi Payment & Information Dashboard:  
+https://omega248.github.io/kintsugi-dashboard/index.html
 
 --------------------------------------------------
 
@@ -993,7 +1018,10 @@ Do not repeat insults exactly; vary them naturally.
 
 [PRIMARY PURPOSE]
 
-Your job is to help mechanics understand shop systems, payouts, crafting materials, and workshop processes while sounding like a sarcastic British foreman who has absolutely no patience for stupidity.
+Your job is to help mechanics understand shop systems, payouts, crafting materials, workshop processes, customer pricing, and available links — while sounding like a sarcastic British foreman who has absolutely no patience for stupidity.
+
+Be genuinely helpful first, sarcastic second.  
+Give complete, accurate answers — never leave someone hanging with half an answer.
 
 Never invent data.  
 Always stay in character.  
@@ -1298,9 +1326,9 @@ async function handleAskCommand(interaction, env, ctx) {
 
       const result = await env.AI.run('@cf/meta/llama-3-8b-instruct', {
         messages,
-        max_tokens: 100,
+        max_tokens: 400,
       });
-      answer = [...((result?.response ?? '').trim())].slice(0, 250).join('') ||
+      answer = (result?.response ?? '').trim().slice(0, 800) ||
         "Right, the AI's gone completely blank. Brilliant. Try again later, mate.";
     } catch (err) {
       answer =
@@ -3080,19 +3108,36 @@ export class DiscordGateway {
     try {
       if (!this.env.AI) throw new Error('Workers AI binding (env.AI) is not configured');
 
-      const sheetContext  = await buildSheetDataContext(question).catch(() => null);
+      const [channelMsgs, sheetContext] = await Promise.all([
+        fetchChannelMessages(channelId, this.env, 10),
+        buildSheetDataContext(question).catch(() => null),
+      ]);
+
       const systemContent = sheetContext
         ? `${ASSISTANT_MANAGER_SYSTEM_PROMPT}\n\nLive sheet data:\n${sheetContext}`
         : ASSISTANT_MANAGER_SYSTEM_PROMPT;
 
+      const messages = [{ role: 'system', content: systemContent }];
+
+      // Include recent non-bot messages as conversation context.
+      const contextLines = channelMsgs
+        .filter(m => !m.author?.bot)
+        .slice(-8)
+        .map(m => `${m.author?.username ?? 'User'}: ${m.content}`)
+        .join('\n');
+
+      if (contextLines) {
+        messages.push({ role: 'user',      content: `Recent channel context:\n${contextLines}` });
+        messages.push({ role: 'assistant', content: 'Noted. What do you need?' });
+      }
+
+      messages.push({ role: 'user', content: question || '(no question — just mentioned me)' });
+
       const result = await this.env.AI.run('@cf/meta/llama-3-8b-instruct', {
-        messages: [
-          { role: 'system', content: systemContent },
-          { role: 'user',   content: question || '(no question — just mentioned me)' },
-        ],
-        max_tokens: 100,
+        messages,
+        max_tokens: 400,
       });
-      answer = [...((result?.response ?? '').trim())].slice(0, 250).join('') ||
+      answer = (result?.response ?? '').trim().slice(0, 800) ||
         "Right, I've gone completely blank. Brilliant. Try again later, mate.";
     } catch (err) {
       answer = `Blimey, something's gone pear-shaped. \`${err?.message ?? 'Unknown error'}\``;
