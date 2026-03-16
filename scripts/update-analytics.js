@@ -135,32 +135,51 @@ function parseJobsSheet(rows) {
   const headers = rows[0].map(h => (h || '').trim());
   const lower   = headers.map(h => h.toLowerCase());
   const iMech   = lower.findIndex(h => h.includes('mechanic'));
-  const iAcross = lower.findIndex(h => h.includes('across') || h.includes('repairs'));
+  // "How many Across PD?" — PD repairs (contains "pd")
+  const iAcrossPD  = lower.findIndex(h => h.includes('across') && h.includes('pd'));
+  // "How many Across" (CIV) — civilian repairs (contains "across" but NOT "pd")
+  const iAcrossCiv = lower.findIndex(h => h.includes('across') && !h.includes('pd'));
   const iTime   = lower.findIndex(h => h.includes('timestamp'));
   const iWeek   = lower.findIndex(h => h.includes('week') && h.includes('end'));
   const iMonth  = lower.findIndex(h => h.includes('month') && h.includes('end'));
-  const iEngine = lower.findIndex(h => h.includes('engine') && h.includes('replacement'));
-  if (iMech === -1 || iAcross === -1) return [];
+  // First "Engine Replacement?" → PD engines
+  const iEnginePD  = lower.findIndex(h => h.includes('engine') && h.includes('replacement'));
+  // Second "Engine Replacement?" → CIV engines (after iEnginePD)
+  const iEngineCiv = iEnginePD !== -1
+    ? lower.findIndex((h, i) => i > iEnginePD && h.includes('engine') && h.includes('replacement'))
+    : -1;
+  if (iMech === -1 || (iAcrossPD === -1 && iAcrossCiv === -1)) return [];
   const jobs = [];
   for (let i = 1; i < rows.length; i++) {
     const row  = rows[i];
     if (!row || !row.length) continue;
     const mech = (row[iMech] || '').trim();
     if (!mech) continue;
-    const across = parseInt(row[iAcross] || '0', 10) || 0;
+    const acrossPD  = iAcrossPD  !== -1 ? (parseInt(row[iAcrossPD]  || '0', 10) || 0) : 0;
+    const acrossCiv = iAcrossCiv !== -1 ? (parseInt(row[iAcrossCiv] || '0', 10) || 0) : 0;
+    const across = acrossPD + acrossCiv;
     if (!across) continue;
-    let engineCount = 0;
-    if (iEngine !== -1) {
-      const raw = (row[iEngine] || '').trim();
+    let pdEngineCount = 0;
+    if (iEnginePD !== -1) {
+      const raw = (row[iEnginePD] || '').trim();
       const n   = Number(raw);
-      if (!isNaN(n) && n > 0) { engineCount = n; }
-      else if (/^(yes|y|true)$/i.test(raw)) { engineCount = 1; }
+      if (!isNaN(n) && n > 0) { pdEngineCount = n; }
+      else if (/^(yes|y|true)$/i.test(raw)) { pdEngineCount = 1; }
     }
+    let civEngineCount = 0;
+    if (iEngineCiv !== -1) {
+      const raw = (row[iEngineCiv] || '').trim();
+      const n   = Number(raw);
+      if (!isNaN(n) && n > 0) { civEngineCount = n; }
+      else if (/^(yes|y|true)$/i.test(raw)) { civEngineCount = 1; }
+    }
+    const engineCount = pdEngineCount + civEngineCount;
     const tsDate   = iTime  !== -1 ? parseDateLike(row[iTime])  : null;
     const weekEnd  = iWeek  !== -1 ? parseDateLike(row[iWeek])  : null;
     const monthEnd = iMonth !== -1 ? parseDateLike(row[iMonth]) : null;
     const bestDate = tsDate || weekEnd || monthEnd;
-    jobs.push({ mechanic: mech, across, engineReplacements: engineCount,
+    jobs.push({ mechanic: mech, across, acrossPD, acrossCiv,
+                engineReplacements: engineCount, pdEngineCount, civEngineCount,
                 tsDate, weekEnd, monthEnd, bestDate });
   }
   return jobs;
