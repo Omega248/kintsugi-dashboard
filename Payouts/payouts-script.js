@@ -555,12 +555,12 @@ function renderWeekly() {
         <td><button class="mech-link" data-mech="${r.mechanic}">${mechLabel}</button></td>
         <td>${kFmtDate(r.weekEnd)}</td>
         <td class="col-count">${r.jobCount || 0}</td>
-        <td class="col-count">${r.repairs}</td>
-        <td class="col-count">${engineReps > 0 ? engineReps : 0}</td>
         <td class="col-amount amount-in">
           ${kFmtMoney(pay)}
           <div class="payout-comment">${comment}</div>
         </td>
+        <td class="col-count">${r.repairs}</td>
+        <td class="col-count">${engineReps > 0 ? engineReps : 0}</td>
         <td class="col-actions">
           <button class="btn btn-copy-summary" 
                   title="Copy payout summary to clipboard"
