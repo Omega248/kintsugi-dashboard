@@ -265,21 +265,28 @@ async function loadPayouts() {
       (h) => h.includes("across") && !h.includes("pd")
     );
 
+    // "Did you buy the engine replacement, or did kintsugi pay for it?"
+    // Must be detected BEFORE engine replacement columns so we can exclude it from those searches.
+    const iEnginePayer = headersLower.findIndex(
+      (h) => h.includes("did you buy") || (h.includes("kintsugi") && h.includes("pay"))
+    );
+
     // First "Engine Replacement?" column → PD engine replacement
+    // Exclude the payer question column which also contains "engine" and "replacement".
     const iEnginePD = headersLower.findIndex(
-      (h) => h.includes("engine") && h.includes("replacement")
+      (h, i) => i !== iEnginePayer && h.includes("engine") && h.includes("replacement")
     );
     // Second "Engine Replacement?" column → CIV engine replacement (after iEnginePD)
     const iEngineCiv =
       iEnginePD !== -1
         ? headersLower.findIndex(
-            (h, i) => i > iEnginePD && h.includes("engine") && h.includes("replacement")
+            (h, i) => i > iEnginePD && i !== iEnginePayer && h.includes("engine") && h.includes("replacement")
           )
         : -1;
 
-    // "Did you buy the engine replacement, or did kintsugi pay for it?"
-    const iEnginePayer = headersLower.findIndex(
-      (h) => h.includes("did you buy") || (h.includes("kintsugi") && h.includes("pay"))
+    // "PD Repair" — yes/no column indicating whether the job is a PD repair
+    const iPDRepair = headersLower.findIndex(
+      (h) => h === "pd repair" || (h.includes("pd") && h.includes("repair") && !h.includes("across"))
     );
 
     // find department column
@@ -367,7 +374,15 @@ async function loadPayouts() {
       const tsDate = tsRaw ? kParseDateLike(tsRaw) || new Date(tsRaw) : null;
       const owner = iOwner !== -1 ? (row[iOwner] || "").trim() : "";
       const plate = iPlate !== -1 ? (row[iPlate] || "").trim() : "";
-      const dept = iDept !== -1 ? (row[iDept] || "").trim() : "";
+      let dept = iDept !== -1 ? (row[iDept] || "").trim() : "";
+
+      // Classify CIV-only jobs: "PD Repair" = "No" (or dept empty + only CIV repairs)
+      if (!dept) {
+        const pdRepairFlag = iPDRepair !== -1 ? (row[iPDRepair] || "").trim().toLowerCase() : "";
+        if (pdRepairFlag === "no" || (acrossCiv > 0 && acrossPD === 0)) {
+          dept = "CIV";
+        }
+      }
 
       mechanics.add(mech);
       if (dept) departments.add(dept);

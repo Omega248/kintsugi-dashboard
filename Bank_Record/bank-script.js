@@ -319,8 +319,12 @@ async function loadBankFromSheet() {
 
     const parsed = parseCSVToObjects(text);
     headers = parsed.fields || [];
-    allRows = dedupeById(parsed.data || []);
+    const bankRows = dedupeById(parsed.data || []);
     columnOrder = [...headers];
+
+    // Load auto-generated mechanic payout rows from the jobs sheet and merge in
+    const payoutRows = await loadJobsAsPayouts();
+    allRows = [...bankRows, ...payoutRows];
 
     computeDerived();
 
@@ -330,7 +334,8 @@ async function loadBankFromSheet() {
     // Now render with whatever filters are active
     render();
 
-    let baseStatus = `Loaded ${allRows.length} rows from "${BANK_SHEET}"`;
+    let baseStatus = `Loaded ${bankRows.length} rows from "${BANK_SHEET}"`;
+    if (payoutRows.length) baseStatus += ` + ${payoutRows.length} auto-tracked payout entries`;
     if (crossInfo && crossInfo.text) {
       baseStatus += " — " + crossInfo.text;
     }
@@ -338,6 +343,197 @@ async function loadBankFromSheet() {
   } catch (err) {
     console.error(err);
     if (statusEl) statusEl.textContent = "";
+  }
+}
+
+// ================== AUTO-TRACK MECHANIC PAYOUTS FROM JOBS SHEET ==================
+
+/**
+ * Fetch the jobs sheet, aggregate mechanic payouts by mechanic+week, and return
+ * an array of synthetic "out" transaction objects to be merged into allRows.
+ */
+async function loadJobsAsPayouts() {
+  const JOBS_SHEET_NAME = (typeof KINTSUGI_CONFIG !== "undefined" && KINTSUGI_CONFIG.SHEETS && KINTSUGI_CONFIG.SHEETS.JOBS)
+    ? KINTSUGI_CONFIG.SHEETS.JOBS
+    : "Form responses 1";
+  const PAY = (typeof PAYMENT_RATES !== "undefined" && PAYMENT_RATES.PAY_PER_REPAIR) ? PAYMENT_RATES.PAY_PER_REPAIR : 700;
+  const ENG_REIMB = (typeof PAYMENT_RATES !== "undefined" && PAYMENT_RATES.ENGINE_REIMBURSEMENT) ? PAYMENT_RATES.ENGINE_REIMBURSEMENT : 12000;
+  const ENG_BONUS = (typeof PAYMENT_RATES !== "undefined" && PAYMENT_RATES.ENGINE_BONUS_LSPD) ? PAYMENT_RATES.ENGINE_BONUS_LSPD : 1500;
+
+  try {
+    const res = await fetch(sheetCsvUrl(JOBS_SHEET_NAME));
+    if (!res.ok) return [];
+    const text = await res.text();
+    if (!text.trim() || text.trim().startsWith("<")) return [];
+
+    const rows = rawParseCSV(text);
+    if (rows.length < 2) return [];
+
+    const headerRow = rows[0].map((h) => (h || "").trim());
+    const headersLower = headerRow.map((h) => h.toLowerCase());
+
+    const iMech   = headerRow.indexOf("Mechanic");
+    const iWeek   = headerRow.indexOf("Week Ending");
+    const iMonth  = headerRow.indexOf("Month Ending");
+
+    // PD repairs: contains "across" AND "pd"
+    const iAcrossPD = headersLower.findIndex(
+      (h) => h.includes("across") && h.includes("pd")
+    );
+    // CIV repairs: contains "across" but NOT "pd"
+    const iAcrossCiv = headersLower.findIndex(
+      (h) => h.includes("across") && !h.includes("pd")
+    );
+
+    // Engine payer column (detect first to exclude from engine-count searches)
+    const iEnginePayer = headersLower.findIndex(
+      (h) => h.includes("did you buy") || (h.includes("kintsugi") && h.includes("pay"))
+    );
+
+    // PD engine replacement (first occurrence, excluding payer column)
+    const iEnginePD = headersLower.findIndex(
+      (h, i) => i !== iEnginePayer && h.includes("engine") && h.includes("replacement")
+    );
+    // CIV engine replacement (second occurrence, excluding payer column)
+    const iEngineCiv =
+      iEnginePD !== -1
+        ? headersLower.findIndex(
+            (h, i) => i > iEnginePD && i !== iEnginePayer && h.includes("engine") && h.includes("replacement")
+          )
+        : -1;
+
+    const iDept      = headersLower.findIndex((h) => h.includes("department"));
+    const iPDRepair  = headersLower.findIndex(
+      (h) => h === "pd repair" || (h.includes("pd") && h.includes("repair") && !h.includes("across"))
+    );
+
+    if (iMech === -1 || iWeek === -1 || (iAcrossPD === -1 && iAcrossCiv === -1)) return [];
+
+    // Aggregate by mechanic + week ending ISO string
+    const weeklyMap = new Map();
+
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r];
+      if (!row || !row.length) continue;
+
+      const mech = (row[iMech] || "").trim();
+      if (!mech) continue;
+
+      const acrossPD  = iAcrossPD  !== -1 ? (parseInt(row[iAcrossPD]  || 0, 10) || 0) : 0;
+      const acrossCiv = iAcrossCiv !== -1 ? (parseInt(row[iAcrossCiv] || 0, 10) || 0) : 0;
+      const across    = acrossPD + acrossCiv;
+      if (!across) continue;
+
+      // PD engine replacements
+      let pdEngineCount = 0;
+      if (iEnginePD !== -1) {
+        const raw = (row[iEnginePD] || "").trim();
+        if (raw) {
+          const n = Number(raw);
+          if (!Number.isNaN(n) && n > 0) pdEngineCount = n;
+          else if (/^(yes|y|true)$/i.test(raw)) pdEngineCount = 1;
+        }
+      }
+
+      // CIV engine replacements
+      let civEngineCount = 0;
+      if (iEngineCiv !== -1) {
+        const raw = (row[iEngineCiv] || "").trim();
+        if (raw) {
+          const n = Number(raw);
+          if (!Number.isNaN(n) && n > 0) civEngineCount = n;
+          else if (/^(yes|y|true)$/i.test(raw)) civEngineCount = 1;
+        }
+      }
+
+      // Engine payer (mechanic bought = full reimbursement; kintsugi bought = bonus only)
+      let enginePayer = "";
+      if (iEnginePayer !== -1 && pdEngineCount > 0) {
+        const rawPayer = (row[iEnginePayer] || "").trim().toLowerCase();
+        if (rawPayer.includes("kintsugi")) enginePayer = "kintsugi";
+        else if (/^\s*i\b|i bought|bought it|myself/i.test(rawPayer)) enginePayer = "mechanic";
+      }
+
+      // Compute mechanic engine pay per job
+      let enginePay = 0;
+      if (pdEngineCount > 0) {
+        const dept = iDept !== -1 ? (row[iDept] || "").trim() : "";
+        if (enginePayer === "mechanic") {
+          enginePay += pdEngineCount * (ENG_REIMB + ENG_BONUS);
+        } else if (enginePayer === "kintsugi") {
+          enginePay += pdEngineCount * ENG_BONUS;
+        } else {
+          enginePay += pdEngineCount * (dept === "BCSO" ? ENG_REIMB : (ENG_REIMB + ENG_BONUS));
+        }
+      }
+      enginePay += civEngineCount * (ENG_REIMB + ENG_BONUS); // CIV engines always full rate
+
+      const weekRaw = iWeek !== -1 ? (row[iWeek] || "").trim() : "";
+      if (!weekRaw) continue;
+      const weekDate = parseDate(weekRaw);
+      if (!weekDate) continue;
+      const weekISO = weekDate.toISOString().slice(0, 10);
+
+      const wKey = `${mech}|${weekISO}`;
+      const agg = weeklyMap.get(wKey) || {
+        mechanic: mech,
+        weekEnd: weekDate,
+        weekISO,
+        repairs: 0,
+        acrossPD: 0,
+        acrossCiv: 0,
+        pdEngines: 0,
+        civEngines: 0,
+        enginePayTotal: 0,
+      };
+      agg.repairs        += across;
+      agg.acrossPD       += acrossPD;
+      agg.acrossCiv      += acrossCiv;
+      agg.pdEngines      += pdEngineCount;
+      agg.civEngines     += civEngineCount;
+      agg.enginePayTotal += enginePay;
+      weeklyMap.set(wKey, agg);
+    }
+
+    // Convert aggregates to synthetic bank transaction rows
+    const syntheticRows = [];
+    for (const agg of weeklyMap.values()) {
+      const totalPayout = agg.repairs * PAY + agg.enginePayTotal;
+      const weekEndStr  = agg.weekEnd.toLocaleDateString("en-GB");
+
+      let repairDesc;
+      if (agg.acrossCiv > 0) {
+        repairDesc = `${agg.acrossPD} PD / ${agg.acrossCiv} CIV repairs`;
+      } else {
+        repairDesc = `${agg.repairs} repair${agg.repairs !== 1 ? "s" : ""}`;
+      }
+      const totalEngines = agg.pdEngines + agg.civEngines;
+      const engineDesc = totalEngines > 0 ? ` + ${totalEngines} engine repl.` : "";
+
+      syntheticRows.push({
+        // Standard bank-row fields so existing filters/display work correctly
+        date:      weekEndStr,
+        direction: "out",
+        amount:    String(totalPayout),
+        comment:   `Mechanic Payout — ${agg.mechanic} — Week ending ${weekEndStr} (${repairDesc}${engineDesc})`,
+        type:      "Mechanic Payout",
+        // Private metadata
+        _source:   "auto-payout",
+        _mechanic: agg.mechanic,
+        _weekISO:  agg.weekISO,
+        _repairs:  agg.repairs,
+        _acrossPD: agg.acrossPD,
+        _acrossCiv: agg.acrossCiv,
+        _enginePay: agg.enginePayTotal,
+      });
+    }
+
+    // Sort newest week first
+    syntheticRows.sort((a, b) => (b._weekISO || "").localeCompare(a._weekISO || ""));
+    return syntheticRows;
+  } catch (err) {
+    console.warn("loadJobsAsPayouts failed:", err);
+    return [];
   }
 }
 
@@ -350,19 +546,25 @@ if (fileInput) {
 
     if (statusEl) statusEl.textContent = "";
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const text = reader.result || "";
                 const parsed = parseCSVToObjects(text);
         headers = parsed.fields || [];
-        allRows = dedupeById(parsed.data || []);
+        const bankRows = dedupeById(parsed.data || []);
         columnOrder = [...headers];
+
+        // Merge in auto-generated payout rows from the jobs sheet
+        const payoutRows = await loadJobsAsPayouts();
+        allRows = [...bankRows, ...payoutRows];
+
         computeDerived();
 
         const crossInfo = applyCrossPageContext();
         render();
 
-        let baseStatus = `Loaded ${allRows.length} unique rows from ${file.name}`;
+        let baseStatus = `Loaded ${bankRows.length} unique rows from ${file.name}`;
+        if (payoutRows.length) baseStatus += ` + ${payoutRows.length} auto-tracked payout entries`;
         if (crossInfo && crossInfo.text) {
           baseStatus += " — " + crossInfo.text;
         }
@@ -695,6 +897,9 @@ binsNoteEl.textContent = binBits.join(" • ");
 }
 
 function classifyBase(r, c, dir) {
+  // Auto-generated mechanic payout entries
+  if (r._source === "auto-payout") return "Mechanic Payout";
+
   const lowerType = (r.type || r.Type || "").toLowerCase();
   const fromId = (
     r.from_account_id ||
@@ -836,6 +1041,8 @@ function getFilteredRows() {
     rows = rows.filter(
       (r) => (r._category || "").toLowerCase() === "grant"
     );
+  } else if (quickFilter === "payouts") {
+    rows = rows.filter((r) => r._source === "auto-payout");
   }
 
   const q = (searchInput?.value || "").trim().toLowerCase();
@@ -872,6 +1079,7 @@ function getTypeClass(t) {
 
 function getCategoryClass(c) {
   const v = (c || "").toLowerCase();
+  if (v.includes("mechanic payout")) return "cat-payout";
   if (v.includes("bet purchase")) return "cat-bet-purchase";
   if (v.includes("bet reimbursement")) return "cat-bet-refund";
   if (v === "grant") return "cat-grant";
@@ -944,6 +1152,7 @@ function drawTable(rows) {
   rows.forEach((r) => {
     const tr = document.createElement("tr");
     if (r._bet) tr.classList.add("row-bet");
+    if (r._source === "auto-payout") tr.classList.add("row-payout");
     tr.addEventListener("click", () => showDetails(r));
 
     cols.forEach((h) => {
@@ -1020,6 +1229,29 @@ function formatDateShort(raw) {
 
 function showDetails(r) {
   if (!detailsPanel) return;
+
+  // Rich display for auto-generated mechanic payout entries
+  if (r._source === "auto-payout") {
+    const amt = parseFloat(r.amount || 0);
+    const weekEndStr = r.date || "N/A";
+    let repairLine;
+    if ((r._acrossCiv || 0) > 0) {
+      repairLine = `${r._acrossPD || 0} PD + ${r._acrossCiv || 0} CIV = ${r._repairs || 0} total repairs`;
+    } else {
+      repairLine = `${r._repairs || 0} repair${(r._repairs || 0) !== 1 ? "s" : ""}`;
+    }
+    const engineLine = r._enginePay > 0 ? `Engine pay: ${money(r._enginePay)}` : null;
+    detailsPanel.innerHTML = `
+      <div><div class="label">Auto-Tracked Mechanic Payout</div>
+        <strong>${kEscapeHtml ? kEscapeHtml(r._mechanic || "") : (r._mechanic || "")}</strong></div>
+      <div style="margin-top:4px;"><div class="label">Week Ending</div>${weekEndStr}</div>
+      <div style="margin-top:4px;"><div class="label">Repairs</div>${repairLine}</div>
+      ${engineLine ? `<div style="margin-top:4px;"><div class="label">Engine Pay</div>${engineLine}</div>` : ""}
+      <div style="margin-top:4px;"><div class="label">Total Payout</div><strong>${money(amt)}</strong></div>
+    `;
+    detailsPanel.style.display = "block";
+    return;
+  }
 
   const id = (r.id || r.ID || "") || "N/A";
   const sender = r.from_civ_name || r.Sender || "N/A";
