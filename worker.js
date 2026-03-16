@@ -411,12 +411,15 @@ function buildWeeklyStats(jobs) {
 
     let rec = weekMap.get(weekKey);
     if (!rec) {
-      rec = { weekKey, weekEndDate, jobCount: 0, totalRepairs: 0, engineReplacements: 0 };
+      rec = { weekKey, weekEndDate, jobCount: 0, totalRepairs: 0, engineReplacements: 0, enginePayTotal: 0 };
       weekMap.set(weekKey, rec);
     }
     rec.jobCount++;
     rec.totalRepairs      += j.across || 0;
     rec.engineReplacements += j.engineReplacements || 0;
+    // Bonus only for LSPD; all other departments get reimbursement only
+    const isLspd = (j.department || '').toUpperCase() === 'LSPD';
+    rec.enginePayTotal    += j.engineReplacements * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
   }
 
   const weeks = Array.from(weekMap.values());
@@ -426,8 +429,7 @@ function buildWeeklyStats(jobs) {
   });
 
   for (const w of weeks) {
-    const enginePay = w.engineReplacements * ENGINE_PAY_DEFAULT;
-    w.totalPayout   = w.totalRepairs * PAY_PER_REPAIR + enginePay;
+    w.totalPayout   = w.totalRepairs * PAY_PER_REPAIR + (w.enginePayTotal || 0);
   }
 
   return weeks;
@@ -559,6 +561,7 @@ function getLatestWeekPayouts(allJobs, stateMap) {
         jobs:               0, // individual job submissions (rows)
         repairs:            0, // total "across" = repair slots across all jobs
         engineReplacements: 0,
+        enginePayTotal:     0,
         totalPayout:        0,
       };
       mechMap.set(j.mechanic, rec);
@@ -566,12 +569,13 @@ function getLatestWeekPayouts(allJobs, stateMap) {
     rec.jobs++;
     rec.repairs            += j.across || 0; // j.across = "How many Across" sheet column
     rec.engineReplacements += j.engineReplacements || 0;
+    // Bonus only for LSPD; all other departments get reimbursement only
+    const isLspdJob = (j.department || '').toUpperCase() === 'LSPD';
+    rec.enginePayTotal     += j.engineReplacements * (ENGINE_REIMBURSEMENT + (isLspdJob ? ENGINE_BONUS_LSPD : 0));
   }
 
   const payouts = Array.from(mechMap.values()).map(m => {
-    // Department info is not available in the weekly aggregate, so we use the
-    // default (LSPD/other) engine pay rate for all engine replacements.
-    m.totalPayout = m.repairs * PAY_PER_REPAIR + m.engineReplacements * ENGINE_PAY_DEFAULT;
+    m.totalPayout = m.repairs * PAY_PER_REPAIR + (m.enginePayTotal || 0);
     return m;
   }).sort((a, b) => b.totalPayout - a.totalPayout);
 
@@ -1935,13 +1939,15 @@ async function handleInvoiceMonthSelect(interaction, env, ctx) {
  * @param {Date}   weekEndDate   - The Sunday that closes the week being displayed.
  */
 function buildMechanicPayoutEmbed(mechanic, stateId, filteredJobs, weekEndDate) {
-  let repairs = 0, engines = 0;
+  let repairs = 0, engines = 0, enginePayTotal = 0;
   for (const j of filteredJobs) {
     repairs += j.across || 0;
     engines += j.engineReplacements || 0;
+    const isLspd = (j.department || '').toUpperCase() === 'LSPD';
+    enginePayTotal += j.engineReplacements * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
   }
   const jobCount   = filteredJobs.length;
-  const payout     = repairs * PAY_PER_REPAIR + engines * ENGINE_PAY_DEFAULT;
+  const payout     = repairs * PAY_PER_REPAIR + enginePayTotal;
   const color      = repairs > 0 ? 0x22c55e : 0xef4444;
   const dateLabel  = fmtDate(weekEndDate);
 

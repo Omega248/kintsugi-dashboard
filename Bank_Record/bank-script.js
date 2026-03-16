@@ -458,15 +458,16 @@ async function loadJobsAsPayouts() {
       let enginePay = 0;
       if (pdEngineCount > 0) {
         const dept = iDept !== -1 ? (row[iDept] || "").trim() : "";
+        const isLspd = dept === "LSPD";
         if (enginePayer === "mechanic") {
-          enginePay += pdEngineCount * (ENG_REIMB + ENG_BONUS);
+          enginePay += pdEngineCount * (ENG_REIMB + (isLspd ? ENG_BONUS : 0));
         } else if (enginePayer === "kintsugi") {
-          enginePay += pdEngineCount * ENG_BONUS;
+          enginePay += pdEngineCount * (isLspd ? ENG_BONUS : 0);
         } else {
-          enginePay += pdEngineCount * (dept === "BCSO" ? ENG_REIMB : (ENG_REIMB + ENG_BONUS));
+          enginePay += pdEngineCount * (isLspd ? (ENG_REIMB + ENG_BONUS) : ENG_REIMB);
         }
       }
-      enginePay += civEngineCount * (ENG_REIMB + ENG_BONUS); // CIV engines always full rate
+      enginePay += civEngineCount * ENG_REIMB; // CIV engines: reimbursement only (no bonus)
 
       const weekRaw = iWeek !== -1 ? (row[iWeek] || "").trim() : "";
       if (!weekRaw) continue;
