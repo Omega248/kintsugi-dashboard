@@ -56,35 +56,50 @@ function commentForWeek(weekEndDate) {
   return `Payout for week ending ${kFmtDate(weekEndDate)}`;
 }
 
-// Generate copy summary for a weekly payout entry
-function generateWeeklyCopySummary(mechanic, weekEndDate, repairs, engineReplacementsByDept, totalPayout) {
+// Generate copy summary for a weekly payout entry.
+// acrossPD      – PD repair count for the week
+// acrossCiv     – CIV repair count for the week
+// pdEngineReps  – PD engine replacement count
+// civEngineReps – CIV engine replacement count
+// enginePay     – pre-computed mechanic engine pay total
+// totalPayout   – final payout (repairs * PAY_PER_REPAIR + enginePay)
+function generateWeeklyCopySummary(mechanic, weekEndDate, acrossPD, acrossCiv, pdEngineReps, civEngineReps, enginePay, totalPayout) {
   const stateId = stateIdByMechanic.get(mechanic) || "N/A";
   const weekEndStr = kFmtDate(weekEndDate);
-  const engineReplacements = Object.values(engineReplacementsByDept).reduce((sum, count) => sum + count, 0);
-  const enginePay = calculateEnginePayment(engineReplacementsByDept);
-  
+  const totalRepairs = acrossPD + acrossCiv;
+
   let summary = `Kintsugi Motorworks - Weekly Payout\n`;
   summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
   summary += `Mechanic: ${mechanic}\n`;
   summary += `State ID: ${stateId}\n`;
   summary += `Week Ending: ${weekEndStr}\n`;
   summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  summary += `Repairs: ${repairs}\n`;
-  
-  if (engineReplacements > 0) {
-    summary += `Engine Replacements: ${engineReplacements}\n`;
-    summary += `Engine Reimbursement: ${kFmtMoney(enginePay)}\n`;
+
+  if (acrossCiv > 0) {
+    summary += `Repairs (PD): ${acrossPD}\n`;
+    summary += `Repairs (CIV): ${acrossCiv}\n`;
+    summary += `Total Repairs: ${totalRepairs}\n`;
+  } else {
+    summary += `Repairs: ${totalRepairs}\n`;
   }
-  
+
+  const totalEngines = pdEngineReps + civEngineReps;
+  if (totalEngines > 0) {
+    summary += `Engine Replacements: ${totalEngines}`;
+    if (civEngineReps > 0) summary += ` (${pdEngineReps} PD, ${civEngineReps} CIV)`;
+    summary += `\n`;
+    summary += `Engine Pay: ${kFmtMoney(enginePay)}\n`;
+  }
+
   summary += `Total Payout: ${kFmtMoney(totalPayout)}\n`;
   summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  
+
   return summary;
 }
 
 // Copy weekly payout summary to clipboard
-async function copyWeeklySummary(btn, mechanic, weekEndDate, repairs, engineReplacementsByDept, totalPayout) {
-  const summary = generateWeeklyCopySummary(mechanic, weekEndDate, repairs, engineReplacementsByDept, totalPayout);
+async function copyWeeklySummary(btn, mechanic, weekEndDate, acrossPD, acrossCiv, pdEngineReps, civEngineReps, enginePay, totalPayout) {
+  const summary = generateWeeklyCopySummary(mechanic, weekEndDate, acrossPD, acrossCiv, pdEngineReps, civEngineReps, enginePay, totalPayout);
   
   // Use existing helper function from payout-helpers.js
   const success = await kCopyToClipboard(summary);
@@ -126,6 +141,7 @@ function calculateEngineValue(engineReplacementsByDept) {
 }
 
 // Calculate mechanic pay for engine replacements by department
+// Legacy function kept for backwards-compatible paths.
 // BCSO: $12k reimbursement only (no bonus)
 // LSPD: $12k reimbursement + $1.5k bonus
 // Other: $12k reimbursement + $1.5k bonus
@@ -152,6 +168,35 @@ function calculateEnginePayment(engineReplacementsByDept) {
   enginePay += otherEngines * (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD);
   
   return enginePay;
+}
+
+// Compute mechanic engine pay for a single job row, accounting for who purchased
+// the engine and whether the repair is PD or civilian (CIV).
+//
+// PD engines:
+//   enginePayer === "mechanic"  → mechanic covered engine cost → $13,500 (both LSPD & BCSO)
+//   enginePayer === "kintsugi"  → kintsugi covered cost, mechanic gets bonus only → $1,500
+//   enginePayer === ""          → old data, fall back to dept-based defaults
+//                                  BCSO: $12,000  |  LSPD/other: $13,500
+//
+// CIV engines: always paid as ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD = $13,500
+function computeJobEnginePay(pdEngineCount, dept, enginePayer, civEngineCount) {
+  let pay = 0;
+
+  if (pdEngineCount > 0) {
+    if (enginePayer === "mechanic") {
+      pay += pdEngineCount * (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD);
+    } else if (enginePayer === "kintsugi") {
+      pay += pdEngineCount * ENGINE_BONUS_LSPD;
+    } else {
+      // Old data without payer info: keep original dept-based defaults
+      pay += pdEngineCount * (dept === "BCSO" ? ENGINE_REIMBURSEMENT : (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD));
+    }
+  }
+
+  pay += (civEngineCount || 0) * (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD);
+
+  return pay;
 }
 
 
@@ -208,19 +253,39 @@ async function loadPayouts() {
     const iMech = headers.indexOf("Mechanic");
     const iOwner = headers.indexOf("Owner of Vehicle");
     const iPlate = headers.indexOf("Vehicle Plate");
-    const iAcross = headers.indexOf("How many Across");
     const iWeek = headers.indexOf("Week Ending");
     const iMonth = headers.indexOf("Month Ending");
-    // any header that contains both "engine" and "replacement"
-    const iEngine = headersLower.findIndex(
-      (h) => h.includes("engine") && h.includes("replacement")
+
+    // "How many Across PD?" — PD repair count (contains "pd")
+    const iAcrossPD = headersLower.findIndex(
+      (h) => h.includes("across") && h.includes("pd")
     );
-    // find department column
-    const iDept = headersLower.findIndex(
-      (h) => h.includes("department")
+    // "How many Across" (CIV) — civilian repair count (contains "across" but NOT "pd")
+    const iAcrossCiv = headersLower.findIndex(
+      (h) => h.includes("across") && !h.includes("pd")
     );
 
-    if (iMech === -1 || iAcross === -1 || iWeek === -1 || iMonth === -1) {
+    // First "Engine Replacement?" column → PD engine replacement
+    const iEnginePD = headersLower.findIndex(
+      (h) => h.includes("engine") && h.includes("replacement")
+    );
+    // Second "Engine Replacement?" column → CIV engine replacement (after iEnginePD)
+    const iEngineCiv =
+      iEnginePD !== -1
+        ? headersLower.findIndex(
+            (h, i) => i > iEnginePD && h.includes("engine") && h.includes("replacement")
+          )
+        : -1;
+
+    // "Did you buy the engine replacement, or did kintsugi pay for it?"
+    const iEnginePayer = headersLower.findIndex(
+      (h) => h.includes("did you buy") || (h.includes("kintsugi") && h.includes("pay"))
+    );
+
+    // find department column
+    const iDept = headersLower.findIndex((h) => h.includes("department"));
+
+    if (iMech === -1 || (iAcrossPD === -1 && iAcrossCiv === -1) || iWeek === -1 || iMonth === -1) {
       throw new Error("Missing required columns.");
     }
 
@@ -243,19 +308,53 @@ async function loadPayouts() {
       const mech = (row[iMech] || "").trim();
       if (!mech) continue;
 
-      const across = Number(row[iAcross] || "0") || 0;
+      // PD repair count ("How many Across PD?")
+      const acrossPD = iAcrossPD !== -1 ? (Number(row[iAcrossPD] || "0") || 0) : 0;
+      // CIV repair count ("How many Across")
+      const acrossCiv = iAcrossCiv !== -1 ? (Number(row[iAcrossCiv] || "0") || 0) : 0;
+      const across = acrossPD + acrossCiv;
       if (!across) continue;
 
-      // Engine replacements: allow numeric count or yes/no
-      let engineCount = 0;
-      if (iEngine !== -1) {
-        const rawEngine = (row[iEngine] || "").trim();
+      // PD engine replacements (first "Engine Replacement?" column)
+      let pdEngineCount = 0;
+      if (iEnginePD !== -1) {
+        const rawEngine = (row[iEnginePD] || "").trim();
         if (rawEngine) {
           const num = Number(rawEngine);
           if (!Number.isNaN(num) && num > 0) {
-            engineCount = num;
+            pdEngineCount = num;
           } else if (/^(yes|y|true)$/i.test(rawEngine)) {
-            engineCount = 1;
+            pdEngineCount = 1;
+          }
+        }
+      }
+
+      // CIV engine replacements (second "Engine Replacement?" column)
+      let civEngineCount = 0;
+      if (iEngineCiv !== -1) {
+        const rawEngineCiv = (row[iEngineCiv] || "").trim();
+        if (rawEngineCiv) {
+          const num = Number(rawEngineCiv);
+          if (!Number.isNaN(num) && num > 0) {
+            civEngineCount = num;
+          } else if (/^(yes|y|true)$/i.test(rawEngineCiv)) {
+            civEngineCount = 1;
+          }
+        }
+      }
+
+      // Determine who purchased the PD engine replacement
+      // "mechanic" = mechanic bought it (owed 13 500)
+      // "kintsugi" = kintsugi bought it (mechanic gets 1 500 bonus)
+      // ""         = old data — fall back to dept-based defaults
+      let enginePayer = "";
+      if (iEnginePayer !== -1 && pdEngineCount > 0) {
+        const rawPayer = (row[iEnginePayer] || "").trim().toLowerCase();
+        if (rawPayer) {
+          if (rawPayer.includes("kintsugi")) {
+            enginePayer = "kintsugi";
+          } else if (/^\s*i\b|i bought|bought it|myself/i.test(rawPayer)) {
+            enginePayer = "mechanic";
           }
         }
       }
@@ -280,6 +379,9 @@ async function loadPayouts() {
       const weekISO = weekEnd.toISOString().slice(0, 10);
       weekKeys.add(weekISO);
 
+      // Pre-compute mechanic engine pay for this job
+      const enginePayForMechanic = computeJobEnginePay(pdEngineCount, dept, enginePayer, civEngineCount);
+
       // Weekly agg for mechanic+week
       const wKey = `${mech}|${weekISO}`;
       const w =
@@ -290,14 +392,22 @@ async function loadPayouts() {
           mKey,
           jobCount: 0,
           repairs: 0,
+          acrossPD: 0,
+          acrossCiv: 0,
           engineReplacements: 0,
-          engineReplacementsByDept: {}, // track engine replacements by department
+          civEngineReplacements: 0,
+          engineReplacementsByDept: {},
+          enginePayAccumulated: 0,
         };
       w.jobCount++;
       w.repairs += across;
-      w.engineReplacements += engineCount;
-      if (engineCount > 0 && dept) {
-        w.engineReplacementsByDept[dept] = (w.engineReplacementsByDept[dept] || 0) + engineCount;
+      w.acrossPD += acrossPD;
+      w.acrossCiv += acrossCiv;
+      w.engineReplacements += pdEngineCount;
+      w.civEngineReplacements += civEngineCount;
+      w.enginePayAccumulated += enginePayForMechanic;
+      if (pdEngineCount > 0 && dept) {
+        w.engineReplacementsByDept[dept] = (w.engineReplacementsByDept[dept] || 0) + pdEngineCount;
       }
       weeklyMap.set(wKey, w);
 
@@ -307,13 +417,21 @@ async function loadPayouts() {
           monthEnd,
           mKey,
           repairs: 0,
+          acrossPD: 0,
+          acrossCiv: 0,
           engineReplacements: 0,
-          engineReplacementsByDept: {}, // track engine replacements by department
+          civEngineReplacements: 0,
+          engineReplacementsByDept: {},
+          enginePayAccumulated: 0,
         };
       mAgg.repairs += across;
-      mAgg.engineReplacements += engineCount;
-      if (engineCount > 0 && dept) {
-        mAgg.engineReplacementsByDept[dept] = (mAgg.engineReplacementsByDept[dept] || 0) + engineCount;
+      mAgg.acrossPD += acrossPD;
+      mAgg.acrossCiv += acrossCiv;
+      mAgg.engineReplacements += pdEngineCount;
+      mAgg.civEngineReplacements += civEngineCount;
+      mAgg.enginePayAccumulated += enginePayForMechanic;
+      if (pdEngineCount > 0 && dept) {
+        mAgg.engineReplacementsByDept[dept] = (mAgg.engineReplacementsByDept[dept] || 0) + pdEngineCount;
       }
       monthlyMap.set(mKey, mAgg);
 
@@ -323,8 +441,13 @@ async function loadPayouts() {
         mechanic: mech,
         owner,
         plate,
+        acrossPD,
+        acrossCiv,
         across,
-        engineReplacements: engineCount,
+        engineReplacements: pdEngineCount,
+        civEngineReplacements: civEngineCount,
+        enginePayer,
+        enginePayForMechanic,
         department: dept,
         weekEnd,
         weekISO,
@@ -459,12 +582,20 @@ function renderWeekly() {
       mKey: j.mKey,
       jobCount: 0,
       repairs: 0,
+      acrossPD: 0,
+      acrossCiv: 0,
       engineReplacements: 0,
+      civEngineReplacements: 0,
       engineReplacementsByDept: {},
+      enginePayAccumulated: 0,
     };
     w.jobCount++;
     w.repairs += j.across;
+    w.acrossPD += j.acrossPD || 0;
+    w.acrossCiv += j.acrossCiv || 0;
     w.engineReplacements += j.engineReplacements;
+    w.civEngineReplacements += j.civEngineReplacements || 0;
+    w.enginePayAccumulated += j.enginePayForMechanic || 0;
     if (j.engineReplacements > 0 && j.department) {
       w.engineReplacementsByDept[j.department] = 
         (w.engineReplacementsByDept[j.department] || 0) + j.engineReplacements;
@@ -506,8 +637,7 @@ function renderWeekly() {
     // First pass: calculate week total for the compact header
     let weekTotal = 0;
     entries.forEach((r) => {
-      const enginePay = calculateEnginePayment(r.engineReplacementsByDept);
-      weekTotal += r.repairs * PAY_PER_REPAIR + enginePay;
+      weekTotal += r.repairs * PAY_PER_REPAIR + r.enginePayAccumulated;
     });
 
     const groupId = `wg-${++groupCounter}`;
@@ -541,10 +671,11 @@ function renderWeekly() {
 
     // Second pass: create individual mechanic rows under this group
     entries.forEach((r) => {
-      const enginePay = calculateEnginePayment(r.engineReplacementsByDept);
-      const pay = r.repairs * PAY_PER_REPAIR + enginePay;
+      const pay = r.repairs * PAY_PER_REPAIR + r.enginePayAccumulated;
       const comment = commentForWeek(r.weekEnd);
-      const engineReps = r.engineReplacements || 0;
+      const pdEngineReps = r.engineReplacements || 0;
+      const civEngineReps = r.civEngineReplacements || 0;
+      const totalEngineReps = pdEngineReps + civEngineReps;
 
       const mechLabel = labelWithStateId(r.mechanic);
 
@@ -560,14 +691,17 @@ function renderWeekly() {
           <div class="payout-comment">${comment}</div>
         </td>
         <td class="col-count">${r.repairs}</td>
-        <td class="col-count">${engineReps > 0 ? engineReps : 0}</td>
+        <td class="col-count">${totalEngineReps > 0 ? totalEngineReps : 0}</td>
         <td class="col-actions">
           <button class="btn btn-copy-summary" 
                   title="Copy payout summary to clipboard"
                   data-mechanic="${r.mechanic}"
                   data-week-end="${r.weekEnd.toISOString()}"
-                  data-repairs="${r.repairs}"
-                  data-engine-depts='${JSON.stringify(r.engineReplacementsByDept)}'
+                  data-pd-repairs="${r.acrossPD || 0}"
+                  data-civ-repairs="${r.acrossCiv || 0}"
+                  data-pd-engine-reps="${pdEngineReps}"
+                  data-civ-engine-reps="${civEngineReps}"
+                  data-engine-pay="${r.enginePayAccumulated}"
                   data-total-pay="${pay}">
             📋 Copy
           </button>
@@ -615,11 +749,19 @@ function renderMonthly() {
       monthEnd: j.monthEnd,
       mKey: j.mKey,
       repairs: 0,
+      acrossPD: 0,
+      acrossCiv: 0,
       engineReplacements: 0,
+      civEngineReplacements: 0,
       engineReplacementsByDept: {},
+      enginePayAccumulated: 0,
     };
     mAgg.repairs += j.across;
+    mAgg.acrossPD += j.acrossPD || 0;
+    mAgg.acrossCiv += j.acrossCiv || 0;
     mAgg.engineReplacements += j.engineReplacements;
+    mAgg.civEngineReplacements += j.civEngineReplacements || 0;
+    mAgg.enginePayAccumulated += j.enginePayForMechanic || 0;
     if (j.engineReplacements > 0 && j.department) {
       mAgg.engineReplacementsByDept[j.department] = 
         (mAgg.engineReplacementsByDept[j.department] || 0) + j.engineReplacements;
@@ -700,17 +842,25 @@ function renderMonthly() {
 
     // Individual month rows under this year group
     yearRows.forEach((r) => {
-      const engineReps = r.engineReplacements || 0;
+      const pdEngineReps = r.engineReplacements || 0;
+      const civEngineReps = r.civEngineReplacements || 0;
+      const totalEngineReps = pdEngineReps + civEngineReps;
       const engineValue = calculateEngineValue(r.engineReplacementsByDept || {});
       const totalValue = r.repairs * REPAIR_RATE + engineValue;
+
+      const acrossPD = r.acrossPD || 0;
+      const acrossCiv = r.acrossCiv || 0;
+      const repairsLabel = acrossCiv > 0
+        ? `${r.repairs} <span class="label-soft" title="${acrossPD} PD / ${acrossCiv} CIV" style="font-size:0.75em">(${acrossPD}PD/${acrossCiv}CIV)</span>`
+        : String(r.repairs);
 
       const tr = document.createElement("tr");
       tr.className = "week-group-row";
       tr.dataset.groupId = groupId;
       tr.innerHTML = `
         <td>${kFmtDate(r.monthEnd)}</td>
-        <td class="col-count">${r.repairs}</td>
-        <td class="col-count">${engineReps}</td>
+        <td class="col-count">${repairsLabel}</td>
+        <td class="col-count">${totalEngineReps}</td>
         <td class="col-amount amount-in">${kFmtMoney(totalValue)}</td>
       `;
       fragment.appendChild(tr);
@@ -768,7 +918,7 @@ function renderJobs() {
 
   if (!rows.length) {
     jobsBody.innerHTML =
-      '<tr><td colspan="9" style="padding:8px; color:#6b7280;">No jobs for this selection.</td></tr>';
+      '<tr><td colspan="10" style="padding:8px; color:#6b7280;">No jobs for this selection.</td></tr>';
     return;
   }
 
@@ -800,10 +950,10 @@ function renderJobs() {
   monthBuckets.forEach(({ monthEnd, jobs: monthJobs }) => {
     let monthTotal = 0;
     monthJobs.forEach((j) => {
-      const engineReps = j.engineReplacements || 0;
-      const engineRate = (j.department === "BCSO" && engineReps > 0) ?
+      const pdEngineReps = j.engineReplacements || 0;
+      const engineRate = (j.department === "BCSO" && pdEngineReps > 0) ?
         ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
-      monthTotal += j.across * REPAIR_RATE + engineReps * engineRate;
+      monthTotal += j.across * REPAIR_RATE + pdEngineReps * engineRate;
     });
 
     const groupId = `jg-${++groupCounter}`;
@@ -814,7 +964,7 @@ function renderJobs() {
     headerRow.dataset.groupId = groupId;
 
     const headerTd = document.createElement("td");
-    headerTd.colSpan = 9;
+    headerTd.colSpan = 10;
 
     const toggleBtn = document.createElement("button");
     toggleBtn.className = "week-group-toggle";
@@ -837,13 +987,14 @@ function renderJobs() {
 
     // Individual job rows under this month group
     monthJobs.forEach((j) => {
-      const engineReps = j.engineReplacements || 0;
-      const engineLabel = engineReps ? "Yes" : "No";
+      const pdEngineReps = j.engineReplacements || 0;
+      const civEngineReps = j.civEngineReplacements || 0;
+      const pdEngineLabel = pdEngineReps ? "Yes" : "No";
       // Use BCSO rate for BCSO engine replacements, standard rate for others
-      const engineRate = (j.department === "BCSO" && engineReps > 0) ?
+      const engineRate = (j.department === "BCSO" && pdEngineReps > 0) ?
         ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
       const totalValue =
-        j.across * REPAIR_RATE + engineReps * engineRate;
+        j.across * REPAIR_RATE + pdEngineReps * engineRate;
 
       const mechLabel = j.mechanic; // keep Jobs view as raw mechanic name
 
@@ -855,8 +1006,9 @@ function renderJobs() {
         <td><button class="mech-link link-btn" data-mech="${j.mechanic}">${mechLabel}</button></td>
         <td><button class="owner-link link-btn" data-owner="${j.owner}">${j.owner}</button></td>
         <td><button class="plate-link link-btn" data-plate="${j.plate}">${j.plate}</button></td>
-        <td class="col-count">${j.across}</td>
-        <td class="col-count">${engineLabel}</td>
+        <td class="col-count">${j.acrossPD || 0}</td>
+        <td class="col-count">${j.acrossCiv || 0}</td>
+        <td class="col-count">${pdEngineLabel}${civEngineReps > 0 ? ` / ${civEngineReps} CIV` : ""}</td>
         <td>${kFmtDate(j.weekEnd)}</td>
         <td>${kFmtDate(j.monthEnd)}</td>
         <td class="col-amount amount-in">${kFmtMoney(totalValue)}</td>
@@ -893,28 +1045,15 @@ function updateMechanicSummary() {
   }
 
   let totalRepairs = 0;
-  let totalEngineReps = 0;
+  let totalEnginePay = 0;
   const weekSet = new Set();
   let lastJob = null;
   mechanicLatestWeekISO = null;
 
-  let totalEngineRepsBCSO = 0; // Track BCSO engine replacements separately
-  let totalEngineRepsLSPD = 0; // Track LSPD engine replacements separately
-
   mechJobs.forEach((j) => {
     const rep = Number(j.across || 0) || 0;
-    const engines = Number(j.engineReplacements || 0) || 0;
     totalRepairs += rep;
-    totalEngineReps += engines;
-    
-    // Track engine replacements by department
-    if (engines > 0) {
-      if (j.department === "BCSO") {
-        totalEngineRepsBCSO += engines;
-      } else if (j.department === "LSPD") {
-        totalEngineRepsLSPD += engines;
-      }
-    }
+    totalEnginePay += j.enginePayForMechanic || 0;
 
     if (j.weekISO) {
       weekSet.add(j.weekISO);
@@ -932,16 +1071,7 @@ function updateMechanicSummary() {
 
   const weeksWorked = weekSet.size;
   const avgPerWeek = weeksWorked ? totalRepairs / weeksWorked : 0;
-  // Calculate engine pay:
-  // - BCSO: $12k reimbursement only
-  // - LSPD: $12k reimbursement + $1.5k bonus
-  // - Other: $12k reimbursement + $1.5k bonus
-  const otherEngineReps = totalEngineReps - totalEngineRepsBCSO - totalEngineRepsLSPD;
-  const totalPayout =
-    totalRepairs * PAY_PER_REPAIR +
-    totalEngineRepsBCSO * ENGINE_REIMBURSEMENT +
-    totalEngineRepsLSPD * (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD) +
-    otherEngineReps * (ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD);
+  const totalPayout = totalRepairs * PAY_PER_REPAIR + totalEnginePay;
 
   if (nameEl) nameEl.textContent = mech;
   if (totalRepairsEl) totalRepairsEl.textContent = totalRepairs.toLocaleString();
@@ -1045,11 +1175,19 @@ function exportCurrentViewCsv() {
         weekEnd: j.weekEnd,
         weekISO: j.weekISO,
         repairs: 0,
+        acrossPD: 0,
+        acrossCiv: 0,
         engineReplacements: 0,
+        civEngineReplacements: 0,
         engineReplacementsByDept: {},
+        enginePayAccumulated: 0,
       };
       w.repairs += j.across;
+      w.acrossPD += j.acrossPD || 0;
+      w.acrossCiv += j.acrossCiv || 0;
       w.engineReplacements += j.engineReplacements;
+      w.civEngineReplacements += j.civEngineReplacements || 0;
+      w.enginePayAccumulated += j.enginePayForMechanic || 0;
       if (j.engineReplacements > 0 && j.department) {
         w.engineReplacementsByDept[j.department] = 
           (w.engineReplacementsByDept[j.department] || 0) + j.engineReplacements;
@@ -1061,14 +1199,15 @@ function exportCurrentViewCsv() {
     if (!filtered.length) return;
 
     const rows = filtered.map((r) => {
-      const enginePay = calculateEnginePayment(r.engineReplacementsByDept);
-      const pay = r.repairs * PAY_PER_REPAIR + enginePay;
+      const pay = r.repairs * PAY_PER_REPAIR + r.enginePayAccumulated;
       const mechLabel = labelWithStateId(r.mechanic);
       const comment = commentForWeek(r.weekEnd);
       return {
         Mechanic: mechLabel,
         "Week Ending": kFmtDate(r.weekEnd),
-        "# Repairs": r.repairs,
+        "PD Repairs": r.acrossPD,
+        "CIV Repairs": r.acrossCiv,
+        "# Total Repairs": r.repairs,
         [`Pay ($${PAY_PER_REPAIR}/repair + engines)`]: pay,
         Comment: comment,
       };
@@ -1077,7 +1216,9 @@ function exportCurrentViewCsv() {
     const cols = [
       "Mechanic",
       "Week Ending",
-      "# Repairs",
+      "PD Repairs",
+      "CIV Repairs",
+      "# Total Repairs",
       `Pay ($${PAY_PER_REPAIR}/repair + engines)`,
       "Comment",
     ];
@@ -1099,11 +1240,17 @@ function exportCurrentViewCsv() {
         monthEnd: j.monthEnd,
         mKey: j.mKey,
         repairs: 0,
+        acrossPD: 0,
+        acrossCiv: 0,
         engineReplacements: 0,
+        civEngineReplacements: 0,
         engineReplacementsByDept: {},
       };
       mAgg.repairs += j.across;
+      mAgg.acrossPD += j.acrossPD || 0;
+      mAgg.acrossCiv += j.acrossCiv || 0;
       mAgg.engineReplacements += j.engineReplacements;
+      mAgg.civEngineReplacements += j.civEngineReplacements || 0;
       if (j.engineReplacements > 0 && j.department) {
         mAgg.engineReplacementsByDept[j.department] = 
           (mAgg.engineReplacementsByDept[j.department] || 0) + j.engineReplacements;
@@ -1115,21 +1262,28 @@ function exportCurrentViewCsv() {
     if (!rows.length) return;
 
     const mapped = rows.map((r) => {
-      const engineReps = r.engineReplacements || 0;
+      const pdEngineReps = r.engineReplacements || 0;
+      const civEngineReps = r.civEngineReplacements || 0;
       const engineValue = calculateEngineValue(r.engineReplacementsByDept || {});
       const totalValue = r.repairs * REPAIR_RATE + engineValue;
       return {
         "Month Ending": kFmtDate(r.monthEnd),
+        "PD Repairs": r.acrossPD,
+        "CIV Repairs": r.acrossCiv,
         "Total Repairs (Across)": r.repairs,
-        "Engine Replacements": engineReps,
+        "PD Engine Replacements": pdEngineReps,
+        "CIV Engine Replacements": civEngineReps,
         "Total Repair Value": totalValue,
       };
     });
 
     const cols = [
       "Month Ending",
+      "PD Repairs",
+      "CIV Repairs",
       "Total Repairs (Across)",
-      "Engine Replacements",
+      "PD Engine Replacements",
+      "CIV Engine Replacements",
       "Total Repair Value",
     ];
     kDownloadCsv("payouts_monthly_filtered.csv", kToCsv(cols, mapped));
@@ -1180,19 +1334,24 @@ function exportCurrentViewCsv() {
     });
 
     const mapped = rows.map((j) => {
-      const engineReps = j.engineReplacements || 0;
-      const engineLabel = engineReps ? "Yes" : "No";
+      const pdEngineReps = j.engineReplacements || 0;
+      const civEngineReps = j.civEngineReplacements || 0;
+      const pdEngineLabel = pdEngineReps ? "Yes" : "No";
+      const civEngineLabel = civEngineReps ? "Yes" : "No";
       // Use BCSO rate for BCSO, standard rate for others
-      const engineRate = (j.department === "BCSO" && engineReps > 0) ? 
+      const engineRate = (j.department === "BCSO" && pdEngineReps > 0) ? 
                          ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
-      const totalValue = j.across * REPAIR_RATE + engineReps * engineRate;
+      const totalValue = j.across * REPAIR_RATE + pdEngineReps * engineRate;
       return {
         Timestamp: j.tsDate ? kFmtDate(j.tsDate) : "",
         Mechanic: j.mechanic,
         Owner: j.owner,
         Plate: j.plate,
-        Across: j.across,
-        "Engine Replacements": engineLabel,
+        "PD Repairs": j.acrossPD || 0,
+        "CIV Repairs": j.acrossCiv || 0,
+        "Total Repairs": j.across,
+        "PD Engine Replacement": pdEngineLabel,
+        "CIV Engine Replacement": civEngineLabel,
         "Week Ending": kFmtDate(j.weekEnd),
         "Month Ending": kFmtDate(j.monthEnd),
         "Total Value": totalValue,
@@ -1204,8 +1363,11 @@ function exportCurrentViewCsv() {
       "Mechanic",
       "Owner",
       "Plate",
-      "Across",
-      "Engine Replacements",
+      "PD Repairs",
+      "CIV Repairs",
+      "Total Repairs",
+      "PD Engine Replacement",
+      "CIV Engine Replacement",
       "Week Ending",
       "Month Ending",
       "Total Value",
@@ -1238,13 +1400,13 @@ function generateBill() {
     return;
   }
 
-  // Create bill rows with proper rates
+  // Create bill rows with proper rates (PD billing only — CIV repairs not charged to department)
   const billRows = filteredJobs.map((j) => {
     const engineReps = j.engineReplacements || 0;
     // Use BCSO rate for BCSO, standard rate for others
     const engineRate = (j.department === "BCSO" && engineReps > 0) ? 
                        ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
-    const repairValue = j.across * REPAIR_RATE;
+    const repairValue = (j.acrossPD || 0) * REPAIR_RATE;
     const engineValue = engineReps * engineRate;
     const totalValue = repairValue + engineValue;
 
@@ -1254,7 +1416,7 @@ function generateBill() {
       "Owner": j.owner,
       "Plate": j.plate,
       "Department": j.department,
-      "Repairs (Across)": j.across,
+      "PD Repairs (Across)": j.acrossPD || 0,
       "Repair Value": repairValue,
       "Engine Replacements": engineReps,
       "Engine Replacement Value": engineValue,
@@ -1270,7 +1432,7 @@ function generateBill() {
   });
 
   // Calculate totals
-  const totalRepairs = billRows.reduce((sum, r) => sum + r["Repairs (Across)"], 0);
+  const totalRepairs = billRows.reduce((sum, r) => sum + r["PD Repairs (Across)"], 0);
   const totalRepairValue = billRows.reduce((sum, r) => sum + r["Repair Value"], 0);
   const totalEngines = billRows.reduce((sum, r) => sum + r["Engine Replacements"], 0);
   const totalEngineValue = billRows.reduce((sum, r) => sum + r["Engine Replacement Value"], 0);
@@ -1283,7 +1445,7 @@ function generateBill() {
     "Owner": "",
     "Plate": "",
     "Department": "TOTAL",
-    "Repairs (Across)": totalRepairs,
+    "PD Repairs (Across)": totalRepairs,
     "Repair Value": totalRepairValue,
     "Engine Replacements": totalEngines,
     "Engine Replacement Value": totalEngineValue,
@@ -1296,7 +1458,7 @@ function generateBill() {
     "Owner",
     "Plate",
     "Department",
-    "Repairs (Across)",
+    "PD Repairs (Across)",
     "Repair Value",
     "Engine Replacements",
     "Engine Replacement Value",
@@ -1355,7 +1517,7 @@ function generateDeptInvoice(dept) {
 
   const billRows = sortedJobs.map((j) => {
     const engineReps = j.engineReplacements || 0;
-    const repairValue = j.across * REPAIR_RATE;
+    const repairValue = (j.acrossPD || 0) * REPAIR_RATE;
     const engineValue = engineReps * engineRate;
     const total = repairValue + engineValue;
     return {
@@ -1363,7 +1525,7 @@ function generateDeptInvoice(dept) {
       "Mechanic": j.mechanic,
       "Officer / Owner": j.owner,
       "License Plate": j.plate,
-      "Repairs": j.across,
+      "PD Repairs": j.acrossPD || 0,
       "Engine Replacements": engineReps,
       "Repair Value ($)": repairValue,
       "Engine Replacement Value ($)": engineValue,
@@ -1372,7 +1534,7 @@ function generateDeptInvoice(dept) {
   });
 
   // Calculate totals
-  const totalRepairs = billRows.reduce((s, r) => s + r["Repairs"], 0);
+  const totalRepairs = billRows.reduce((s, r) => s + r["PD Repairs"], 0);
   const totalEngines = billRows.reduce((s, r) => s + r["Engine Replacements"], 0);
   const totalRepairValue = billRows.reduce((s, r) => s + r["Repair Value ($)"], 0);
   const totalEngineValue = billRows.reduce((s, r) => s + r["Engine Replacement Value ($)"], 0);
@@ -1384,7 +1546,7 @@ function generateDeptInvoice(dept) {
     "Mechanic": "",
     "Officer / Owner": "",
     "License Plate": "TOTAL",
-    "Repairs": totalRepairs,
+    "PD Repairs": totalRepairs,
     "Engine Replacements": totalEngines,
     "Repair Value ($)": totalRepairValue,
     "Engine Replacement Value ($)": totalEngineValue,
@@ -1396,7 +1558,7 @@ function generateDeptInvoice(dept) {
     "Mechanic",
     "Officer / Owner",
     "License Plate",
-    "Repairs",
+    "PD Repairs",
     "Engine Replacements",
     "Repair Value ($)",
     "Engine Replacement Value ($)",
@@ -1585,11 +1747,14 @@ document.addEventListener("DOMContentLoaded", () => {
         e.stopPropagation();
         const mechanic = copyBtn.dataset.mechanic;
         const weekEnd = new Date(copyBtn.dataset.weekEnd);
-        const repairs = parseInt(copyBtn.dataset.repairs, 10);
-        const engineReplacementsByDept = JSON.parse(copyBtn.dataset.engineDepts || "{}");
+        const acrossPD = parseInt(copyBtn.dataset.pdRepairs, 10) || 0;
+        const acrossCiv = parseInt(copyBtn.dataset.civRepairs, 10) || 0;
+        const pdEngineReps = parseInt(copyBtn.dataset.pdEngineReps, 10) || 0;
+        const civEngineReps = parseInt(copyBtn.dataset.civEngineReps, 10) || 0;
+        const enginePay = parseFloat(copyBtn.dataset.enginePay) || 0;
         const totalPay = parseFloat(copyBtn.dataset.totalPay);
         
-        copyWeeklySummary(copyBtn, mechanic, weekEnd, repairs, engineReplacementsByDept, totalPay);
+        copyWeeklySummary(copyBtn, mechanic, weekEnd, acrossPD, acrossCiv, pdEngineReps, civEngineReps, enginePay, totalPay);
       }
     });
     // Event delegation for collapsible week group headers
@@ -1716,10 +1881,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const totalRepairs = mechanicData.reduce((sum, w) => sum + w.repairs, 0);
       const totalEngines = mechanicData.reduce((sum, w) => sum + w.engineReplacements, 0);
       
-      // Calculate total engine pay
+      // Calculate total engine pay using pre-computed accumulated values
       let totalEnginePay = 0;
       mechanicData.forEach(w => {
-        totalEnginePay += calculateEnginePayment(w.engineReplacementsByDept);
+        totalEnginePay += w.enginePayAccumulated || 0;
       });
       
       const totalPayout = totalRepairs * PAY_PER_REPAIR + totalEnginePay;
