@@ -28,7 +28,7 @@
 
 body {
   margin: 0;
-  padding: 22px;
+  padding: 0 22px 22px;
   font-family: var(--font);
   font-size: 15px;
   color: var(--text-main);
@@ -71,6 +71,16 @@ body::-webkit-scrollbar-thumb:hover {
   justify-content: flex-start;
   gap: 12px;
   margin-bottom: 20px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: linear-gradient(to bottom, rgba(2, 8, 23, 0.99) 80%, rgba(2, 8, 23, 0.92));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  padding: 18px 22px 14px;
+  margin-left: -22px;
+  margin-right: -22px;
+  border-bottom: 1px solid rgba(79, 70, 229, 0.1);
 }
 
 
@@ -201,8 +211,8 @@ body::-webkit-scrollbar-thumb:hover {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 /* Filter group */
@@ -348,12 +358,12 @@ body::-webkit-scrollbar-thumb:hover {
 .summary-row {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-  margin: 4px 2px 10px;
+  gap: 14px;
+  margin: 6px 2px 14px;
 }
 
 .summary-card {
-  padding: 18px;
+  padding: 22px 20px;
   border-radius: var(--radius-lg);
   background:
     radial-gradient(circle at top left, rgba(148, 163, 253, 0.10), transparent),
@@ -361,7 +371,7 @@ body::-webkit-scrollbar-thumb:hover {
   border: 1px solid var(--border-strong);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75);
   transition: all 0.15s ease;
   position: relative;
@@ -403,19 +413,19 @@ body::-webkit-scrollbar-thumb:hover {
 }
 
 .summary-card .label {
-  font-size: 9px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.16em;
   color: var(--text-soft);
 }
 
 .summary-card .value {
-  font-size: 19px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;
 }
 
 .summary-card .hint {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-soft);
 }
 
@@ -437,7 +447,8 @@ body::-webkit-scrollbar-thumb:hover {
   border: 1px solid var(--border-subtle);
   background: var(--bg-primary);
   overflow: auto;
-  max-height: calc(100vh - 140px);
+  /* ~130px top-bar + ~45px ledger-header + ~80px controls x2 + ~110px summary-row + spacing */
+  max-height: calc(100vh - 380px);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
   width: 100%;
   scrollbar-color: #4f46e5 #020817;

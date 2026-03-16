@@ -27,6 +27,7 @@ const clearQuickBtn = document.getElementById("clearQuick");
 const searchInput = document.getElementById("searchInput");
 const toggleBalance = document.getElementById("toggleBalance");
 const toggleTaxBtn = document.getElementById("toggleTax");
+const toggleHeaderBtn = document.getElementById("toggleHeader");
 
 const tableHead = document.querySelector("#table thead");
 const tableBody = document.querySelector("#table tbody");
@@ -62,6 +63,7 @@ let currentFilter = "all";
 let quickFilter = null;
 let showBalance = false;
 let showTax = false;
+let showHeader = true;
 
 // metrics
 let totalBET = 0;
@@ -91,6 +93,7 @@ function applyStateFromUrl() {
     const q = params.get("q");
     const balance = params.get("balance");
     const tax = params.get("tax");
+    const hideheader = params.get("hideheader");
 
     // main filter: all / in / out
     if (filter === "in" || filter === "out" || filter === "all") {
@@ -137,6 +140,12 @@ function applyStateFromUrl() {
         toggleTaxBtn.textContent = "Hide Tax";
       }
     }
+
+    // header visibility
+    if (hideheader === "1") {
+      showHeader = false;
+      applyHeaderVisibility();
+    }
   } catch (e) {
     console.warn("applyStateFromUrl failed:", e);
   }
@@ -166,6 +175,7 @@ function updateUrlFromState() {
     setOrDelete("q", q, "");
     setOrDelete("balance", showBalance ? "1" : "0", "0");
     setOrDelete("tax", showTax ? "1" : "0", "0");
+    setOrDelete("hideheader", showHeader ? "0" : "1", "0");
 
     const qs = params.toString();
     const newUrl =
@@ -182,6 +192,19 @@ function updateUrlFromState() {
   }
 }
 
+
+// ================== HEADER VISIBILITY ==================
+
+function applyHeaderVisibility() {
+  const topBar = document.querySelector(".top-bar");
+  const ledgerHeader = document.querySelector(".ledger-header");
+  if (topBar) topBar.style.display = showHeader ? "" : "none";
+  if (ledgerHeader) ledgerHeader.style.display = showHeader ? "" : "none";
+  if (toggleHeaderBtn) {
+    toggleHeaderBtn.textContent = showHeader ? "Hide Header" : "Show Header";
+    toggleHeaderBtn.classList.toggle("active", !showHeader);
+  }
+}
 
 // ================== CSV HELPERS ==================
 
@@ -703,6 +726,14 @@ if (toggleTaxBtn) {
     toggleTaxBtn.classList.toggle("active", showTax);
     toggleTaxBtn.textContent = showTax ? "Hide Tax" : "Show Tax";
     render();
+    updateUrlFromState();
+  });
+}
+
+if (toggleHeaderBtn) {
+  toggleHeaderBtn.addEventListener("click", () => {
+    showHeader = !showHeader;
+    applyHeaderVisibility();
     updateUrlFromState();
   });
 }
