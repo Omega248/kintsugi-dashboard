@@ -193,14 +193,20 @@ function mechBuildWeeklyStats(mechanicName, sourceJobs) {
         weekEndDate,
         mechanic: mechanicName,
         totalRepairs: 0,
+        acrossPD: 0,
+        acrossCiv: 0,
         engineReplacements: 0,
+        civEngineReplacements: 0,
         jobs: []
       };
       weekMap.set(weekKey, weekRec);
     }
     
     weekRec.totalRepairs += j.across || 0;
+    weekRec.acrossPD = (weekRec.acrossPD || 0) + (j.acrossPD || 0);
+    weekRec.acrossCiv = (weekRec.acrossCiv || 0) + (j.acrossCiv || 0);
     weekRec.engineReplacements += j.engineReplacements || 0;
+    weekRec.civEngineReplacements = (weekRec.civEngineReplacements || 0) + (j.civEngineReplacements || 0);
     weekRec.jobs.push(j);
   }
   
@@ -213,10 +219,11 @@ function mechBuildWeeklyStats(mechanicName, sourceJobs) {
     return b.weekKey.localeCompare(a.weekKey);
   });
   
-  // Calculate payouts
+  // Calculate payouts (include both PD and CIV engine replacements)
   for (const week of weeklyStats) {
     const basePay = week.totalRepairs * MECH_PAY_PER_REPAIR;
-    const enginePay = mechCalculateEngineValue(week.engineReplacements);
+    const totalEngines = (week.engineReplacements || 0) + (week.civEngineReplacements || 0);
+    const enginePay = mechCalculateEngineValue(totalEngines);
     week.totalPayout = basePay + enginePay;
   }
   
@@ -502,10 +509,22 @@ function mechRenderWeeklySummary(mechanicName) {
     
     mechAddSummaryRow(card, "Mechanic", mechanicName);
     mechAddSummaryRow(card, "State ID", stateId);
-    mechAddSummaryRow(card, "Repairs", week.totalRepairs.toString());
-    if (week.engineReplacements > 0) {
-      mechAddSummaryRow(card, "Engine Replacements", week.engineReplacements.toString());
-      const engineValue = mechCalculateEngineValue(week.engineReplacements);
+    if (week.acrossCiv > 0) {
+      mechAddSummaryRow(card, "Repairs (PD)", (week.acrossPD || 0).toString());
+      mechAddSummaryRow(card, "Repairs (CIV)", (week.acrossCiv || 0).toString());
+      mechAddSummaryRow(card, "Total Repairs", week.totalRepairs.toString());
+    } else {
+      mechAddSummaryRow(card, "Repairs", week.totalRepairs.toString());
+    }
+    const totalEngines = (week.engineReplacements || 0) + (week.civEngineReplacements || 0);
+    if (totalEngines > 0) {
+      if (week.civEngineReplacements > 0) {
+        mechAddSummaryRow(card, "Engine Replacements (PD)", (week.engineReplacements || 0).toString());
+        mechAddSummaryRow(card, "Engine Replacements (CIV)", (week.civEngineReplacements || 0).toString());
+      } else {
+        mechAddSummaryRow(card, "Engine Replacements", totalEngines.toString());
+      }
+      const engineValue = mechCalculateEngineValue(totalEngines);
       mechAddSummaryRow(card, "Engine Value", mechFmtMoney(engineValue));
     }
     mechAddSummaryRow(card, "Total Payout", mechFmtMoney(week.totalPayout));
@@ -553,10 +572,22 @@ async function mechCopyWeekSummary(mechanicName, week) {
   summary += `State ID: ${stateId}\n`;
   summary += `Week Ending: ${weekEndStr}\n`;
   summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  summary += `Repairs: ${week.totalRepairs}\n`;
-  if (week.engineReplacements > 0) {
-    summary += `Engine Replacements: ${week.engineReplacements}\n`;
-    const engineValue = mechCalculateEngineValue(week.engineReplacements);
+  if ((week.acrossCiv || 0) > 0) {
+    summary += `Repairs (PD): ${week.acrossPD || 0}\n`;
+    summary += `Repairs (CIV): ${week.acrossCiv || 0}\n`;
+    summary += `Total Repairs: ${week.totalRepairs}\n`;
+  } else {
+    summary += `Repairs: ${week.totalRepairs}\n`;
+  }
+  const totalEngines = (week.engineReplacements || 0) + (week.civEngineReplacements || 0);
+  if (totalEngines > 0) {
+    if ((week.civEngineReplacements || 0) > 0) {
+      summary += `Engine Replacements (PD): ${week.engineReplacements || 0}\n`;
+      summary += `Engine Replacements (CIV): ${week.civEngineReplacements || 0}\n`;
+    } else {
+      summary += `Engine Replacements: ${totalEngines}\n`;
+    }
+    const engineValue = mechCalculateEngineValue(totalEngines);
     summary += `Engine Reimbursement: ${mechFmtMoney(engineValue)}\n`;
   }
   summary += `Total Payout: ${mechFmtMoney(week.totalPayout)}\n`;
@@ -601,14 +632,26 @@ async function mechCopyAllWeeks(mechanicName, weeklyStats) {
   for (const week of weeklyStats) {
     const weekEndStr = week.weekEndDate ? mechFmtDate(week.weekEndDate) : week.weekKey;
     summary += `Week ending ${weekEndStr}:\n`;
-    summary += `  Repairs: ${week.totalRepairs}\n`;
-    if (week.engineReplacements > 0) {
-      summary += `  Engine Replacements: ${week.engineReplacements}\n`;
+    if ((week.acrossCiv || 0) > 0) {
+      summary += `  Repairs (PD): ${week.acrossPD || 0}\n`;
+      summary += `  Repairs (CIV): ${week.acrossCiv || 0}\n`;
+      summary += `  Total Repairs: ${week.totalRepairs}\n`;
+    } else {
+      summary += `  Repairs: ${week.totalRepairs}\n`;
+    }
+    const totalEngines = (week.engineReplacements || 0) + (week.civEngineReplacements || 0);
+    if (totalEngines > 0) {
+      if ((week.civEngineReplacements || 0) > 0) {
+        summary += `  Engine Replacements (PD): ${week.engineReplacements || 0}\n`;
+        summary += `  Engine Replacements (CIV): ${week.civEngineReplacements || 0}\n`;
+      } else {
+        summary += `  Engine Replacements: ${totalEngines}\n`;
+      }
     }
     summary += `  Payout: ${mechFmtMoney(week.totalPayout)}\n\n`;
     
     totalRepairs += week.totalRepairs;
-    totalEngineReplacements += week.engineReplacements;
+    totalEngineReplacements += totalEngines;
     totalPayout += week.totalPayout;
   }
   
@@ -768,23 +811,51 @@ async function mechLoad() {
 
     const iTime = headers.indexOf("Timestamp");
     const iMech = headers.indexOf("Mechanic");
-    const iAcross = headers.indexOf("How many Across");
     const iWeek = headers.indexOf("Week Ending");
     const iMonth = headers.indexOf("Month Ending");
-    
-    // Find engine replacement column
-    const iEngine = headersLower.findIndex(
-      (h) => h.includes("engine") && h.includes("replacement")
+
+    // Dual-column detection matching payouts-script.js:
+    // PD repairs: "How many Across PD?" (contains "across" AND "pd")
+    const iAcrossPD = headersLower.findIndex(
+      (h) => h.includes("across") && h.includes("pd")
     );
-    
+    // CIV repairs: "How many Across" (contains "across" but NOT "pd")
+    const iAcrossCiv = headersLower.findIndex(
+      (h) => h.includes("across") && !h.includes("pd")
+    );
+
+    // "Did you buy the engine replacement..." payer column — detect first so we
+    // can exclude it from the engine-count column searches.
+    const iEnginePayer = headersLower.findIndex(
+      (h) => h.includes("did you buy") || (h.includes("kintsugi") && h.includes("pay"))
+    );
+
+    // First "Engine Replacement?" column → PD (exclude the payer question)
+    const iEngine = headersLower.findIndex(
+      (h, i) => i !== iEnginePayer && h.includes("engine") && h.includes("replacement")
+    );
+
+    // Second "Engine Replacement?" column → CIV (after PD column, exclude payer)
+    const iEngineCiv =
+      iEngine !== -1
+        ? headersLower.findIndex(
+            (h, i) => i > iEngine && i !== iEnginePayer && h.includes("engine") && h.includes("replacement")
+          )
+        : -1;
+
+    // "PD Repair" yes/no column — used to classify CIV-only jobs
+    const iPDRepair = headersLower.findIndex(
+      (h) => h === "pd repair" || (h.includes("pd") && h.includes("repair") && !h.includes("across"))
+    );
+
     // Find department column
     const iDept = headersLower.findIndex(
       (h) => h.includes("department")
     );
 
-    if (iTime === -1 || iMech === -1 || iAcross === -1) {
+    if (iTime === -1 || iMech === -1 || (iAcrossPD === -1 && iAcrossCiv === -1)) {
       throw new Error(
-        'Missing expected columns. Need at least "Timestamp", "Mechanic", "How many Across".'
+        'Missing expected columns. Need at least "Timestamp", "Mechanic", and either "How many Across PD?" or "How many Across" column.'
       );
     }
 
@@ -797,11 +868,13 @@ async function mechLoad() {
       const mech = iMech !== -1 ? String(row[iMech] || "").trim() : "";
       if (!mech) continue;
 
-      const acrossRaw = iAcross !== -1 ? row[iAcross] : "";
-      const across = acrossRaw ? parseInt(acrossRaw, 10) || 0 : 0;
+      // PD and CIV repair counts
+      const acrossPD = iAcrossPD !== -1 ? (parseInt(row[iAcrossPD] || 0, 10) || 0) : 0;
+      const acrossCiv = iAcrossCiv !== -1 ? (parseInt(row[iAcrossCiv] || 0, 10) || 0) : 0;
+      const across = acrossPD + acrossCiv;
       if (!across) continue;
 
-      // Engine replacements: allow numeric count or yes/no
+      // PD engine replacements (first "Engine Replacement?" column)
       let engineCount = 0;
       if (iEngine !== -1) {
         const rawEngine = (row[iEngine] || "").trim();
@@ -814,8 +887,30 @@ async function mechLoad() {
           }
         }
       }
+
+      // CIV engine replacements (second "Engine Replacement?" column)
+      let civEngineCount = 0;
+      if (iEngineCiv !== -1) {
+        const rawEngineCiv = (row[iEngineCiv] || "").trim();
+        if (rawEngineCiv) {
+          const num = Number(rawEngineCiv);
+          if (!Number.isNaN(num) && num > 0) {
+            civEngineCount = num;
+          } else if (/^(yes|y|true)$/i.test(rawEngineCiv)) {
+            civEngineCount = 1;
+          }
+        }
+      }
       
-      const dept = iDept !== -1 ? (row[iDept] || "").trim() : "";
+      let dept = iDept !== -1 ? (row[iDept] || "").trim() : "";
+
+      // Classify CIV-only jobs: "PD Repair" = "No" (or dept empty + CIV-only)
+      if (!dept) {
+        const pdRepairFlag = iPDRepair !== -1 ? (row[iPDRepair] || "").trim().toLowerCase() : "";
+        if (pdRepairFlag === "no" || (acrossCiv > 0 && acrossPD === 0)) {
+          dept = "CIV";
+        }
+      }
 
       const tsRaw = iTime !== -1 ? row[iTime] : "";
       const weekRaw = iWeek !== -1 ? row[iWeek] : "";
@@ -829,7 +924,10 @@ async function mechLoad() {
       jobs.push({
         mechanic: mech,
         across,
+        acrossPD,
+        acrossCiv,
         engineReplacements: engineCount,
+        civEngineReplacements: civEngineCount,
         department: dept,
         tsDate,
         weekEnd,

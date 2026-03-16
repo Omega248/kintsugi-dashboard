@@ -24,20 +24,29 @@ async function loadOverview() {
       return;
     }
 
-    // infer keys
+    // infer keys — detect PD and CIV repair columns separately
     const sample = rows[0];
+    const allSampleKeys = Object.keys(sample);
     const mechKey =
-      Object.keys(sample).find((k) =>
+      allSampleKeys.find((k) =>
         k.toLowerCase().includes("mechanic")
       ) || "Mechanic";
 
-    const acrossKey =
-      Object.keys(sample).find((k) =>
-        k.toLowerCase().includes("across")
-      ) ||
-      Object.keys(sample).find((k) =>
-        k.toLowerCase().includes("repairs")
-      );
+    // PD repairs: "How many Across PD?" (contains "across" AND "pd")
+    const acrossPDKey =
+      allSampleKeys.find((k) => {
+        const l = k.toLowerCase();
+        return l.includes("across") && l.includes("pd");
+      }) || null;
+
+    // CIV repairs: "How many Across" (contains "across" but NOT "pd")
+    const acrossCivKey =
+      allSampleKeys.find((k) => {
+        const l = k.toLowerCase();
+        return l.includes("across") && !l.includes("pd");
+      }) ||
+      allSampleKeys.find((k) => k.toLowerCase().includes("repairs")) ||
+      null;
 
     const weekKey =
       Object.keys(sample).find((k) =>
@@ -77,7 +86,10 @@ async function loadOverview() {
       const mech = (r[mechKey] || "").trim();
       if (mech) mechanics.add(mech);
 
-      const across = acrossKey ? Number(r[acrossKey] || 0) || 0 : 0;
+      // Sum PD + CIV repairs for total count
+      const acrossPD = acrossPDKey ? Number(r[acrossPDKey] || 0) || 0 : 0;
+      const acrossCiv = acrossCivKey ? Number(r[acrossCivKey] || 0) || 0 : 0;
+      const across = acrossPD + acrossCiv;
       totalRepairs += across;
 
       // Week ending for global latest week tile

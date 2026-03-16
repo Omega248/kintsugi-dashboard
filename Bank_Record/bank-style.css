@@ -496,6 +496,10 @@ tbody tr:hover {
   background: rgba(56, 189, 248, 0.05);
 }
 
+.row-payout {
+  background: rgba(249, 115, 22, 0.04);
+}
+
 /* Amount alignment */
 
 .amount-in,
@@ -546,6 +550,7 @@ td.col-date {
 .cat-grant        { background: rgba(250,204,21,0.18); color:#facc15; }
 .cat-repair       { background: rgba(79,70,229,0.18); color:#a5b4fc; }
 .cat-tax          { background: rgba(248,250,252,0.06); color:#fbbf24; }
+.cat-payout       { background: rgba(249,115,22,0.16); color:#fb923c; }
 .cat-other        { background: rgba(75,85,99,0.40); color:#9ca3af; }
 
 .flag-pill {

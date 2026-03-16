@@ -234,13 +234,25 @@ async function loadAnalytics() {
       return;
     }
 
-    // Infer column keys
+    // Infer column keys — detect PD and CIV repair columns separately
     const sample = rows[0];
-    const mechKey = Object.keys(sample).find(k => k.toLowerCase().includes("mechanic")) || "Mechanic";
-    const acrossKey = Object.keys(sample).find(k => k.toLowerCase().includes("across"))
-      || Object.keys(sample).find(k => k.toLowerCase().includes("repairs"));
-    const weekKey = Object.keys(sample).find(k => k.toLowerCase().includes("week ending")) || null;
-    const tsKey = Object.keys(sample).find(k => k.toLowerCase().includes("timestamp")) || null;
+    const allKeys = Object.keys(sample);
+    const mechKey = allKeys.find(k => k.toLowerCase().includes("mechanic")) || "Mechanic";
+
+    // PD repairs: "How many Across PD?" (contains "across" AND "pd")
+    const acrossPDKey = allKeys.find(k => {
+      const l = k.toLowerCase();
+      return l.includes("across") && l.includes("pd");
+    }) || null;
+
+    // CIV repairs: "How many Across" (contains "across" but NOT "pd")
+    const acrossCivKey = allKeys.find(k => {
+      const l = k.toLowerCase();
+      return l.includes("across") && !l.includes("pd");
+    }) || allKeys.find(k => k.toLowerCase().includes("repairs")) || null;
+
+    const weekKey = allKeys.find(k => k.toLowerCase().includes("week ending")) || null;
+    const tsKey = allKeys.find(k => k.toLowerCase().includes("timestamp")) || null;
 
     // Read controls
     const timeRange = document.getElementById("timeRange")?.value || "all";
@@ -261,7 +273,10 @@ async function loadAnalytics() {
       const mech = (r[mechKey] || "").trim();
       if (mech) mechanics.add(mech);
 
-      const across = acrossKey ? Number(r[acrossKey] || 0) || 0 : 0;
+      // Sum PD + CIV repairs for total count
+      const acrossPD = acrossPDKey ? Number(r[acrossPDKey] || 0) || 0 : 0;
+      const acrossCiv = acrossCivKey ? Number(r[acrossCivKey] || 0) || 0 : 0;
+      const across = acrossPD + acrossCiv;
 
       // Determine date
       let jobDate = null;
