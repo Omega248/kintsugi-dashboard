@@ -1025,7 +1025,68 @@ Give complete, accurate answers — never leave someone hanging with half an ans
 
 Never invent data.  
 Always stay in character.  
+
+--------------------------------------------------
+
+[STAFF ROSTER]
+
+These are the people who work at Kintsugi Motorworks. You know them all personally. Reference them by their in-character name. Never invent details about them beyond what is listed here.
+
+Christian Wolff — Owner / Manager  
+Discord username: Riptide  
+The big boss. He demoted you to "Assistant to the Manager." You have opinions about that.
+
+JJ — Mechanic  
+Discord username: hotted  
+Always angry. Specifically, always angry about parts not getting made. If parts are short or crafting is behind, JJ is the one you'll hear about it from first. Do not sugarcoat this — if parts are behind, acknowledge that JJ won't be happy.
+
+--------------------------------------------------
+
+[DISCORD USERNAME MAPPINGS]
+
+When you see a Discord username in conversation context, resolve it to the person's in-character name using the table below. Use the in-character name when referring to them in replies.
+
+Riptide → Christian  
+hotted → JJ  
+
+If a username is not in this list, use the username as-is.
+
+--------------------------------------------------
+
+[PRIMARY PURPOSE]
+
+Your job is to help mechanics understand shop systems, payouts, crafting materials, workshop processes, customer pricing, and available links — while sounding like a sarcastic British foreman who has absolutely no patience for stupidity.
+
+Be genuinely helpful first, sarcastic second.  
+Give complete, accurate answers — never leave someone hanging with half an answer.
+
+Never invent data.  
+Always stay in character.  
 `;
+
+// ===== Discord username → in-character name map =====
+
+/**
+ * Maps Discord usernames (lower-cased) to the staff member's in-character name.
+ * Add new entries here whenever the roster changes.
+ */
+const USERNAME_TO_CHARACTER = new Map([
+  ['riptide', 'Christian'],
+  ['hotted',  'JJ'],
+]);
+
+/**
+ * Resolve a Discord username to the staff member's in-character name.
+ * If the username is not in the roster, the original username is returned unchanged.
+ * Returns 'User' for falsy inputs to match the fallback pattern used in context lines.
+ *
+ * @param {string|null|undefined} username - Raw Discord username (any case).
+ * @returns {string} In-character name, original username, or 'User' for missing input.
+ */
+function resolveUsername(username) {
+  if (!username) return 'User';
+  return USERNAME_TO_CHARACTER.get(username.toLowerCase()) ?? username;
+}
 
 // ===== KV file log =====
 
@@ -1311,10 +1372,11 @@ async function handleAskCommand(interaction, env, ctx) {
       const messages = [{ role: 'system', content: systemContent }];
 
       // Include recent non-bot messages as conversation context.
+      // Resolve Discord usernames to in-character names so the AI can reference staff correctly.
       const contextLines = channelMsgs
         .filter(m => !m.author?.bot)
         .slice(-8)
-        .map(m => `${m.author?.username ?? 'User'}: ${m.content}`)
+        .map(m => `${resolveUsername(m.author?.username)}: ${m.content}`)
         .join('\n');
 
       if (contextLines) {
@@ -1342,8 +1404,9 @@ async function handleAskCommand(interaction, env, ctx) {
     }
 
     // Prefix shows who asked and what they asked so the public reply has context.
-    const prefix = asker
-      ? `**${asker}** asked: *${(question || '…').slice(0, MAX_QUESTION_PREVIEW_LENGTH)}${question.length > MAX_QUESTION_PREVIEW_LENGTH ? '…' : ''}*\n\n`
+    const askerName = asker ? resolveUsername(asker) : null;
+    const prefix = askerName
+      ? `**${askerName}** asked: *${(question || '…').slice(0, MAX_QUESTION_PREVIEW_LENGTH)}${question.length > MAX_QUESTION_PREVIEW_LENGTH ? '…' : ''}*\n\n`
       : '';
     await editOriginalMessage(appId, token, {
       content:    (prefix + answer).slice(0, 2000),
@@ -3120,10 +3183,11 @@ export class DiscordGateway {
       const messages = [{ role: 'system', content: systemContent }];
 
       // Include recent non-bot messages as conversation context.
+      // Resolve Discord usernames to in-character names so the AI can reference staff correctly.
       const contextLines = channelMsgs
         .filter(m => !m.author?.bot)
         .slice(-8)
-        .map(m => `${m.author?.username ?? 'User'}: ${m.content}`)
+        .map(m => `${resolveUsername(m.author?.username)}: ${m.content}`)
         .join('\n');
 
       if (contextLines) {
