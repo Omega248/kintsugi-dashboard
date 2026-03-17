@@ -413,7 +413,7 @@ function buildWeeklyStats(jobs) {
 
     let rec = weekMap.get(weekKey);
     if (!rec) {
-      rec = { weekKey, weekEndDate, jobCount: 0, totalRepairs: 0, engineReplacements: 0, enginePayTotal: 0, harnessKitPayTotal: 0 };
+      rec = { weekKey, weekEndDate, jobCount: 0, totalRepairs: 0, engineReplacements: 0, enginePayTotal: 0, totalHarness: 0, totalAdvKit: 0, harnessKitPayTotal: 0 };
       weekMap.set(weekKey, rec);
     }
     rec.jobCount++;
@@ -422,9 +422,11 @@ function buildWeeklyStats(jobs) {
     // Bonus only for LSPD; all other departments get reimbursement only
     const isLspd = (j.department || '').toUpperCase() === 'LSPD';
     rec.enginePayTotal    += j.engineReplacements * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
-    // Harness and Advanced Repair Kit pay
+    // Harness and Advanced Repair Kit counts and pay
     const totalHarness = (j.harnessPD || 0) + (j.harnessCiv || 0);
     const totalAdvKit  = (j.advKitPD  || 0) + (j.advKitCiv  || 0);
+    rec.totalHarness       += totalHarness;
+    rec.totalAdvKit        += totalAdvKit;
     rec.harnessKitPayTotal += totalHarness * HARNESS_RATE + totalAdvKit * ADVANCED_REPAIR_KIT_RATE;
   }
 
@@ -584,6 +586,8 @@ function getLatestWeekPayouts(allJobs, stateMap) {
         repairs:            0, // total "across" = repair slots across all jobs
         engineReplacements: 0,
         enginePayTotal:     0,
+        harness:            0,
+        advKit:             0,
         harnessKitPayTotal: 0,
         totalPayout:        0,
       };
@@ -595,9 +599,11 @@ function getLatestWeekPayouts(allJobs, stateMap) {
     // Bonus only for LSPD; all other departments get reimbursement only
     const isLspdJob = (j.department || '').toUpperCase() === 'LSPD';
     rec.enginePayTotal     += j.engineReplacements * (ENGINE_REIMBURSEMENT + (isLspdJob ? ENGINE_BONUS_LSPD : 0));
-    // Harness and Advanced Repair Kit pay
+    // Harness and Advanced Repair Kit counts and pay
     const totalHarness = (j.harnessPD || 0) + (j.harnessCiv || 0);
     const totalAdvKit  = (j.advKitPD  || 0) + (j.advKitCiv  || 0);
+    rec.harness            += totalHarness;
+    rec.advKit             += totalAdvKit;
     rec.harnessKitPayTotal += totalHarness * HARNESS_RATE + totalAdvKit * ADVANCED_REPAIR_KIT_RATE;
   }
 
@@ -630,6 +636,12 @@ function buildPayoutsProcessedPayload(weekEndDate, payouts) {
       line += ` — ${m.jobs} job${m.jobs !== 1 ? 's' : ''} (${m.repairs} across)`;
       if (m.engineReplacements > 0) {
         line += `, ${m.engineReplacements} engine${m.engineReplacements !== 1 ? 's' : ''}`;
+      }
+      if ((m.harness || 0) > 0) {
+        line += `, ${m.harness} harness${m.harness !== 1 ? 'es' : ''}`;
+      }
+      if ((m.advKit || 0) > 0) {
+        line += `, ${m.advKit} kit${m.advKit !== 1 ? 's' : ''}`;
       }
       line += ` · **${fmtMoney(m.totalPayout)}**`;
       return line;
@@ -921,6 +933,38 @@ Process: Click "📋 Generate Monthly Invoice" → choose department → choose 
 Payouts  
 Mechanics use: #payouts panel  
 Managers use: dashboard or /payouts
+
+--------------------------------------------------
+
+[TRACKING — HOW TO LOG JOBS]
+
+All jobs must be submitted via the appropriate Google Form. Data flows automatically into the Kintsugi Motorworks Sheet, then into the Payouts Dashboard and weekly analytics.
+
+Standard Repairs (PD)
+Form: Kintsugi PD Repairs form (link in USEFUL LINKS)
+Fields to fill in: Mechanic name, Week Ending, Month Ending, How many Across PD, Department, Engine Replacement (if applicable), who paid for the engine
+
+Standard Repairs (CIV)
+Same form — fill in "How many Across" (CIV field)
+
+Harness
+Tracked on the same job submission form
+Field: "Harness (PD)" or "Harness (CIV)" — enter the number sold/installed
+Payout: $500 per harness, calculated automatically
+Customer charge: $5,000 per harness (or 10 BET)
+
+Advanced Repair Kits
+Tracked on the same job submission form
+Field: "Advanced Repair Kits (PD)" or "Advanced Repair Kits (CIV)" — enter the count
+Payout: $500 per kit, calculated automatically
+Customer charge: $2,500 per kit
+
+After Submission
+Payouts appear on the dashboard under Payouts → Weekly view
+Analytics are updated automatically
+Use /payouts for the current week summary
+
+If something isn't showing up, check the form was filled in correctly and that Week Ending / Month Ending dates match.
 
 --------------------------------------------------
 
@@ -2183,6 +2227,8 @@ function buildLatestWeekSummary(allJobs) {
     weekEndDate,
     totalRepairs:  latestWeek.totalRepairs,
     totalEngines:  latestWeek.engineReplacements,
+    totalHarness:  latestWeek.totalHarness || 0,
+    totalAdvKit:   latestWeek.totalAdvKit  || 0,
     totalPayout:   latestWeek.totalPayout,
     mechanicCount: mechMap.size,
     topMechanic,
@@ -2214,6 +2260,8 @@ function buildPrevWeekSummary(allJobs) {
     weekEndDate,
     totalRepairs:  prevWeek.totalRepairs,
     totalEngines:  prevWeek.engineReplacements,
+    totalHarness:  prevWeek.totalHarness || 0,
+    totalAdvKit:   prevWeek.totalAdvKit  || 0,
     totalPayout:   prevWeek.totalPayout,
     mechanicCount: mechMap.size,
   };
@@ -2254,6 +2302,8 @@ function buildCurrentWeekSummary(allJobs) {
     weekEndDate:    currentSunday,
     totalRepairs:   weekStats ? weekStats.totalRepairs        : 0,
     totalEngines:   weekStats ? weekStats.engineReplacements  : 0,
+    totalHarness:   weekStats ? weekStats.totalHarness        : 0,
+    totalAdvKit:    weekStats ? weekStats.totalAdvKit         : 0,
     totalPayout:    weekStats ? weekStats.totalPayout         : 0,
     mechanicCount:  mechMap.size,
     topMechanic,
@@ -2330,7 +2380,7 @@ function validateConfig(env) {
  * @param {object} [prevSummary] - Optional previous week summary for week-over-week trend.
  */
 function buildAnalyticsPayload(summary, prevSummary = null) {
-  const { weekEndDate, totalRepairs, totalEngines, totalPayout,
+  const { weekEndDate, totalRepairs, totalEngines, totalHarness, totalAdvKit, totalPayout,
           mechanicCount, topMechanic, topRepairs, mechanics } = summary;
 
   const fields = [
@@ -2341,6 +2391,12 @@ function buildAnalyticsPayload(summary, prevSummary = null) {
   ];
   if (totalEngines > 0) {
     fields.push({ name: '🔩 Engine Replacements', value: String(totalEngines), inline: true });
+  }
+  if ((totalHarness || 0) > 0) {
+    fields.push({ name: '🦺 Harness', value: String(totalHarness), inline: true });
+  }
+  if ((totalAdvKit || 0) > 0) {
+    fields.push({ name: '🔧 Repair Kits', value: String(totalAdvKit), inline: true });
   }
 
   // Week-over-week repair + payout trend when previous week data is available

@@ -14,6 +14,9 @@
  * @param {string} mechanic.stateId - State ID
  * @param {number} mechanic.totalRepairs - Total repairs count
  * @param {number} mechanic.engineReplacements - Engine replacements count
+ * @param {number} [mechanic.totalHarness] - Total harness count
+ * @param {number} [mechanic.totalAdvKit] - Total advanced repair kit count
+ * @param {number} [mechanic.harnessKitPay] - Total harness/kit mechanic pay
  * @param {number} mechanic.totalPayout - Total payout amount
  * @param {Object} options - Additional options
  * @param {Date} [options.startDate] - Period start date
@@ -66,6 +69,16 @@ function kGeneratePayoutSummary(mechanic, options = {}) {
     const engineReimbursement = mechanic.engineReplacements * (PAYMENT_RATES?.ENGINE_REIMBURSEMENT || 12000);
     summary += `Engine Reimbursement: ${kFormatCurrency(engineReimbursement)}\n`;
   }
+  
+  if ((mechanic.totalHarness || 0) > 0) {
+    summary += `Harness: ${mechanic.totalHarness}\n`;
+  }
+  if ((mechanic.totalAdvKit || 0) > 0) {
+    summary += `Repair Kits: ${mechanic.totalAdvKit}\n`;
+  }
+  if ((mechanic.harnessKitPay || 0) > 0) {
+    summary += `Harness/Kit Pay: ${kFormatCurrency(mechanic.harnessKitPay)}\n`;
+  }
   summary += '\n';
   
   // Payout Details
@@ -115,6 +128,13 @@ function kGeneratePayoutBankComment(mechanic, options = {}) {
   
   if (mechanic.engineReplacements > 0) {
     comment += `, ${mechanic.engineReplacements} engines`;
+  }
+  
+  if ((mechanic.totalHarness || 0) > 0) {
+    comment += `, ${mechanic.totalHarness} harness`;
+  }
+  if ((mechanic.totalAdvKit || 0) > 0) {
+    comment += `, ${mechanic.totalAdvKit} kits`;
   }
   
   comment += ` - ${kFormatCurrency(mechanic.totalPayout)}`;

@@ -35,6 +35,10 @@ const PAYMENT_RATES = {
   HARNESS_RATE: 500,
   ADVANCED_REPAIR_KIT_RATE: 500,
 
+  // Customer billing rates for harness and advanced repair kit
+  HARNESS_BILLING_RATE: 5000,
+  ADVANCED_REPAIR_KIT_BILLING_RATE: 2500,
+
   // BET and bins
   BET_RATE: 300,
   BINS_PER_15: 10
