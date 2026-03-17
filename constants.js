@@ -31,6 +31,10 @@ const PAYMENT_RATES = {
   ENGINE_REIMBURSEMENT: 12000,
   ENGINE_BONUS_LSPD: 1500,
   
+  // Harness and Advanced Repair Kit mechanic pay
+  HARNESS_RATE: 500,
+  ADVANCED_REPAIR_KIT_RATE: 500,
+
   // BET and bins
   BET_RATE: 300,
   BINS_PER_15: 10

@@ -84,6 +84,8 @@ const ENGINE_REIMBURSEMENT  = 12000;
 const ENGINE_BONUS_LSPD     = 1500;
 // Combined engine pay per replacement (LSPD/other rate — used when department is unknown)
 const ENGINE_PAY_DEFAULT    = ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD;
+const HARNESS_RATE          = 500;
+const ADVANCED_REPAIR_KIT_RATE = 500;
 
 // ===== Discord embed display limits =====
 const DISCORD_FIELD_MAX_CHARS = 1024; // Discord API field value character limit
@@ -411,7 +413,7 @@ function buildWeeklyStats(jobs) {
 
     let rec = weekMap.get(weekKey);
     if (!rec) {
-      rec = { weekKey, weekEndDate, jobCount: 0, totalRepairs: 0, engineReplacements: 0, enginePayTotal: 0 };
+      rec = { weekKey, weekEndDate, jobCount: 0, totalRepairs: 0, engineReplacements: 0, enginePayTotal: 0, harnessKitPayTotal: 0 };
       weekMap.set(weekKey, rec);
     }
     rec.jobCount++;
@@ -420,6 +422,10 @@ function buildWeeklyStats(jobs) {
     // Bonus only for LSPD; all other departments get reimbursement only
     const isLspd = (j.department || '').toUpperCase() === 'LSPD';
     rec.enginePayTotal    += j.engineReplacements * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
+    // Harness and Advanced Repair Kit pay
+    const totalHarness = (j.harnessPD || 0) + (j.harnessCiv || 0);
+    const totalAdvKit  = (j.advKitPD  || 0) + (j.advKitCiv  || 0);
+    rec.harnessKitPayTotal += totalHarness * HARNESS_RATE + totalAdvKit * ADVANCED_REPAIR_KIT_RATE;
   }
 
   const weeks = Array.from(weekMap.values());
@@ -429,7 +435,7 @@ function buildWeeklyStats(jobs) {
   });
 
   for (const w of weeks) {
-    w.totalPayout   = w.totalRepairs * PAY_PER_REPAIR + (w.enginePayTotal || 0);
+    w.totalPayout   = w.totalRepairs * PAY_PER_REPAIR + (w.enginePayTotal || 0) + (w.harnessKitPayTotal || 0);
   }
 
   return weeks;
@@ -455,6 +461,13 @@ function parseJobsSheet(rows) {
   const iPlate  = lower.findIndex(h => h.includes('plate') || h.includes('license') || h.includes('licence'));
   const iDept   = lower.findIndex(h => h.includes('department') || h.includes('dept') || h.includes('division') || h.includes('unit'));
 
+  // Harness columns: "Harness (PD)" and "Harness (CIV)"
+  const iHarnessPD  = lower.findIndex(h => h.includes('harness') && h.includes('pd'));
+  const iHarnessCiv = lower.findIndex(h => h.includes('harness') && !h.includes('pd'));
+  // Advanced Repair Kit columns: "Advanced Repair Kits (PD)" and "Advanced Repair Kits (CIV)"
+  const iAdvKitPD  = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && h.includes('pd'));
+  const iAdvKitCiv = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && !h.includes('pd'));
+
   if (iMech === -1 || iAcross === -1) return [];
 
   const jobs = [];
@@ -475,10 +488,15 @@ function parseJobsSheet(rows) {
       else if (/^(yes|y|true)$/i.test(raw)) { engineCount = 1; }
     }
 
-    // Skip rows with neither repairs nor engine replacements — they carry no
-    // billable work.  Rows with engine replacements but zero repairs are kept
-    // so engine-only jobs appear in invoices and payout calculations.
-    if (!across && !engineCount) continue;
+    const harnessPD  = iHarnessPD  !== -1 ? (parseInt(row[iHarnessPD]  || '0', 10) || 0) : 0;
+    const harnessCiv = iHarnessCiv !== -1 ? (parseInt(row[iHarnessCiv] || '0', 10) || 0) : 0;
+    const advKitPD   = iAdvKitPD   !== -1 ? (parseInt(row[iAdvKitPD]   || '0', 10) || 0) : 0;
+    const advKitCiv  = iAdvKitCiv  !== -1 ? (parseInt(row[iAdvKitCiv]  || '0', 10) || 0) : 0;
+    const totalHarness = harnessPD + harnessCiv;
+    const totalAdvKit  = advKitPD  + advKitCiv;
+
+    // Skip rows with no billable work
+    if (!across && !engineCount && !totalHarness && !totalAdvKit) continue;
 
     const tsDate  = iTime  !== -1 ? parseDateLike(row[iTime])  : null;
     const weekEnd = iWeek  !== -1 ? parseDateLike(row[iWeek])  : null;
@@ -489,6 +507,10 @@ function parseJobsSheet(rows) {
       mechanic:           mech,
       across,
       engineReplacements: engineCount,
+      harnessPD,
+      harnessCiv,
+      advKitPD,
+      advKitCiv,
       cop:                iCop   !== -1 ? (row[iCop]   || '').trim() : '',
       plate:              iPlate !== -1 ? (row[iPlate] || '').trim() : '',
       department:         iDept  !== -1 ? (row[iDept]  || '').trim() : '',
@@ -562,6 +584,7 @@ function getLatestWeekPayouts(allJobs, stateMap) {
         repairs:            0, // total "across" = repair slots across all jobs
         engineReplacements: 0,
         enginePayTotal:     0,
+        harnessKitPayTotal: 0,
         totalPayout:        0,
       };
       mechMap.set(j.mechanic, rec);
@@ -572,10 +595,14 @@ function getLatestWeekPayouts(allJobs, stateMap) {
     // Bonus only for LSPD; all other departments get reimbursement only
     const isLspdJob = (j.department || '').toUpperCase() === 'LSPD';
     rec.enginePayTotal     += j.engineReplacements * (ENGINE_REIMBURSEMENT + (isLspdJob ? ENGINE_BONUS_LSPD : 0));
+    // Harness and Advanced Repair Kit pay
+    const totalHarness = (j.harnessPD || 0) + (j.harnessCiv || 0);
+    const totalAdvKit  = (j.advKitPD  || 0) + (j.advKitCiv  || 0);
+    rec.harnessKitPayTotal += totalHarness * HARNESS_RATE + totalAdvKit * ADVANCED_REPAIR_KIT_RATE;
   }
 
   const payouts = Array.from(mechMap.values()).map(m => {
-    m.totalPayout = m.repairs * PAY_PER_REPAIR + (m.enginePayTotal || 0);
+    m.totalPayout = m.repairs * PAY_PER_REPAIR + (m.enginePayTotal || 0) + (m.harnessKitPayTotal || 0);
     return m;
   }).sort((a, b) => b.totalPayout - a.totalPayout);
 
@@ -905,6 +932,10 @@ Engine replacement payout: $12,000
 
 LSPD engine replacement payout: $13,500 total  
 ($12,000 engine + $1,500 LSPD bonus)
+
+Harness payout: $500 per harness
+
+Advanced Repair Kit payout: $500 per kit
 
 --------------------------------------------------
 
@@ -1939,16 +1970,19 @@ async function handleInvoiceMonthSelect(interaction, env, ctx) {
  * @param {Date}   weekEndDate   - The Sunday that closes the week being displayed.
  */
 function buildMechanicPayoutEmbed(mechanic, stateId, filteredJobs, weekEndDate) {
-  let repairs = 0, engines = 0, enginePayTotal = 0;
+  let repairs = 0, engines = 0, enginePayTotal = 0, harnessKitPayTotal = 0;
   for (const j of filteredJobs) {
     repairs += j.across || 0;
     engines += j.engineReplacements || 0;
     const isLspd = (j.department || '').toUpperCase() === 'LSPD';
     enginePayTotal += j.engineReplacements * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
+    const totalHarness = (j.harnessPD || 0) + (j.harnessCiv || 0);
+    const totalAdvKit  = (j.advKitPD  || 0) + (j.advKitCiv  || 0);
+    harnessKitPayTotal += totalHarness * HARNESS_RATE + totalAdvKit * ADVANCED_REPAIR_KIT_RATE;
   }
   const jobCount   = filteredJobs.length;
-  const payout     = repairs * PAY_PER_REPAIR + enginePayTotal;
-  const color      = repairs > 0 ? 0x22c55e : 0xef4444;
+  const payout     = repairs * PAY_PER_REPAIR + enginePayTotal + harnessKitPayTotal;
+  const color      = (repairs > 0 || harnessKitPayTotal > 0) ? 0x22c55e : 0xef4444;
   const dateLabel  = fmtDate(weekEndDate);
 
   const fields = [
@@ -1960,6 +1994,9 @@ function buildMechanicPayoutEmbed(mechanic, stateId, filteredJobs, weekEndDate) 
   if (engines > 0) {
     fields.push({ name: '🔩 Engines', value: String(engines), inline: true });
   }
+  if (harnessKitPayTotal > 0) {
+    fields.push({ name: '🦺 Items Pay', value: fmtMoney(harnessKitPayTotal), inline: true });
+  }
 
   if (jobCount > 0) {
     const lines = filteredJobs.map((j, i) => {
@@ -1967,6 +2004,10 @@ function buildMechanicPayoutEmbed(mechanic, stateId, filteredJobs, weekEndDate) 
       if (j.engineReplacements > 0) {
         line += ` + **${j.engineReplacements}** engine${j.engineReplacements !== 1 ? 's' : ''}`;
       }
+      const totalHarness = (j.harnessPD || 0) + (j.harnessCiv || 0);
+      const totalAdvKit  = (j.advKitPD  || 0) + (j.advKitCiv  || 0);
+      if (totalHarness > 0) line += ` + **${totalHarness}** harness`;
+      if (totalAdvKit  > 0) line += ` + **${totalAdvKit}** adv. kit`;
       if (j.tsDate) line += ` _(${fmtDate(j.tsDate)})_`;
       return line;
     });

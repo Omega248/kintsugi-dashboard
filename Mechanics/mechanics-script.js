@@ -4,6 +4,8 @@ const MECH_STATE_ID_SHEET     = KINTSUGI_CONFIG.SHEETS.STATE_IDS;
 const MECH_PAY_PER_REPAIR     = PAYMENT_RATES.PAY_PER_REPAIR;
 const MECH_ENGINE_REIMBURSEMENT = PAYMENT_RATES.ENGINE_REIMBURSEMENT;
 const MECH_ENGINE_BONUS_LSPD  = PAYMENT_RATES.ENGINE_BONUS_LSPD;
+const MECH_HARNESS_RATE       = PAYMENT_RATES.HARNESS_RATE;
+const MECH_ADVANCED_REPAIR_KIT_RATE = PAYMENT_RATES.ADVANCED_REPAIR_KIT_RATE;
 
 // ===== State =====
 let mechJobs = [];      // raw parsed jobs
@@ -197,6 +199,11 @@ function mechBuildWeeklyStats(mechanicName, sourceJobs) {
         engineReplacements: 0,
         civEngineReplacements: 0,
         enginePayTotal: 0,
+        harnessPD: 0,
+        harnessCiv: 0,
+        advKitPD: 0,
+        advKitCiv: 0,
+        harnessKitPayTotal: 0,
         jobs: []
       };
       weekMap.set(weekKey, weekRec);
@@ -211,6 +218,11 @@ function mechBuildWeeklyStats(mechanicName, sourceJobs) {
     const isLspd = (j.department || "").toUpperCase() === "LSPD";
     weekRec.enginePayTotal += mechCalculateEngineValue(j.engineReplacements || 0, isLspd)
                             + mechCalculateEngineValue(j.civEngineReplacements || 0, false); // CIV engines never get the bonus
+    weekRec.harnessPD += j.harnessPD || 0;
+    weekRec.harnessCiv += j.harnessCiv || 0;
+    weekRec.advKitPD += j.advKitPD || 0;
+    weekRec.advKitCiv += j.advKitCiv || 0;
+    weekRec.harnessKitPayTotal += j.harnessKitPay || 0;
     weekRec.jobs.push(j);
   }
   
@@ -223,10 +235,10 @@ function mechBuildWeeklyStats(mechanicName, sourceJobs) {
     return b.weekKey.localeCompare(a.weekKey);
   });
   
-  // Calculate payouts (include both PD and CIV engine replacements)
+  // Calculate payouts (include both PD and CIV engine replacements, plus harness and kits)
   for (const week of weeklyStats) {
     const basePay = week.totalRepairs * MECH_PAY_PER_REPAIR;
-    week.totalPayout = basePay + (week.enginePayTotal || 0);
+    week.totalPayout = basePay + (week.enginePayTotal || 0) + (week.harnessKitPayTotal || 0);
   }
   
   return weeklyStats;
@@ -247,6 +259,7 @@ function mechBuildStats(sourceJobs) {
       rec = {
         mechanic: mech,
         totalRepairs: 0,
+        totalHarnessKitPay: 0,
         weeksWorkedSet: new Set(),
         monthsActiveSet: new Set(),
         firstJob: null,
@@ -257,6 +270,7 @@ function mechBuildStats(sourceJobs) {
 
     const across = j.across || 0;
     rec.totalRepairs += across;
+    rec.totalHarnessKitPay += j.harnessKitPay || 0;
 
     // choose best valid date for this job
     const d = j.bestDate;
@@ -285,7 +299,7 @@ function mechBuildStats(sourceJobs) {
     const weeksCount = rec.weeksWorkedSet.size;
     const monthsCount = rec.monthsActiveSet.size;
     const avgPerWeek = weeksCount ? rec.totalRepairs / weeksCount : 0;
-    const totalPayout = rec.totalRepairs * MECH_PAY_PER_REPAIR;
+    const totalPayout = rec.totalRepairs * MECH_PAY_PER_REPAIR + (rec.totalHarnessKitPay || 0);
 
     stats.push({
       mechanic: rec.mechanic,
@@ -306,7 +320,7 @@ function mechBuildStats(sourceJobs) {
 function mechRenderGlobalSummary(stats, globalEarliest, globalLatest) {
   const totalMechanics = stats.length;
   const totalRepairs = stats.reduce((sum, r) => sum + (r.totalRepairs || 0), 0);
-  const totalPayout = totalRepairs * MECH_PAY_PER_REPAIR;
+  const totalPayout = stats.reduce((sum, r) => sum + (r.totalPayout || 0), 0);
 
   if (sumTotalMechanicsEl) {
     sumTotalMechanicsEl.textContent = totalMechanics
@@ -529,6 +543,26 @@ function mechRenderWeeklySummary(mechanicName) {
       const engineValue = week.enginePayTotal || 0;
       mechAddSummaryRow(card, "Engine Value", mechFmtMoney(engineValue));
     }
+
+    const totalHarness = (week.harnessPD || 0) + (week.harnessCiv || 0);
+    if (totalHarness > 0) {
+      if ((week.harnessCiv || 0) > 0 && (week.harnessPD || 0) > 0) {
+        mechAddSummaryRow(card, "Harness (PD)", (week.harnessPD || 0).toString());
+        mechAddSummaryRow(card, "Harness (CIV)", (week.harnessCiv || 0).toString());
+      } else {
+        mechAddSummaryRow(card, "Harness", totalHarness.toString());
+      }
+    }
+
+    const totalAdvKit = (week.advKitPD || 0) + (week.advKitCiv || 0);
+    if (totalAdvKit > 0) {
+      if ((week.advKitCiv || 0) > 0 && (week.advKitPD || 0) > 0) {
+        mechAddSummaryRow(card, "Advanced Repair Kits (PD)", (week.advKitPD || 0).toString());
+        mechAddSummaryRow(card, "Advanced Repair Kits (CIV)", (week.advKitCiv || 0).toString());
+      } else {
+        mechAddSummaryRow(card, "Advanced Repair Kits", totalAdvKit.toString());
+      }
+    }
     mechAddSummaryRow(card, "Total Payout", mechFmtMoney(week.totalPayout));
     
     fragment.appendChild(card);
@@ -592,6 +626,26 @@ async function mechCopyWeekSummary(mechanicName, week) {
     const engineValue = week.enginePayTotal || 0;
     summary += `Engine Reimbursement: ${mechFmtMoney(engineValue)}\n`;
   }
+
+  const totalHarness = (week.harnessPD || 0) + (week.harnessCiv || 0);
+  if (totalHarness > 0) {
+    if ((week.harnessCiv || 0) > 0 && (week.harnessPD || 0) > 0) {
+      summary += `Harness (PD): ${week.harnessPD || 0}\n`;
+      summary += `Harness (CIV): ${week.harnessCiv || 0}\n`;
+    } else {
+      summary += `Harness: ${totalHarness}\n`;
+    }
+  }
+
+  const totalAdvKit = (week.advKitPD || 0) + (week.advKitCiv || 0);
+  if (totalAdvKit > 0) {
+    if ((week.advKitCiv || 0) > 0 && (week.advKitPD || 0) > 0) {
+      summary += `Advanced Repair Kits (PD): ${week.advKitPD || 0}\n`;
+      summary += `Advanced Repair Kits (CIV): ${week.advKitCiv || 0}\n`;
+    } else {
+      summary += `Advanced Repair Kits: ${totalAdvKit}\n`;
+    }
+  }
   summary += `Total Payout: ${mechFmtMoney(week.totalPayout)}\n`;
   summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
   
@@ -650,6 +704,26 @@ async function mechCopyAllWeeks(mechanicName, weeklyStats) {
         summary += `  Engine Replacements: ${totalEngines}\n`;
       }
     }
+
+    const weekHarness = (week.harnessPD || 0) + (week.harnessCiv || 0);
+    if (weekHarness > 0) {
+      if ((week.harnessCiv || 0) > 0 && (week.harnessPD || 0) > 0) {
+        summary += `  Harness (PD): ${week.harnessPD || 0}\n`;
+        summary += `  Harness (CIV): ${week.harnessCiv || 0}\n`;
+      } else {
+        summary += `  Harness: ${weekHarness}\n`;
+      }
+    }
+
+    const weekAdvKit = (week.advKitPD || 0) + (week.advKitCiv || 0);
+    if (weekAdvKit > 0) {
+      if ((week.advKitCiv || 0) > 0 && (week.advKitPD || 0) > 0) {
+        summary += `  Advanced Repair Kits (PD): ${week.advKitPD || 0}\n`;
+        summary += `  Advanced Repair Kits (CIV): ${week.advKitCiv || 0}\n`;
+      } else {
+        summary += `  Advanced Repair Kits: ${weekAdvKit}\n`;
+      }
+    }
     summary += `  Payout: ${mechFmtMoney(week.totalPayout)}\n\n`;
     
     totalRepairs += week.totalRepairs;
@@ -657,11 +731,24 @@ async function mechCopyAllWeeks(mechanicName, weeklyStats) {
     totalPayout += week.totalPayout;
   }
   
+  let totalHarness = 0;
+  let totalAdvKit = 0;
+  for (const week of weeklyStats) {
+    totalHarness += (week.harnessPD || 0) + (week.harnessCiv || 0);
+    totalAdvKit += (week.advKitPD || 0) + (week.advKitCiv || 0);
+  }
+
   summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
   summary += `TOTALS:\n`;
   summary += `Total Repairs: ${totalRepairs}\n`;
   if (totalEngineReplacements > 0) {
     summary += `Total Engine Replacements: ${totalEngineReplacements}\n`;
+  }
+  if (totalHarness > 0) {
+    summary += `Total Harness: ${totalHarness}\n`;
+  }
+  if (totalAdvKit > 0) {
+    summary += `Total Advanced Repair Kits: ${totalAdvKit}\n`;
   }
   summary += `Total Payout: ${mechFmtMoney(totalPayout)}\n`;
   summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
@@ -847,13 +934,21 @@ async function mechLoad() {
 
     // "PD Repair" yes/no column — used to classify CIV-only jobs
     const iPDRepair = headersLower.findIndex(
-      (h) => h === "pd repair" || (h.includes("pd") && h.includes("repair") && !h.includes("across"))
+      (h) => h === "pd repair" || (h.includes("pd") && h.includes("repair") && !h.includes("across") && !h.includes("kit"))
     );
 
     // Find department column
     const iDept = headersLower.findIndex(
       (h) => h.includes("department")
     );
+
+    // Harness columns: "Harness (PD)" and "Harness (CIV)"
+    const iHarnessPD  = headersLower.findIndex((h) => h.includes("harness") && h.includes("pd"));
+    const iHarnessCiv = headersLower.findIndex((h) => h.includes("harness") && !h.includes("pd"));
+
+    // Advanced Repair Kit columns: "Advanced Repair Kits (PD)" and "Advanced Repair Kits (CIV)"
+    const iAdvKitPD  = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && h.includes("pd"));
+    const iAdvKitCiv = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && !h.includes("pd"));
 
     if (iTime === -1 || iMech === -1 || (iAcrossPD === -1 && iAcrossCiv === -1)) {
       throw new Error(
@@ -874,7 +969,16 @@ async function mechLoad() {
       const acrossPD = iAcrossPD !== -1 ? (parseInt(row[iAcrossPD] || 0, 10) || 0) : 0;
       const acrossCiv = iAcrossCiv !== -1 ? (parseInt(row[iAcrossCiv] || 0, 10) || 0) : 0;
       const across = acrossPD + acrossCiv;
-      if (!across) continue;
+
+      // Harness and Advanced Repair Kit counts
+      const harnessPD  = iHarnessPD  !== -1 ? (parseInt(row[iHarnessPD]  || 0, 10) || 0) : 0;
+      const harnessCiv = iHarnessCiv !== -1 ? (parseInt(row[iHarnessCiv] || 0, 10) || 0) : 0;
+      const advKitPD  = iAdvKitPD  !== -1 ? (parseInt(row[iAdvKitPD]  || 0, 10) || 0) : 0;
+      const advKitCiv = iAdvKitCiv !== -1 ? (parseInt(row[iAdvKitCiv] || 0, 10) || 0) : 0;
+      const totalHarness = harnessPD + harnessCiv;
+      const totalAdvKit = advKitPD + advKitCiv;
+
+      if (!across && !totalHarness && !totalAdvKit) continue;
 
       // PD engine replacements (first "Engine Replacement?" column)
       let engineCount = 0;
@@ -930,6 +1034,11 @@ async function mechLoad() {
         acrossCiv,
         engineReplacements: engineCount,
         civEngineReplacements: civEngineCount,
+        harnessPD,
+        harnessCiv,
+        advKitPD,
+        advKitCiv,
+        harnessKitPay: totalHarness * MECH_HARNESS_RATE + totalAdvKit * MECH_ADVANCED_REPAIR_KIT_RATE,
         department: dept,
         tsDate,
         weekEnd,

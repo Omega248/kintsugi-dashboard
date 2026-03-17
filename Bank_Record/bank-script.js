@@ -359,6 +359,8 @@ async function loadJobsAsPayouts() {
   const PAY = (typeof PAYMENT_RATES !== "undefined" && PAYMENT_RATES.PAY_PER_REPAIR) ? PAYMENT_RATES.PAY_PER_REPAIR : 700;
   const ENG_REIMB = (typeof PAYMENT_RATES !== "undefined" && PAYMENT_RATES.ENGINE_REIMBURSEMENT) ? PAYMENT_RATES.ENGINE_REIMBURSEMENT : 12000;
   const ENG_BONUS = (typeof PAYMENT_RATES !== "undefined" && PAYMENT_RATES.ENGINE_BONUS_LSPD) ? PAYMENT_RATES.ENGINE_BONUS_LSPD : 1500;
+  const HARNESS = (typeof PAYMENT_RATES !== "undefined" && PAYMENT_RATES.HARNESS_RATE) ? PAYMENT_RATES.HARNESS_RATE : 500;
+  const ADV_KIT = (typeof PAYMENT_RATES !== "undefined" && PAYMENT_RATES.ADVANCED_REPAIR_KIT_RATE) ? PAYMENT_RATES.ADVANCED_REPAIR_KIT_RATE : 500;
 
   try {
     const res = await fetch(sheetCsvUrl(JOBS_SHEET_NAME));
@@ -404,8 +406,15 @@ async function loadJobsAsPayouts() {
 
     const iDept      = headersLower.findIndex((h) => h.includes("department"));
     const iPDRepair  = headersLower.findIndex(
-      (h) => h === "pd repair" || (h.includes("pd") && h.includes("repair") && !h.includes("across"))
+      (h) => h === "pd repair" || (h.includes("pd") && h.includes("repair") && !h.includes("across") && !h.includes("kit"))
     );
+
+    // Harness columns: "Harness (PD)" and "Harness (CIV)"
+    const iHarnessPD  = headersLower.findIndex((h) => h.includes("harness") && h.includes("pd"));
+    const iHarnessCiv = headersLower.findIndex((h) => h.includes("harness") && !h.includes("pd"));
+    // Advanced Repair Kit columns: "Advanced Repair Kits (PD)" and "Advanced Repair Kits (CIV)"
+    const iAdvKitPD  = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && h.includes("pd"));
+    const iAdvKitCiv = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && !h.includes("pd"));
 
     if (iMech === -1 || iWeek === -1 || (iAcrossPD === -1 && iAcrossCiv === -1)) return [];
 
@@ -422,7 +431,16 @@ async function loadJobsAsPayouts() {
       const acrossPD  = iAcrossPD  !== -1 ? (parseInt(row[iAcrossPD]  || 0, 10) || 0) : 0;
       const acrossCiv = iAcrossCiv !== -1 ? (parseInt(row[iAcrossCiv] || 0, 10) || 0) : 0;
       const across    = acrossPD + acrossCiv;
-      if (!across) continue;
+
+      // Harness and Advanced Repair Kit counts
+      const harnessPD  = iHarnessPD  !== -1 ? (parseInt(row[iHarnessPD]  || 0, 10) || 0) : 0;
+      const harnessCiv = iHarnessCiv !== -1 ? (parseInt(row[iHarnessCiv] || 0, 10) || 0) : 0;
+      const advKitPD   = iAdvKitPD   !== -1 ? (parseInt(row[iAdvKitPD]   || 0, 10) || 0) : 0;
+      const advKitCiv  = iAdvKitCiv  !== -1 ? (parseInt(row[iAdvKitCiv]  || 0, 10) || 0) : 0;
+      const totalHarness = harnessPD + harnessCiv;
+      const totalAdvKit  = advKitPD  + advKitCiv;
+
+      if (!across && !totalHarness && !totalAdvKit) continue;
 
       // PD engine replacements
       let pdEngineCount = 0;
@@ -469,6 +487,9 @@ async function loadJobsAsPayouts() {
       }
       enginePay += civEngineCount * ENG_REIMB; // CIV engines: reimbursement only (no bonus)
 
+      // Harness and Advanced Repair Kit pay
+      const harnessKitPay = totalHarness * HARNESS + totalAdvKit * ADV_KIT;
+
       const weekRaw = iWeek !== -1 ? (row[iWeek] || "").trim() : "";
       if (!weekRaw) continue;
       const weekDate = parseDate(weekRaw);
@@ -486,20 +507,26 @@ async function loadJobsAsPayouts() {
         pdEngines: 0,
         civEngines: 0,
         enginePayTotal: 0,
+        harnessKitPayTotal: 0,
+        totalHarness: 0,
+        totalAdvKit: 0,
       };
-      agg.repairs        += across;
-      agg.acrossPD       += acrossPD;
-      agg.acrossCiv      += acrossCiv;
-      agg.pdEngines      += pdEngineCount;
-      agg.civEngines     += civEngineCount;
-      agg.enginePayTotal += enginePay;
+      agg.repairs           += across;
+      agg.acrossPD          += acrossPD;
+      agg.acrossCiv         += acrossCiv;
+      agg.pdEngines         += pdEngineCount;
+      agg.civEngines        += civEngineCount;
+      agg.enginePayTotal    += enginePay;
+      agg.harnessKitPayTotal += harnessKitPay;
+      agg.totalHarness      += totalHarness;
+      agg.totalAdvKit       += totalAdvKit;
       weeklyMap.set(wKey, agg);
     }
 
     // Convert aggregates to synthetic bank transaction rows
     const syntheticRows = [];
     for (const agg of weeklyMap.values()) {
-      const totalPayout = agg.repairs * PAY + agg.enginePayTotal;
+      const totalPayout = agg.repairs * PAY + agg.enginePayTotal + agg.harnessKitPayTotal;
       const weekEndStr  = agg.weekEnd.toLocaleDateString("en-GB");
 
       let repairDesc;
@@ -510,13 +537,15 @@ async function loadJobsAsPayouts() {
       }
       const totalEngines = agg.pdEngines + agg.civEngines;
       const engineDesc = totalEngines > 0 ? ` + ${totalEngines} engine repl.` : "";
+      const harnessDesc = agg.totalHarness > 0 ? ` + ${agg.totalHarness} harness` : "";
+      const kitDesc = agg.totalAdvKit > 0 ? ` + ${agg.totalAdvKit} adv. kit` : "";
 
       syntheticRows.push({
         // Standard bank-row fields so existing filters/display work correctly
         date:      weekEndStr,
         direction: "out",
         amount:    String(totalPayout),
-        comment:   `Mechanic Payout — ${agg.mechanic} — Week ending ${weekEndStr} (${repairDesc}${engineDesc})`,
+        comment:   `Mechanic Payout — ${agg.mechanic} — Week ending ${weekEndStr} (${repairDesc}${engineDesc}${harnessDesc}${kitDesc})`,
         type:      "Mechanic Payout",
         // Private metadata
         _source:   "auto-payout",
