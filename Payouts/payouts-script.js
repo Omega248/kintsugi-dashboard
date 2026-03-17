@@ -8,6 +8,8 @@ const ENGINE_REPLACEMENT_RATE = PAYMENT_RATES.ENGINE_REPLACEMENT_RATE;
 const ENGINE_REPLACEMENT_RATE_BCSO = PAYMENT_RATES.ENGINE_REPLACEMENT_RATE_BCSO;
 const ENGINE_REIMBURSEMENT    = PAYMENT_RATES.ENGINE_REIMBURSEMENT;
 const ENGINE_BONUS_LSPD       = PAYMENT_RATES.ENGINE_BONUS_LSPD;
+const HARNESS_RATE            = PAYMENT_RATES.HARNESS_RATE;
+const ADVANCED_REPAIR_KIT_RATE = PAYMENT_RATES.ADVANCED_REPAIR_KIT_RATE;
 
 // ===== State =====
 let weeklyAgg = [];   // mechanic-week aggregates
@@ -62,8 +64,12 @@ function commentForWeek(weekEndDate) {
 // pdEngineReps  – PD engine replacement count
 // civEngineReps – CIV engine replacement count
 // enginePay     – pre-computed mechanic engine pay total
-// totalPayout   – final payout (repairs * PAY_PER_REPAIR + enginePay)
-function generateWeeklyCopySummary(mechanic, weekEndDate, acrossPD, acrossCiv, pdEngineReps, civEngineReps, enginePay, totalPayout) {
+// harnessPD     – PD harness count
+// harnessCiv    – CIV harness count
+// advKitPD      – PD advanced repair kit count
+// advKitCiv     – CIV advanced repair kit count
+// totalPayout   – final payout (repairs * PAY_PER_REPAIR + enginePay + harnessKitPay)
+function generateWeeklyCopySummary(mechanic, weekEndDate, acrossPD, acrossCiv, pdEngineReps, civEngineReps, enginePay, harnessPD, harnessCiv, advKitPD, advKitCiv, totalPayout) {
   const stateId = stateIdByMechanic.get(mechanic) || "N/A";
   const weekEndStr = kFmtDate(weekEndDate);
   const totalRepairs = acrossPD + acrossCiv;
@@ -91,6 +97,26 @@ function generateWeeklyCopySummary(mechanic, weekEndDate, acrossPD, acrossCiv, p
     summary += `Engine Pay: ${kFmtMoney(enginePay)}\n`;
   }
 
+  const totalHarness = (harnessPD || 0) + (harnessCiv || 0);
+  if (totalHarness > 0) {
+    if ((harnessCiv || 0) > 0 && (harnessPD || 0) > 0) {
+      summary += `Harness (PD): ${harnessPD || 0}\n`;
+      summary += `Harness (CIV): ${harnessCiv || 0}\n`;
+    } else {
+      summary += `Harness: ${totalHarness}\n`;
+    }
+  }
+
+  const totalAdvKit = (advKitPD || 0) + (advKitCiv || 0);
+  if (totalAdvKit > 0) {
+    if ((advKitCiv || 0) > 0 && (advKitPD || 0) > 0) {
+      summary += `Advanced Repair Kits (PD): ${advKitPD || 0}\n`;
+      summary += `Advanced Repair Kits (CIV): ${advKitCiv || 0}\n`;
+    } else {
+      summary += `Advanced Repair Kits: ${totalAdvKit}\n`;
+    }
+  }
+
   summary += `Total Payout: ${kFmtMoney(totalPayout)}\n`;
   summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
 
@@ -98,8 +124,8 @@ function generateWeeklyCopySummary(mechanic, weekEndDate, acrossPD, acrossCiv, p
 }
 
 // Copy weekly payout summary to clipboard
-async function copyWeeklySummary(btn, mechanic, weekEndDate, acrossPD, acrossCiv, pdEngineReps, civEngineReps, enginePay, totalPayout) {
-  const summary = generateWeeklyCopySummary(mechanic, weekEndDate, acrossPD, acrossCiv, pdEngineReps, civEngineReps, enginePay, totalPayout);
+async function copyWeeklySummary(btn, mechanic, weekEndDate, acrossPD, acrossCiv, pdEngineReps, civEngineReps, enginePay, harnessPD, harnessCiv, advKitPD, advKitCiv, totalPayout) {
+  const summary = generateWeeklyCopySummary(mechanic, weekEndDate, acrossPD, acrossCiv, pdEngineReps, civEngineReps, enginePay, harnessPD, harnessCiv, advKitPD, advKitCiv, totalPayout);
   
   // Use existing helper function from payout-helpers.js
   const success = await kCopyToClipboard(summary);
@@ -289,11 +315,19 @@ async function loadPayouts() {
 
     // "PD Repair" — yes/no column indicating whether the job is a PD repair
     const iPDRepair = headersLower.findIndex(
-      (h) => h === "pd repair" || (h.includes("pd") && h.includes("repair") && !h.includes("across"))
+      (h) => h === "pd repair" || (h.includes("pd") && h.includes("repair") && !h.includes("across") && !h.includes("kit"))
     );
 
     // find department column
     const iDept = headersLower.findIndex((h) => h.includes("department"));
+
+    // Harness columns: "Harness (PD)" and "Harness (CIV)"
+    const iHarnessPD  = headersLower.findIndex((h) => h.includes("harness") && h.includes("pd"));
+    const iHarnessCiv = headersLower.findIndex((h) => h.includes("harness") && !h.includes("pd"));
+
+    // Advanced Repair Kit columns: "Advanced Repair Kits (PD)" and "Advanced Repair Kits (CIV)"
+    const iAdvKitPD  = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && h.includes("pd"));
+    const iAdvKitCiv = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && !h.includes("pd"));
 
     if (iMech === -1 || (iAcrossPD === -1 && iAcrossCiv === -1) || iWeek === -1 || iMonth === -1) {
       throw new Error("Missing required columns.");
@@ -323,7 +357,18 @@ async function loadPayouts() {
       // CIV repair count ("How many Across")
       const acrossCiv = iAcrossCiv !== -1 ? (Number(row[iAcrossCiv] || "0") || 0) : 0;
       const across = acrossPD + acrossCiv;
-      if (!across) continue;
+
+      // Harness counts
+      const harnessPD  = iHarnessPD  !== -1 ? (Number(row[iHarnessPD]  || "0") || 0) : 0;
+      const harnessCiv = iHarnessCiv !== -1 ? (Number(row[iHarnessCiv] || "0") || 0) : 0;
+      const totalHarness = harnessPD + harnessCiv;
+
+      // Advanced Repair Kit counts
+      const advKitPD  = iAdvKitPD  !== -1 ? (Number(row[iAdvKitPD]  || "0") || 0) : 0;
+      const advKitCiv = iAdvKitCiv !== -1 ? (Number(row[iAdvKitCiv] || "0") || 0) : 0;
+      const totalAdvKit = advKitPD + advKitCiv;
+
+      if (!across && !totalHarness && !totalAdvKit) continue;
 
       // PD engine replacements (first "Engine Replacement?" column)
       let pdEngineCount = 0;
@@ -400,6 +445,9 @@ async function loadPayouts() {
       // Pre-compute mechanic engine pay for this job
       const enginePayForMechanic = computeJobEnginePay(pdEngineCount, dept, enginePayer, civEngineCount);
 
+      // Harness and Advanced Repair Kit pay
+      const harnessKitPay = totalHarness * HARNESS_RATE + totalAdvKit * ADVANCED_REPAIR_KIT_RATE;
+
       // Weekly agg for mechanic+week
       const wKey = `${mech}|${weekISO}`;
       const w =
@@ -416,6 +464,11 @@ async function loadPayouts() {
           civEngineReplacements: 0,
           engineReplacementsByDept: {},
           enginePayAccumulated: 0,
+          harnessPD: 0,
+          harnessCiv: 0,
+          advKitPD: 0,
+          advKitCiv: 0,
+          harnessKitPayAccumulated: 0,
         };
       w.jobCount++;
       w.repairs += across;
@@ -424,6 +477,11 @@ async function loadPayouts() {
       w.engineReplacements += pdEngineCount;
       w.civEngineReplacements += civEngineCount;
       w.enginePayAccumulated += enginePayForMechanic;
+      w.harnessPD += harnessPD;
+      w.harnessCiv += harnessCiv;
+      w.advKitPD += advKitPD;
+      w.advKitCiv += advKitCiv;
+      w.harnessKitPayAccumulated += harnessKitPay;
       if (pdEngineCount > 0 && dept) {
         w.engineReplacementsByDept[dept] = (w.engineReplacementsByDept[dept] || 0) + pdEngineCount;
       }
@@ -441,6 +499,11 @@ async function loadPayouts() {
           civEngineReplacements: 0,
           engineReplacementsByDept: {},
           enginePayAccumulated: 0,
+          harnessPD: 0,
+          harnessCiv: 0,
+          advKitPD: 0,
+          advKitCiv: 0,
+          harnessKitPayAccumulated: 0,
         };
       mAgg.repairs += across;
       mAgg.acrossPD += acrossPD;
@@ -448,6 +511,11 @@ async function loadPayouts() {
       mAgg.engineReplacements += pdEngineCount;
       mAgg.civEngineReplacements += civEngineCount;
       mAgg.enginePayAccumulated += enginePayForMechanic;
+      mAgg.harnessPD += harnessPD;
+      mAgg.harnessCiv += harnessCiv;
+      mAgg.advKitPD += advKitPD;
+      mAgg.advKitCiv += advKitCiv;
+      mAgg.harnessKitPayAccumulated += harnessKitPay;
       if (pdEngineCount > 0 && dept) {
         mAgg.engineReplacementsByDept[dept] = (mAgg.engineReplacementsByDept[dept] || 0) + pdEngineCount;
       }
@@ -466,6 +534,11 @@ async function loadPayouts() {
         civEngineReplacements: civEngineCount,
         enginePayer,
         enginePayForMechanic,
+        harnessPD,
+        harnessCiv,
+        advKitPD,
+        advKitCiv,
+        harnessKitPay,
         department: dept,
         weekEnd,
         weekISO,
@@ -606,6 +679,11 @@ function renderWeekly() {
       civEngineReplacements: 0,
       engineReplacementsByDept: {},
       enginePayAccumulated: 0,
+      harnessPD: 0,
+      harnessCiv: 0,
+      advKitPD: 0,
+      advKitCiv: 0,
+      harnessKitPayAccumulated: 0,
     };
     w.jobCount++;
     w.repairs += j.across;
@@ -614,6 +692,11 @@ function renderWeekly() {
     w.engineReplacements += j.engineReplacements;
     w.civEngineReplacements += j.civEngineReplacements || 0;
     w.enginePayAccumulated += j.enginePayForMechanic || 0;
+    w.harnessPD += j.harnessPD || 0;
+    w.harnessCiv += j.harnessCiv || 0;
+    w.advKitPD += j.advKitPD || 0;
+    w.advKitCiv += j.advKitCiv || 0;
+    w.harnessKitPayAccumulated += j.harnessKitPay || 0;
     if (j.engineReplacements > 0 && j.department) {
       w.engineReplacementsByDept[j.department] = 
         (w.engineReplacementsByDept[j.department] || 0) + j.engineReplacements;
@@ -655,7 +738,7 @@ function renderWeekly() {
     // First pass: calculate week total for the compact header
     let weekTotal = 0;
     entries.forEach((r) => {
-      weekTotal += r.repairs * PAY_PER_REPAIR + r.enginePayAccumulated;
+      weekTotal += r.repairs * PAY_PER_REPAIR + r.enginePayAccumulated + r.harnessKitPayAccumulated;
     });
 
     const groupId = `wg-${++groupCounter}`;
@@ -689,7 +772,7 @@ function renderWeekly() {
 
     // Second pass: create individual mechanic rows under this group
     entries.forEach((r) => {
-      const pay = r.repairs * PAY_PER_REPAIR + r.enginePayAccumulated;
+      const pay = r.repairs * PAY_PER_REPAIR + r.enginePayAccumulated + r.harnessKitPayAccumulated;
       const comment = commentForWeek(r.weekEnd);
       const pdEngineReps = r.engineReplacements || 0;
       const civEngineReps = r.civEngineReplacements || 0;
@@ -720,6 +803,10 @@ function renderWeekly() {
                   data-pd-engine-reps="${pdEngineReps}"
                   data-civ-engine-reps="${civEngineReps}"
                   data-engine-pay="${r.enginePayAccumulated}"
+                  data-harness-pd="${r.harnessPD || 0}"
+                  data-harness-civ="${r.harnessCiv || 0}"
+                  data-adv-kit-pd="${r.advKitPD || 0}"
+                  data-adv-kit-civ="${r.advKitCiv || 0}"
                   data-total-pay="${pay}">
             📋 Copy
           </button>
@@ -1064,6 +1151,7 @@ function updateMechanicSummary() {
 
   let totalRepairs = 0;
   let totalEnginePay = 0;
+  let totalHarnessKitPay = 0;
   const weekSet = new Set();
   let lastJob = null;
   mechanicLatestWeekISO = null;
@@ -1072,6 +1160,7 @@ function updateMechanicSummary() {
     const rep = Number(j.across || 0) || 0;
     totalRepairs += rep;
     totalEnginePay += j.enginePayForMechanic || 0;
+    totalHarnessKitPay += j.harnessKitPay || 0;
 
     if (j.weekISO) {
       weekSet.add(j.weekISO);
@@ -1089,7 +1178,7 @@ function updateMechanicSummary() {
 
   const weeksWorked = weekSet.size;
   const avgPerWeek = weeksWorked ? totalRepairs / weeksWorked : 0;
-  const totalPayout = totalRepairs * PAY_PER_REPAIR + totalEnginePay;
+  const totalPayout = totalRepairs * PAY_PER_REPAIR + totalEnginePay + totalHarnessKitPay;
 
   if (nameEl) nameEl.textContent = mech;
   if (totalRepairsEl) totalRepairsEl.textContent = totalRepairs.toLocaleString();
@@ -1199,6 +1288,11 @@ function exportCurrentViewCsv() {
         civEngineReplacements: 0,
         engineReplacementsByDept: {},
         enginePayAccumulated: 0,
+        harnessPD: 0,
+        harnessCiv: 0,
+        advKitPD: 0,
+        advKitCiv: 0,
+        harnessKitPayAccumulated: 0,
       };
       w.repairs += j.across;
       w.acrossPD += j.acrossPD || 0;
@@ -1206,6 +1300,11 @@ function exportCurrentViewCsv() {
       w.engineReplacements += j.engineReplacements;
       w.civEngineReplacements += j.civEngineReplacements || 0;
       w.enginePayAccumulated += j.enginePayForMechanic || 0;
+      w.harnessPD += j.harnessPD || 0;
+      w.harnessCiv += j.harnessCiv || 0;
+      w.advKitPD += j.advKitPD || 0;
+      w.advKitCiv += j.advKitCiv || 0;
+      w.harnessKitPayAccumulated += j.harnessKitPay || 0;
       if (j.engineReplacements > 0 && j.department) {
         w.engineReplacementsByDept[j.department] = 
           (w.engineReplacementsByDept[j.department] || 0) + j.engineReplacements;
@@ -1217,7 +1316,7 @@ function exportCurrentViewCsv() {
     if (!filtered.length) return;
 
     const rows = filtered.map((r) => {
-      const pay = r.repairs * PAY_PER_REPAIR + r.enginePayAccumulated;
+      const pay = r.repairs * PAY_PER_REPAIR + r.enginePayAccumulated + r.harnessKitPayAccumulated;
       const mechLabel = labelWithStateId(r.mechanic);
       const comment = commentForWeek(r.weekEnd);
       return {
@@ -1770,9 +1869,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const pdEngineReps = parseInt(copyBtn.dataset.pdEngineReps, 10) || 0;
         const civEngineReps = parseInt(copyBtn.dataset.civEngineReps, 10) || 0;
         const enginePay = parseFloat(copyBtn.dataset.enginePay) || 0;
+        const harnessPD = parseInt(copyBtn.dataset.harnessPd, 10) || 0;
+        const harnessCiv = parseInt(copyBtn.dataset.harnessCiv, 10) || 0;
+        const advKitPD = parseInt(copyBtn.dataset.advKitPd, 10) || 0;
+        const advKitCiv = parseInt(copyBtn.dataset.advKitCiv, 10) || 0;
         const totalPay = parseFloat(copyBtn.dataset.totalPay);
         
-        copyWeeklySummary(copyBtn, mechanic, weekEnd, acrossPD, acrossCiv, pdEngineReps, civEngineReps, enginePay, totalPay);
+        copyWeeklySummary(copyBtn, mechanic, weekEnd, acrossPD, acrossCiv, pdEngineReps, civEngineReps, enginePay, harnessPD, harnessCiv, advKitPD, advKitCiv, totalPay);
       }
     });
     // Event delegation for collapsible week group headers
