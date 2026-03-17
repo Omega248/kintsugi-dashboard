@@ -1160,6 +1160,8 @@ function updateMechanicSummary() {
   const totalRepairsEl = document.getElementById("mechSummaryTotalRepairs");
   const weeksWorkedEl = document.getElementById("mechSummaryWeeksWorked");
   const avgPerWeekEl = document.getElementById("mechSummaryAvgPerWeek");
+  const harnessEl = document.getElementById("mechSummaryHarness");
+  const advKitEl = document.getElementById("mechSummaryAdvKit");
   const totalPayoutEl = document.getElementById("mechSummaryTotalPayout");
   const lastJobEl = document.getElementById("mechSummaryLastJob");
 
@@ -1180,6 +1182,8 @@ function updateMechanicSummary() {
   let totalRepairs = 0;
   let totalEnginePay = 0;
   let totalHarnessKitPay = 0;
+  let totalHarness = 0;
+  let totalAdvKit = 0;
   const weekSet = new Set();
   let lastJob = null;
   mechanicLatestWeekISO = null;
@@ -1189,6 +1193,8 @@ function updateMechanicSummary() {
     totalRepairs += rep;
     totalEnginePay += j.enginePayForMechanic || 0;
     totalHarnessKitPay += j.harnessKitPay || 0;
+    totalHarness += (j.harnessPD || 0) + (j.harnessCiv || 0);
+    totalAdvKit += (j.advKitPD || 0) + (j.advKitCiv || 0);
 
     if (j.weekISO) {
       weekSet.add(j.weekISO);
@@ -1212,6 +1218,8 @@ function updateMechanicSummary() {
   if (totalRepairsEl) totalRepairsEl.textContent = totalRepairs.toLocaleString();
   if (weeksWorkedEl) weeksWorkedEl.textContent = String(weeksWorked);
   if (avgPerWeekEl) avgPerWeekEl.textContent = avgPerWeek.toFixed(1);
+  if (harnessEl) harnessEl.textContent = totalHarness > 0 ? String(totalHarness) : "0";
+  if (advKitEl) advKitEl.textContent = totalAdvKit > 0 ? String(totalAdvKit) : "0";
   if (totalPayoutEl) totalPayoutEl.textContent = kFmtMoney(totalPayout);
   if (lastJobEl) lastJobEl.textContent = lastJob ? kFmtDate(lastJob) : "—";
 

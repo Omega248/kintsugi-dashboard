@@ -357,7 +357,7 @@ function kValidateMechanicPayout(mechanic) {
     errors.push('Invalid total payout amount');
   }
   
-  if (mechanic.totalRepairs === 0 && mechanic.totalPayout > 0) {
+  if (mechanic.totalRepairs === 0 && mechanic.totalPayout > 0 && !mechanic.totalHarness && !mechanic.totalAdvKit) {
     errors.push('Payout without repairs');
   }
   
