@@ -327,6 +327,8 @@ function buildLatestWeekSummary(allJobs) {
     weekEndDate,
     totalRepairs:  latestWeek.totalRepairs,
     totalEngines:  latestWeek.engineReplacements,
+    totalHarness:  latestWeek.totalHarness || 0,
+    totalAdvKit:   latestWeek.totalAdvKit  || 0,
     totalPayout:   latestWeek.totalPayout,
     mechanicCount: mechMap.size,
     topMechanic,
@@ -342,7 +344,7 @@ function plural(n, word) {
 }
 
 function buildAnalyticsPayload(summary) {
-  const { weekEndDate, totalRepairs, totalEngines, totalPayout,
+  const { weekEndDate, totalRepairs, totalEngines, totalHarness, totalAdvKit, totalPayout,
           mechanicCount, topMechanic, topRepairs, mechanics } = summary;
 
   const fields = [
@@ -353,6 +355,12 @@ function buildAnalyticsPayload(summary) {
   ];
   if (totalEngines > 0) {
     fields.push({ name: '🔩 Engine Replacements', value: String(totalEngines), inline: true });
+  }
+  if ((totalHarness || 0) > 0) {
+    fields.push({ name: '🦺 Harness', value: String(totalHarness), inline: true });
+  }
+  if ((totalAdvKit || 0) > 0) {
+    fields.push({ name: '🔧 Repair Kits', value: String(totalAdvKit), inline: true });
   }
   if (topMechanic) {
     fields.push({
@@ -473,6 +481,8 @@ async function main() {
   console.log(`Week ending : ${fmtDate(summary.weekEndDate)}`);
   console.log(`Repairs     : ${summary.totalRepairs}`);
   console.log(`Mechanics   : ${summary.mechanicCount}`);
+  console.log(`Harness     : ${summary.totalHarness || 0}`);
+  console.log(`Repair kits : ${summary.totalAdvKit || 0}`);
   console.log(`Total payout: ${fmtMoney(summary.totalPayout)}`);
 
   const payload = buildAnalyticsPayload(summary);
