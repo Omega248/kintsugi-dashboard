@@ -37,10 +37,12 @@ const SHEET_ID   = '1EJxx9BAUyBgj9XImCXQ5_3nr_o5BXyLZ9SSkaww71Ks';
 const JOBS_SHEET = 'Form responses 1';
 
 // ===== Pay rates (mirrors constants.js) =====
-const PAY_PER_REPAIR       = 700;
-const ENGINE_REIMBURSEMENT = 12000;
-const ENGINE_BONUS_LSPD    = 1500;
-const ENGINE_PAY_DEFAULT   = ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD;
+const PAY_PER_REPAIR           = 700;
+const ENGINE_REIMBURSEMENT     = 12000;
+const ENGINE_BONUS_LSPD        = 1500;
+const ENGINE_PAY_DEFAULT       = ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD;
+const HARNESS_RATE             = 500;
+const ADVANCED_REPAIR_KIT_RATE = 500;
 
 // Max mechanics to list in the embed field (Discord field value ≤ 1 024 chars)
 const DISCORD_MAX_MECHANICS   = 10;
@@ -149,6 +151,12 @@ function parseJobsSheet(rows) {
     ? lower.findIndex((h, i) => i > iEnginePD && h.includes('engine') && h.includes('replacement'))
     : -1;
   const iDept = lower.findIndex(h => h.includes('department') || h.includes('dept'));
+  // Harness columns: "Harness (PD)" and "Harness (CIV)"
+  const iHarnessPD  = lower.findIndex(h => h.includes('harness') && h.includes('pd'));
+  const iHarnessCiv = lower.findIndex(h => h.includes('harness') && !h.includes('pd'));
+  // Advanced Repair Kit columns: "Advanced Repair Kits (PD)" and "Advanced Repair Kits (CIV)"
+  const iAdvKitPD  = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && h.includes('pd'));
+  const iAdvKitCiv = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && !h.includes('pd'));
   if (iMech === -1 || (iAcrossPD === -1 && iAcrossCiv === -1)) return [];
   const jobs = [];
   for (let i = 1; i < rows.length; i++) {
@@ -159,7 +167,6 @@ function parseJobsSheet(rows) {
     const acrossPD  = iAcrossPD  !== -1 ? (parseInt(row[iAcrossPD]  || '0', 10) || 0) : 0;
     const acrossCiv = iAcrossCiv !== -1 ? (parseInt(row[iAcrossCiv] || '0', 10) || 0) : 0;
     const across = acrossPD + acrossCiv;
-    if (!across) continue;
     let pdEngineCount = 0;
     if (iEnginePD !== -1) {
       const raw = (row[iEnginePD] || '').trim();
@@ -175,6 +182,13 @@ function parseJobsSheet(rows) {
       else if (/^(yes|y|true)$/i.test(raw)) { civEngineCount = 1; }
     }
     const engineCount = pdEngineCount + civEngineCount;
+    const harnessPD  = iHarnessPD  !== -1 ? (parseInt(row[iHarnessPD]  || '0', 10) || 0) : 0;
+    const harnessCiv = iHarnessCiv !== -1 ? (parseInt(row[iHarnessCiv] || '0', 10) || 0) : 0;
+    const advKitPD   = iAdvKitPD   !== -1 ? (parseInt(row[iAdvKitPD]   || '0', 10) || 0) : 0;
+    const advKitCiv  = iAdvKitCiv  !== -1 ? (parseInt(row[iAdvKitCiv]  || '0', 10) || 0) : 0;
+    const totalHarness = harnessPD + harnessCiv;
+    const totalAdvKit  = advKitPD  + advKitCiv;
+    if (!across && !engineCount && !totalHarness && !totalAdvKit) continue;
     const dept     = iDept !== -1 ? (row[iDept] || '').trim() : '';
     const tsDate   = iTime  !== -1 ? parseDateLike(row[iTime])  : null;
     const weekEnd  = iWeek  !== -1 ? parseDateLike(row[iWeek])  : null;
@@ -182,6 +196,7 @@ function parseJobsSheet(rows) {
     const bestDate = tsDate || weekEnd || monthEnd;
     jobs.push({ mechanic: mech, across, acrossPD, acrossCiv,
                 engineReplacements: engineCount, pdEngineCount, civEngineCount,
+                harnessPD, harnessCiv, advKitPD, advKitCiv,
                 department: dept, tsDate, weekEnd, monthEnd, bestDate });
   }
   return jobs;
@@ -228,7 +243,7 @@ function buildWeeklyStats(jobs) {
     }
     let rec = weekMap.get(weekKey);
     if (!rec) {
-      rec = { weekKey, weekEndDate, totalRepairs: 0, engineReplacements: 0, enginePayTotal: 0 };
+      rec = { weekKey, weekEndDate, totalRepairs: 0, engineReplacements: 0, enginePayTotal: 0, totalHarness: 0, totalAdvKit: 0, harnessKitPayTotal: 0 };
       weekMap.set(weekKey, rec);
     }
     rec.totalRepairs       += j.across || 0;
@@ -239,6 +254,12 @@ function buildWeeklyStats(jobs) {
     const isLspd = (j.department || '').toUpperCase() === 'LSPD';
     rec.enginePayTotal     += j.pdEngineCount * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0))
                             + j.civEngineCount * ENGINE_REIMBURSEMENT; // CIV engines: reimbursement only
+    // Harness and Advanced Repair Kit pay
+    const totalHarness = (j.harnessPD || 0) + (j.harnessCiv || 0);
+    const totalAdvKit  = (j.advKitPD  || 0) + (j.advKitCiv  || 0);
+    rec.totalHarness       += totalHarness;
+    rec.totalAdvKit        += totalAdvKit;
+    rec.harnessKitPayTotal += totalHarness * HARNESS_RATE + totalAdvKit * ADVANCED_REPAIR_KIT_RATE;
   }
   const weeks = Array.from(weekMap.values());
   weeks.sort((a, b) => {
@@ -246,7 +267,7 @@ function buildWeeklyStats(jobs) {
     return b.weekKey.localeCompare(a.weekKey);
   });
   for (const w of weeks) {
-    w.totalPayout = w.totalRepairs * PAY_PER_REPAIR + (w.enginePayTotal || 0);
+    w.totalPayout = w.totalRepairs * PAY_PER_REPAIR + (w.enginePayTotal || 0) + (w.harnessKitPayTotal || 0);
   }
   return weeks;
 }
@@ -274,6 +295,8 @@ function buildCurrentWeekSummary(allJobs) {
     weekEndDate:   currentSunday,
     totalRepairs:  weekStats ? weekStats.totalRepairs        : 0,
     totalEngines:  weekStats ? weekStats.engineReplacements  : 0,
+    totalHarness:  weekStats ? weekStats.totalHarness        : 0,
+    totalAdvKit:   weekStats ? weekStats.totalAdvKit         : 0,
     totalPayout:   weekStats ? weekStats.totalPayout         : 0,
     mechanicCount: mechMap.size,
     topMechanic,

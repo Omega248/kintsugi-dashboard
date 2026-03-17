@@ -10,6 +10,8 @@ const ENGINE_REIMBURSEMENT    = PAYMENT_RATES.ENGINE_REIMBURSEMENT;
 const ENGINE_BONUS_LSPD       = PAYMENT_RATES.ENGINE_BONUS_LSPD;
 const HARNESS_RATE            = PAYMENT_RATES.HARNESS_RATE;
 const ADVANCED_REPAIR_KIT_RATE = PAYMENT_RATES.ADVANCED_REPAIR_KIT_RATE;
+const HARNESS_BILLING_RATE    = PAYMENT_RATES.HARNESS_BILLING_RATE;
+const ADVANCED_REPAIR_KIT_BILLING_RATE = PAYMENT_RATES.ADVANCED_REPAIR_KIT_BILLING_RATE;
 
 // ===== State =====
 let weeklyAgg = [];   // mechanic-week aggregates
@@ -708,7 +710,7 @@ function renderWeekly() {
 
   if (!filtered.length) {
     weeklyBody.innerHTML =
-      '<tr><td colspan="7" style="padding:8px; color:#6b7280;">No weekly records for this selection.</td></tr>';
+      '<tr><td colspan="9" style="padding:8px; color:#6b7280;">No weekly records for this selection.</td></tr>';
     if (weeklySummaryEl) weeklySummaryEl.textContent = "";
     return;
   }
@@ -749,7 +751,7 @@ function renderWeekly() {
     headerRow.dataset.groupId = groupId;
 
     const headerTd = document.createElement("td");
-    headerTd.colSpan = 7;
+    headerTd.colSpan = 9;
 
     const toggleBtn = document.createElement("button");
     toggleBtn.className = "week-group-toggle";
@@ -793,6 +795,8 @@ function renderWeekly() {
         </td>
         <td class="col-count">${r.repairs}</td>
         <td class="col-count">${totalEngineReps > 0 ? totalEngineReps : 0}</td>
+        <td class="col-count">${(r.harnessPD || 0) + (r.harnessCiv || 0)}</td>
+        <td class="col-count">${(r.advKitPD || 0) + (r.advKitCiv || 0)}</td>
         <td class="col-actions">
           <button class="btn btn-copy-summary" 
                   title="Copy payout summary to clipboard"
@@ -860,6 +864,11 @@ function renderMonthly() {
       civEngineReplacements: 0,
       engineReplacementsByDept: {},
       enginePayAccumulated: 0,
+      harnessPD: 0,
+      harnessCiv: 0,
+      advKitPD: 0,
+      advKitCiv: 0,
+      harnessKitBillingAccumulated: 0,
     };
     mAgg.repairs += j.across;
     mAgg.acrossPD += j.acrossPD || 0;
@@ -867,6 +876,13 @@ function renderMonthly() {
     mAgg.engineReplacements += j.engineReplacements;
     mAgg.civEngineReplacements += j.civEngineReplacements || 0;
     mAgg.enginePayAccumulated += j.enginePayForMechanic || 0;
+    mAgg.harnessPD += j.harnessPD || 0;
+    mAgg.harnessCiv += j.harnessCiv || 0;
+    mAgg.advKitPD += j.advKitPD || 0;
+    mAgg.advKitCiv += j.advKitCiv || 0;
+    mAgg.harnessKitBillingAccumulated +=
+      ((j.harnessPD || 0) + (j.harnessCiv || 0)) * HARNESS_BILLING_RATE +
+      ((j.advKitPD || 0) + (j.advKitCiv || 0)) * ADVANCED_REPAIR_KIT_BILLING_RATE;
     if (j.engineReplacements > 0 && j.department) {
       mAgg.engineReplacementsByDept[j.department] = 
         (mAgg.engineReplacementsByDept[j.department] || 0) + j.engineReplacements;
@@ -878,7 +894,7 @@ function renderMonthly() {
 
   if (!rows.length) {
     monthlyBody.innerHTML =
-      '<tr><td colspan="4" style="padding:8px; color:#6b7280;">No monthly records for this selection.</td></tr>';
+      '<tr><td colspan="6" style="padding:8px; color:#6b7280;">No monthly records for this selection.</td></tr>';
     if (headerCell) {
       headerCell.textContent = "Total Repair Value ($2,500/repair)";
     }
@@ -910,7 +926,7 @@ function renderMonthly() {
     let yearRepairs = 0;
     yearRows.forEach((r) => {
       const engineValue = calculateEngineValue(r.engineReplacementsByDept || {});
-      const totalValue = r.repairs * REPAIR_RATE + engineValue;
+      const totalValue = r.repairs * REPAIR_RATE + engineValue + (r.harnessKitBillingAccumulated || 0);
       yearTotal += totalValue;
       yearRepairs += r.repairs;
     });
@@ -924,7 +940,7 @@ function renderMonthly() {
     headerRow.dataset.groupId = groupId;
 
     const headerTd = document.createElement("td");
-    headerTd.colSpan = 4;
+    headerTd.colSpan = 6;
 
     const toggleBtn = document.createElement("button");
     toggleBtn.className = "week-group-toggle";
@@ -951,7 +967,9 @@ function renderMonthly() {
       const civEngineReps = r.civEngineReplacements || 0;
       const totalEngineReps = pdEngineReps + civEngineReps;
       const engineValue = calculateEngineValue(r.engineReplacementsByDept || {});
-      const totalValue = r.repairs * REPAIR_RATE + engineValue;
+      const totalValue = r.repairs * REPAIR_RATE + engineValue + (r.harnessKitBillingAccumulated || 0);
+      const totalHarnessCount = (r.harnessPD || 0) + (r.harnessCiv || 0);
+      const totalAdvKitCount = (r.advKitPD || 0) + (r.advKitCiv || 0);
 
       const acrossPD = r.acrossPD || 0;
       const acrossCiv = r.acrossCiv || 0;
@@ -966,6 +984,8 @@ function renderMonthly() {
         <td>${kFmtDate(r.monthEnd)}</td>
         <td class="col-count">${repairsLabel}</td>
         <td class="col-count">${totalEngineReps}</td>
+        <td class="col-count">${totalHarnessCount}</td>
+        <td class="col-count">${totalAdvKitCount}</td>
         <td class="col-amount amount-in">${kFmtMoney(totalValue)}</td>
       `;
       fragment.appendChild(tr);
@@ -1023,7 +1043,7 @@ function renderJobs() {
 
   if (!rows.length) {
     jobsBody.innerHTML =
-      '<tr><td colspan="10" style="padding:8px; color:#6b7280;">No jobs for this selection.</td></tr>';
+      '<tr><td colspan="12" style="padding:8px; color:#6b7280;">No jobs for this selection.</td></tr>';
     return;
   }
 
@@ -1058,7 +1078,9 @@ function renderJobs() {
       const pdEngineReps = j.engineReplacements || 0;
       const engineRate = (j.department === "BCSO" && pdEngineReps > 0) ?
         ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
-      monthTotal += j.across * REPAIR_RATE + pdEngineReps * engineRate;
+      monthTotal += j.across * REPAIR_RATE + pdEngineReps * engineRate
+        + ((j.harnessPD || 0) + (j.harnessCiv || 0)) * HARNESS_BILLING_RATE
+        + ((j.advKitPD || 0) + (j.advKitCiv || 0)) * ADVANCED_REPAIR_KIT_BILLING_RATE;
     });
 
     const groupId = `jg-${++groupCounter}`;
@@ -1069,7 +1091,7 @@ function renderJobs() {
     headerRow.dataset.groupId = groupId;
 
     const headerTd = document.createElement("td");
-    headerTd.colSpan = 10;
+    headerTd.colSpan = 12;
 
     const toggleBtn = document.createElement("button");
     toggleBtn.className = "week-group-toggle";
@@ -1098,8 +1120,12 @@ function renderJobs() {
       // Use BCSO rate for BCSO engine replacements, standard rate for others
       const engineRate = (j.department === "BCSO" && pdEngineReps > 0) ?
         ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
+      const totalHarnessCount = (j.harnessPD || 0) + (j.harnessCiv || 0);
+      const totalAdvKitCount = (j.advKitPD || 0) + (j.advKitCiv || 0);
       const totalValue =
-        j.across * REPAIR_RATE + pdEngineReps * engineRate;
+        j.across * REPAIR_RATE + pdEngineReps * engineRate
+        + totalHarnessCount * HARNESS_BILLING_RATE
+        + totalAdvKitCount * ADVANCED_REPAIR_KIT_BILLING_RATE;
 
       const mechLabel = j.mechanic; // keep Jobs view as raw mechanic name
 
@@ -1114,6 +1140,8 @@ function renderJobs() {
         <td class="col-count">${j.acrossPD || 0}</td>
         <td class="col-count">${j.acrossCiv || 0}</td>
         <td class="col-count">${pdEngineLabel}${civEngineReps > 0 ? ` / ${civEngineReps} CIV` : ""}</td>
+        <td class="col-count">${totalHarnessCount}</td>
+        <td class="col-count">${totalAdvKitCount}</td>
         <td>${kFmtDate(j.weekEnd)}</td>
         <td>${kFmtDate(j.monthEnd)}</td>
         <td class="col-amount amount-in">${kFmtMoney(totalValue)}</td>
@@ -1325,7 +1353,9 @@ function exportCurrentViewCsv() {
         "PD Repairs": r.acrossPD,
         "CIV Repairs": r.acrossCiv,
         "# Total Repairs": r.repairs,
-        [`Pay ($${PAY_PER_REPAIR}/repair + engines)`]: pay,
+        "Harness": (r.harnessPD || 0) + (r.harnessCiv || 0),
+        "Repair Kits": (r.advKitPD || 0) + (r.advKitCiv || 0),
+        [`Pay ($${PAY_PER_REPAIR}/repair + engines + items)`]: pay,
         Comment: comment,
       };
     });
@@ -1336,7 +1366,9 @@ function exportCurrentViewCsv() {
       "PD Repairs",
       "CIV Repairs",
       "# Total Repairs",
-      `Pay ($${PAY_PER_REPAIR}/repair + engines)`,
+      "Harness",
+      "Repair Kits",
+      `Pay ($${PAY_PER_REPAIR}/repair + engines + items)`,
       "Comment",
     ];
     kDownloadCsv("payouts_weekly_filtered.csv", kToCsv(cols, rows));
@@ -1362,12 +1394,24 @@ function exportCurrentViewCsv() {
         engineReplacements: 0,
         civEngineReplacements: 0,
         engineReplacementsByDept: {},
+        harnessPD: 0,
+        harnessCiv: 0,
+        advKitPD: 0,
+        advKitCiv: 0,
+        harnessKitBillingAccumulated: 0,
       };
       mAgg.repairs += j.across;
       mAgg.acrossPD += j.acrossPD || 0;
       mAgg.acrossCiv += j.acrossCiv || 0;
       mAgg.engineReplacements += j.engineReplacements;
       mAgg.civEngineReplacements += j.civEngineReplacements || 0;
+      mAgg.harnessPD += j.harnessPD || 0;
+      mAgg.harnessCiv += j.harnessCiv || 0;
+      mAgg.advKitPD += j.advKitPD || 0;
+      mAgg.advKitCiv += j.advKitCiv || 0;
+      mAgg.harnessKitBillingAccumulated +=
+        ((j.harnessPD || 0) + (j.harnessCiv || 0)) * HARNESS_BILLING_RATE +
+        ((j.advKitPD || 0) + (j.advKitCiv || 0)) * ADVANCED_REPAIR_KIT_BILLING_RATE;
       if (j.engineReplacements > 0 && j.department) {
         mAgg.engineReplacementsByDept[j.department] = 
           (mAgg.engineReplacementsByDept[j.department] || 0) + j.engineReplacements;
@@ -1382,7 +1426,7 @@ function exportCurrentViewCsv() {
       const pdEngineReps = r.engineReplacements || 0;
       const civEngineReps = r.civEngineReplacements || 0;
       const engineValue = calculateEngineValue(r.engineReplacementsByDept || {});
-      const totalValue = r.repairs * REPAIR_RATE + engineValue;
+      const totalValue = r.repairs * REPAIR_RATE + engineValue + (r.harnessKitBillingAccumulated || 0);
       return {
         "Month Ending": kFmtDate(r.monthEnd),
         "PD Repairs": r.acrossPD,
@@ -1390,6 +1434,8 @@ function exportCurrentViewCsv() {
         "Total Repairs (Across)": r.repairs,
         "PD Engine Replacements": pdEngineReps,
         "CIV Engine Replacements": civEngineReps,
+        "Harness": (r.harnessPD || 0) + (r.harnessCiv || 0),
+        "Repair Kits": (r.advKitPD || 0) + (r.advKitCiv || 0),
         "Total Repair Value": totalValue,
       };
     });
@@ -1401,6 +1447,8 @@ function exportCurrentViewCsv() {
       "Total Repairs (Across)",
       "PD Engine Replacements",
       "CIV Engine Replacements",
+      "Harness",
+      "Repair Kits",
       "Total Repair Value",
     ];
     kDownloadCsv("payouts_monthly_filtered.csv", kToCsv(cols, mapped));
@@ -1458,7 +1506,11 @@ function exportCurrentViewCsv() {
       // Use BCSO rate for BCSO, standard rate for others
       const engineRate = (j.department === "BCSO" && pdEngineReps > 0) ? 
                          ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
-      const totalValue = j.across * REPAIR_RATE + pdEngineReps * engineRate;
+      const totalHarnessCount = (j.harnessPD || 0) + (j.harnessCiv || 0);
+      const totalAdvKitCount = (j.advKitPD || 0) + (j.advKitCiv || 0);
+      const totalValue = j.across * REPAIR_RATE + pdEngineReps * engineRate
+        + totalHarnessCount * HARNESS_BILLING_RATE
+        + totalAdvKitCount * ADVANCED_REPAIR_KIT_BILLING_RATE;
       return {
         Timestamp: j.tsDate ? kFmtDate(j.tsDate) : "",
         Mechanic: j.mechanic,
@@ -1469,6 +1521,8 @@ function exportCurrentViewCsv() {
         "Total Repairs": j.across,
         "PD Engine Replacement": pdEngineLabel,
         "CIV Engine Replacement": civEngineLabel,
+        "Harness": totalHarnessCount,
+        "Repair Kits": totalAdvKitCount,
         "Week Ending": kFmtDate(j.weekEnd),
         "Month Ending": kFmtDate(j.monthEnd),
         "Total Value": totalValue,
@@ -1485,6 +1539,8 @@ function exportCurrentViewCsv() {
       "Total Repairs",
       "PD Engine Replacement",
       "CIV Engine Replacement",
+      "Harness",
+      "Repair Kits",
       "Week Ending",
       "Month Ending",
       "Total Value",
@@ -2001,14 +2057,19 @@ document.addEventListener("DOMContentLoaded", () => {
       // Calculate totals
       const totalRepairs = mechanicData.reduce((sum, w) => sum + w.repairs, 0);
       const totalEngines = mechanicData.reduce((sum, w) => sum + w.engineReplacements, 0);
-      
+      const totalHarness = mechanicData.reduce((sum, w) => sum + (w.harnessPD || 0) + (w.harnessCiv || 0), 0);
+      const totalAdvKit  = mechanicData.reduce((sum, w) => sum + (w.advKitPD || 0) + (w.advKitCiv || 0), 0);
+
       // Calculate total engine pay using pre-computed accumulated values
       let totalEnginePay = 0;
       mechanicData.forEach(w => {
         totalEnginePay += w.enginePayAccumulated || 0;
       });
-      
-      const totalPayout = totalRepairs * PAY_PER_REPAIR + totalEnginePay;
+
+      // Calculate harness/kit mechanic pay
+      const totalHarnessKitPay = totalHarness * HARNESS_RATE + totalAdvKit * ADVANCED_REPAIR_KIT_RATE;
+
+      const totalPayout = totalRepairs * PAY_PER_REPAIR + totalEnginePay + totalHarnessKitPay;
       const stateId = stateIdByMechanic.get(mech) || "";
       
       // Get date range
@@ -2028,6 +2089,9 @@ document.addEventListener("DOMContentLoaded", () => {
         stateId: stateId,
         totalRepairs: totalRepairs,
         engineReplacements: totalEngines,
+        totalHarness: totalHarness,
+        totalAdvKit: totalAdvKit,
+        harnessKitPay: totalHarnessKitPay,
         totalPayout: totalPayout
       }, {
         startDate: startDate,
