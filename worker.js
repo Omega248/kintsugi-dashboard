@@ -507,9 +507,11 @@ function parseJobsSheet(rows) {
   // Harness columns: "Harness (PD)" and "Harness (CIV)"
   const iHarnessPD  = lower.findIndex(h => h.includes('harness') && h.includes('pd'));
   const iHarnessCiv = lower.findIndex(h => h.includes('harness') && !h.includes('pd'));
-  // Advanced Repair Kit columns: "Advanced Repair Kits (PD)" and "Advanced Repair Kits (CIV)"
-  const iAdvKitPD  = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && h.includes('pd'));
-  const iAdvKitCiv = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && !h.includes('pd'));
+  // Advanced Repair Kit columns: primary "advanced"+"kit", fallback "repair"+"kit"
+  let iAdvKitPD  = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && h.includes('pd'));
+  let iAdvKitCiv = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && !h.includes('pd'));
+  if (iAdvKitPD  === -1) iAdvKitPD  = lower.findIndex((h) => h.includes('repair') && h.includes('kit') && h.includes('pd'));
+  if (iAdvKitCiv === -1) iAdvKitCiv = lower.findIndex((h, i) => i !== iAdvKitPD && h.includes('repair') && h.includes('kit') && !h.includes('pd'));
 
   if (iMech === -1 || iAcross === -1) return [];
 
@@ -1495,7 +1497,9 @@ async function handleAskCommand(interaction, env, ctx) {
   const { application_id: appId, token } = interaction;
   const question  = (interaction.data?.options?.find(o => o.name === 'question')?.value ?? '').trim();
   const channelId = interaction.channel_id ?? null;
-  const asker     = (interaction.member?.user ?? interaction.user)?.username ?? null;
+  const askerMember = interaction.member ?? null;
+  const askerUser   = askerMember?.user ?? interaction.user ?? null;
+  const asker       = askerMember?.nick || askerUser?.global_name || (askerUser?.username ? resolveUsername(askerUser.username) : null);
 
   ctx.waitUntil((async () => {
     let answer;
@@ -1517,11 +1521,14 @@ async function handleAskCommand(interaction, env, ctx) {
       const messages = [{ role: 'system', content: systemContent }];
 
       // Include recent non-bot messages as conversation context.
-      // Resolve Discord usernames to in-character names so the AI can reference staff correctly.
+      // Use server nickname when available, falling back to display name or resolved username.
       const contextLines = channelMsgs
         .filter(m => !m.author?.bot)
         .slice(-8)
-        .map(m => `${resolveUsername(m.author?.username)}: ${m.content}`)
+        .map(m => {
+          const displayName = m.member?.nick || m.author?.global_name || resolveUsername(m.author?.username);
+          return `${displayName}: ${m.content}`;
+        })
         .join('\n');
 
       if (contextLines) {
@@ -1549,7 +1556,7 @@ async function handleAskCommand(interaction, env, ctx) {
     }
 
     // Prefix shows who asked and what they asked so the public reply has context.
-    const askerName = asker ? resolveUsername(asker) : null;
+    const askerName = asker ?? null;
     const prefix = askerName
       ? `**${askerName}** asked: *${(question || '…').slice(0, MAX_QUESTION_PREVIEW_LENGTH)}${question.length > MAX_QUESTION_PREVIEW_LENGTH ? '…' : ''}*\n\n`
       : '';
@@ -3351,11 +3358,14 @@ export class DiscordGateway {
       const messages = [{ role: 'system', content: systemContent }];
 
       // Include recent non-bot messages as conversation context.
-      // Resolve Discord usernames to in-character names so the AI can reference staff correctly.
+      // Use server nickname when available, falling back to display name or resolved username.
       const contextLines = channelMsgs
         .filter(m => !m.author?.bot)
         .slice(-8)
-        .map(m => `${resolveUsername(m.author?.username)}: ${m.content}`)
+        .map(m => {
+          const displayName = m.member?.nick || m.author?.global_name || resolveUsername(m.author?.username);
+          return `${displayName}: ${m.content}`;
+        })
         .join('\n');
 
       if (contextLines) {
