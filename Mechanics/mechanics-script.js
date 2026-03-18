@@ -263,6 +263,7 @@ function mechBuildStats(sourceJobs) {
       rec = {
         mechanic: mech,
         totalRepairs: 0,
+        totalEnginePay: 0,
         totalHarnessKitPay: 0,
         weeksWorkedSet: new Set(),
         monthsActiveSet: new Set(),
@@ -275,6 +276,11 @@ function mechBuildStats(sourceJobs) {
     const across = j.across || 0;
     rec.totalRepairs += across;
     rec.totalHarnessKitPay += j.harnessKitPay || 0;
+
+    // Compute engine pay for this job (matches mechBuildWeeklyStats logic)
+    const isLspd = (j.department || "").toUpperCase() === "LSPD";
+    rec.totalEnginePay += mechCalculateEngineValue(j.engineReplacements || 0, isLspd, j.enginePayer || "")
+                        + mechCalculateEngineValue(j.civEngineReplacements || 0, false, j.enginePayer || "");
 
     // choose best valid date for this job
     const d = j.bestDate;
@@ -303,7 +309,9 @@ function mechBuildStats(sourceJobs) {
     const weeksCount = rec.weeksWorkedSet.size;
     const monthsCount = rec.monthsActiveSet.size;
     const avgPerWeek = weeksCount ? rec.totalRepairs / weeksCount : 0;
-    const totalPayout = rec.totalRepairs * MECH_PAY_PER_REPAIR + (rec.totalHarnessKitPay || 0);
+    const totalPayout = rec.totalRepairs * MECH_PAY_PER_REPAIR
+                      + (rec.totalEnginePay || 0)
+                      + (rec.totalHarnessKitPay || 0);
 
     stats.push({
       mechanic: rec.mechanic,
