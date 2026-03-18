@@ -53,7 +53,7 @@ async function loadOverview() {
 
     // Engine payer column — detect FIRST so it can be excluded from the engine
     // replacement column searches (codebase convention).
-    const iEnginePayer = headersLower.findIndex(
+    let iEnginePayer = headersLower.findIndex(
       (h) => h.includes("did you buy") || (h.includes("kintsugi") && h.includes("pay"))
     );
     // PD engine replacement: first "engine replacement" column, excluding payer column
@@ -83,6 +83,26 @@ async function loadOverview() {
     let iAdvKitCiv = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && !h.includes("pd"));
     if (iAdvKitPD  === -1) iAdvKitPD  = headersLower.findIndex((h) => h.includes("repair") && h.includes("kit") && h.includes("pd"));
     if (iAdvKitCiv === -1) iAdvKitCiv = headersLower.findIndex((h, i) => i !== iAdvKitPD && h.includes("repair") && h.includes("kit") && !h.includes("pd"));
+
+    // Fallback: if header detection failed, scan data rows to find the engine payer column
+    // by cell values (handles generic headers like "Column 8").
+    if (iEnginePayer === -1) {
+      const knownCols = new Set(
+        [iMech, iTs, iAcrossPD, iAcrossCiv, iEnginePD, iEngineCiv,
+          iDept, iHarnessPD, iHarnessCiv, iAdvKitPD, iAdvKitCiv, iWeek]
+          .filter(i => i !== -1)
+      );
+      for (let col = 0; col < headers.length && iEnginePayer === -1; col++) {
+        if (knownCols.has(col)) continue;
+        for (let r = 1; r < Math.min(rawData.length, 11); r++) {
+          const cell = (rawData[r][col] || "").trim().toLowerCase();
+          if (cell && (cell.includes("kintsugi") || /i bought|bought it|myself/i.test(cell))) {
+            iEnginePayer = col;
+            break;
+          }
+        }
+      }
+    }
 
     const rows = rawData.slice(1);
 
@@ -164,7 +184,13 @@ async function loadOverview() {
             enginePay += pdEngineCount * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
           }
         }
-        enginePay += civEngineCount * ENGINE_REIMBURSEMENT;
+        if (civEngineCount > 0) {
+          if (enginePayer !== "kintsugi") {
+            // Mechanic paid or old data — full $12,000 reimbursement
+            enginePay += civEngineCount * ENGINE_REIMBURSEMENT;
+          }
+          // kintsugi paid CIV engine — mechanic is not reimbursed
+        }
       }
       totalEnginePay += enginePay;
 
