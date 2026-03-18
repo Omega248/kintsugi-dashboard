@@ -43,7 +43,8 @@ const STATE_IDS_SHEET = "State ID's";
 const PAY_PER_REPAIR       = 700;
 const ENGINE_REIMBURSEMENT = 12000;
 const ENGINE_BONUS_LSPD    = 1500;
-const ENGINE_PAY_DEFAULT   = ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD;
+const HARNESS_RATE             = 500;
+const ADVANCED_REPAIR_KIT_RATE = 500;
 
 // ===== CSV fetch + parse =====
 
@@ -135,7 +136,9 @@ function fmtMoney(n) {
  *   enginePayer === "kintsugi"  → kintsugi covered cost, mechanic gets $1,500 bonus only if LSPD
  *   enginePayer === ""          → old data, fall back to dept-based defaults
  *
- * CIV engines: $12,000 reimbursement only (no bonus, payer irrelevant)
+ * CIV engines:
+ *   enginePayer === "mechanic" or "" → $12,000 reimbursement (mechanic paid / old data)
+ *   enginePayer === "kintsugi"       → $0 (kintsugi paid, mechanic is not reimbursed)
  */
 function computeEnginePay(pdEngineCount, dept, enginePayer, civEngineCount) {
   let pay = 0;
@@ -150,7 +153,14 @@ function computeEnginePay(pdEngineCount, dept, enginePayer, civEngineCount) {
       pay += pdEngineCount * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
     }
   }
-  pay += (civEngineCount || 0) * ENGINE_REIMBURSEMENT;
+  if ((civEngineCount || 0) > 0) {
+    if (enginePayer === 'kintsugi') {
+      // Kintsugi paid for the CIV engine — mechanic is not reimbursed
+    } else {
+      // Mechanic paid ('mechanic') or old data ('') — full $12,000 reimbursement
+      pay += civEngineCount * ENGINE_REIMBURSEMENT;
+    }
+  }
   return pay;
 }
 
@@ -161,7 +171,10 @@ function parseJobsSheet(rows) {
   const headers = rows[0].map(h => (h || '').trim());
   const lower   = headers.map(h => h.toLowerCase());
   const iMech   = lower.findIndex(h => h.includes('mechanic'));
-  const iAcross = lower.findIndex(h => h.includes('across') || h.includes('repairs'));
+  // "How many Across PD?" — PD repairs (contains "across" and "pd")
+  const iAcrossPD  = lower.findIndex(h => h.includes('across') && h.includes('pd'));
+  // "How many Across" (CIV) — civilian repairs (contains "across" but NOT "pd")
+  const iAcrossCiv = lower.findIndex(h => h.includes('across') && !h.includes('pd'));
   const iTime   = lower.findIndex(h => h.includes('timestamp'));
   const iWeek   = lower.findIndex(h => h.includes('week') && h.includes('end'));
   const iDept   = lower.findIndex(h => h.includes('department') || h.includes('dept'));
@@ -182,15 +195,25 @@ function parseJobsSheet(rows) {
         )
       : -1;
 
-  if (iMech === -1 || iAcross === -1) return [];
+  // Harness columns: "Harness (PD)" and "Harness (CIV)"
+  const iHarnessPD  = lower.findIndex(h => h.includes('harness') && h.includes('pd'));
+  const iHarnessCiv = lower.findIndex(h => h.includes('harness') && !h.includes('pd'));
+  // Advanced Repair Kit columns: primary "advanced"+"kit", fallback "repair"+"kit"
+  let iAdvKitPD  = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && h.includes('pd'));
+  let iAdvKitCiv = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && !h.includes('pd'));
+  if (iAdvKitPD  === -1) iAdvKitPD  = lower.findIndex(h => h.includes('repair') && h.includes('kit') && h.includes('pd'));
+  if (iAdvKitCiv === -1) iAdvKitCiv = lower.findIndex((h, i) => i !== iAdvKitPD && h.includes('repair') && h.includes('kit') && !h.includes('pd'));
+
+  if (iMech === -1 || (iAcrossPD === -1 && iAcrossCiv === -1)) return [];
   const jobs = [];
   for (let i = 1; i < rows.length; i++) {
     const row  = rows[i];
     if (!row || !row.length) continue;
     const mech = (row[iMech] || '').trim();
     if (!mech) continue;
-    const across = parseInt(row[iAcross] || '0', 10) || 0;
-    if (!across) continue;
+    const acrossPD  = iAcrossPD  !== -1 ? (parseInt(row[iAcrossPD]  || '0', 10) || 0) : 0;
+    const acrossCiv = iAcrossCiv !== -1 ? (parseInt(row[iAcrossCiv] || '0', 10) || 0) : 0;
+    const across = acrossPD + acrossCiv;
 
     let pdEngineCount = 0;
     if (iEnginePD !== -1) {
@@ -208,10 +231,10 @@ function parseJobsSheet(rows) {
       else if (/^(yes|y|true)$/i.test(raw)) { civEngineCount = 1; }
     }
 
-    // Determine who purchased the PD engine replacement
+    // Determine who purchased the engine replacement (applies to both PD and CIV)
     // "mechanic" = mechanic bought it; "kintsugi" = kintsugi bought it; "" = old data
     let enginePayer = '';
-    if (iEnginePayer !== -1 && pdEngineCount > 0) {
+    if (iEnginePayer !== -1 && (pdEngineCount > 0 || civEngineCount > 0)) {
       const rawPayer = (row[iEnginePayer] || '').trim().toLowerCase();
       if (rawPayer.includes('kintsugi')) {
         enginePayer = 'kintsugi';
@@ -220,6 +243,16 @@ function parseJobsSheet(rows) {
       }
     }
 
+    const harnessPD  = iHarnessPD  !== -1 ? (parseInt(row[iHarnessPD]  || '0', 10) || 0) : 0;
+    const harnessCiv = iHarnessCiv !== -1 ? (parseInt(row[iHarnessCiv] || '0', 10) || 0) : 0;
+    const advKitPD   = iAdvKitPD   !== -1 ? (parseInt(row[iAdvKitPD]   || '0', 10) || 0) : 0;
+    const advKitCiv  = iAdvKitCiv  !== -1 ? (parseInt(row[iAdvKitCiv]  || '0', 10) || 0) : 0;
+    const totalHarness = harnessPD + harnessCiv;
+    const totalAdvKit  = advKitPD  + advKitCiv;
+    const engineCount  = pdEngineCount + civEngineCount;
+
+    if (!across && !engineCount && !totalHarness && !totalAdvKit) continue;
+
     const dept     = iDept !== -1 ? (row[iDept] || '').trim() : '';
     const tsDate   = iTime !== -1 ? parseDateLike(row[iTime])  : null;
     const weekEnd  = iWeek !== -1 ? parseDateLike(row[iWeek])  : null;
@@ -227,10 +260,16 @@ function parseJobsSheet(rows) {
     jobs.push({
       mechanic:           mech,
       across,
-      engineReplacements: pdEngineCount + civEngineCount,
+      acrossPD,
+      acrossCiv,
+      engineReplacements: engineCount,
       pdEngineCount,
       civEngineCount,
       enginePayer,
+      harnessPD,
+      harnessCiv,
+      advKitPD,
+      advKitCiv,
       department:         dept,
       weekEnd,
       bestDate,
@@ -304,15 +343,30 @@ function buildPayload(weekEndDate, payouts) {
     if (m.engineReplacements > 0) {
       line += `, ${m.engineReplacements} engine replacement${m.engineReplacements !== 1 ? 's' : ''}`;
     }
+    if ((m.harness || 0) > 0) {
+      line += `, ${m.harness} harness${m.harness !== 1 ? 'es' : ''}`;
+    }
+    if ((m.advKit || 0) > 0) {
+      line += `, ${m.advKit} kit${m.advKit !== 1 ? 's' : ''}`;
+    }
     line += ` · **${fmtMoney(m.totalPayout)}**`;
     return line;
   });
 
   const grandTotal = payouts.reduce((s, m) => s + m.totalPayout, 0);
+  const totalHarness = payouts.reduce((s, m) => s + (m.harness || 0), 0);
+  const totalAdvKit  = payouts.reduce((s, m) => s + (m.advKit  || 0), 0);
 
   const contactContent = CONTACT_USER_ID
     ? `If you think there are any issues with your payout, please contact <@${CONTACT_USER_ID}>`
     : '';
+
+  const summaryFields = [
+    { name: '💰 Total Paid',      value: fmtMoney(grandTotal),       inline: true },
+    { name: '👷 Mechanics Paid',  value: String(payouts.length),     inline: true },
+  ];
+  if (totalHarness > 0) summaryFields.push({ name: '🦺 Harnesses',    value: String(totalHarness), inline: true });
+  if (totalAdvKit  > 0) summaryFields.push({ name: '🔧 Repair Kits',  value: String(totalAdvKit),  inline: true });
 
   return {
     ...(contactContent ? { content: contactContent } : {}),
@@ -326,8 +380,7 @@ function buildPayload(weekEndDate, payouts) {
           value:  lines.join('\n').slice(0, 1024) || '_No mechanics found._',
           inline: false,
         },
-        { name: '💰 Total Paid',    value: fmtMoney(grandTotal), inline: true },
-        { name: '👷 Mechanics Paid',  value: String(payouts.length), inline: true },
+        ...summaryFields,
       ],
       timestamp: new Date().toISOString(),
       footer:    { text: 'Kintsugi Motorworks · Payouts' },
@@ -395,6 +448,9 @@ async function main() {
         repairs:            0,
         engineReplacements: 0,
         enginePayTotal:     0,
+        harness:            0,
+        advKit:             0,
+        harnessKitPayTotal: 0,
         totalPayout:        0,
       };
       mechMap.set(j.mechanic, rec);
@@ -403,10 +459,15 @@ async function main() {
     rec.repairs            += j.across || 0;
     rec.engineReplacements += j.engineReplacements || 0;
     rec.enginePayTotal     += computeEnginePay(j.pdEngineCount || 0, j.department, j.enginePayer || '', j.civEngineCount || 0);
+    const totalHarness = (j.harnessPD || 0) + (j.harnessCiv || 0);
+    const totalAdvKit  = (j.advKitPD  || 0) + (j.advKitCiv  || 0);
+    rec.harness            += totalHarness;
+    rec.advKit             += totalAdvKit;
+    rec.harnessKitPayTotal += totalHarness * HARNESS_RATE + totalAdvKit * ADVANCED_REPAIR_KIT_RATE;
   }
 
   const payouts = Array.from(mechMap.values()).map(m => {
-    m.totalPayout = m.repairs * PAY_PER_REPAIR + (m.enginePayTotal || 0);
+    m.totalPayout = m.repairs * PAY_PER_REPAIR + (m.enginePayTotal || 0) + (m.harnessKitPayTotal || 0);
     return m;
   }).sort((a, b) => b.totalPayout - a.totalPayout);
 
