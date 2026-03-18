@@ -468,7 +468,7 @@ async function loadJobsAsPayouts() {
 
       // Engine payer (mechanic bought = full reimbursement; kintsugi bought = bonus only)
       let enginePayer = "";
-      if (iEnginePayer !== -1 && pdEngineCount > 0) {
+      if (iEnginePayer !== -1 && (pdEngineCount > 0 || civEngineCount > 0)) {
         const rawPayer = (row[iEnginePayer] || "").trim().toLowerCase();
         if (rawPayer.includes("kintsugi")) enginePayer = "kintsugi";
         else if (/^\s*i\b|i bought|bought it|myself/i.test(rawPayer)) enginePayer = "mechanic";
@@ -487,7 +487,10 @@ async function loadJobsAsPayouts() {
           enginePay += pdEngineCount * (isLspd ? (ENG_REIMB + ENG_BONUS) : ENG_REIMB);
         }
       }
-      enginePay += civEngineCount * ENG_REIMB; // CIV engines: reimbursement only (no bonus)
+      // CIV engines: $12k reimbursement only if mechanic paid; $0 if kintsugi paid
+      if (civEngineCount > 0 && enginePayer !== "kintsugi") {
+        enginePay += civEngineCount * ENG_REIMB;
+      }
 
       // Harness and Advanced Repair Kit pay
       const harnessKitPay = totalHarness * HARNESS + totalAdvKit * ADV_KIT;
@@ -550,13 +553,16 @@ async function loadJobsAsPayouts() {
         comment:   `Mechanic Payout — ${agg.mechanic} — Week ending ${weekEndStr} (${repairDesc}${engineDesc}${harnessDesc}${kitDesc})`,
         type:      "Mechanic Payout",
         // Private metadata
-        _source:   "auto-payout",
-        _mechanic: agg.mechanic,
-        _weekISO:  agg.weekISO,
-        _repairs:  agg.repairs,
-        _acrossPD: agg.acrossPD,
-        _acrossCiv: agg.acrossCiv,
-        _enginePay: agg.enginePayTotal,
+        _source:        "auto-payout",
+        _mechanic:      agg.mechanic,
+        _weekISO:       agg.weekISO,
+        _repairs:       agg.repairs,
+        _acrossPD:      agg.acrossPD,
+        _acrossCiv:     agg.acrossCiv,
+        _enginePay:     agg.enginePayTotal,
+        _totalHarness:  agg.totalHarness,
+        _totalAdvKit:   agg.totalAdvKit,
+        _harnessKitPay: agg.harnessKitPayTotal,
       });
     }
 
@@ -1273,12 +1279,21 @@ function showDetails(r) {
       repairLine = `${r._repairs || 0} repair${(r._repairs || 0) !== 1 ? "s" : ""}`;
     }
     const engineLine = r._enginePay > 0 ? `Engine pay: ${money(r._enginePay)}` : null;
+    const kitLine = (r._totalAdvKit || 0) > 0 || (r._totalHarness || 0) > 0
+      ? [
+          (r._totalAdvKit || 0) > 0 ? `${r._totalAdvKit} repair kit${r._totalAdvKit !== 1 ? "s" : ""}` : "",
+          (r._totalHarness || 0) > 0 ? `${r._totalHarness} harness${r._totalHarness !== 1 ? "es" : ""}` : "",
+        ].filter(Boolean).join(", ")
+      : null;
+    const kitPayLine = (r._harnessKitPay || 0) > 0 ? `Kit/harness pay: ${money(r._harnessKitPay)}` : null;
     detailsPanel.innerHTML = `
       <div><div class="label">Auto-Tracked Mechanic Payout</div>
         <strong>${kEscapeHtml ? kEscapeHtml(r._mechanic || "") : (r._mechanic || "")}</strong></div>
       <div style="margin-top:4px;"><div class="label">Week Ending</div>${weekEndStr}</div>
       <div style="margin-top:4px;"><div class="label">Repairs</div>${repairLine}</div>
       ${engineLine ? `<div style="margin-top:4px;"><div class="label">Engine Pay</div>${engineLine}</div>` : ""}
+      ${kitLine ? `<div style="margin-top:4px;"><div class="label">Repair Kit Sales</div>${kitLine}</div>` : ""}
+      ${kitPayLine ? `<div style="margin-top:4px;"><div class="label">Kit / Harness Pay</div>${kitPayLine}</div>` : ""}
       <div style="margin-top:4px;"><div class="label">Total Payout</div><strong>${money(amt)}</strong></div>
     `;
     detailsPanel.style.display = "block";
