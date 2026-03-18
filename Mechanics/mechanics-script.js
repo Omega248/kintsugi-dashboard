@@ -66,8 +66,12 @@ function mechBuildStateIdMap(stateRows) {
 }
 
 // ===== Calculation helpers =====
-function mechCalculateEngineValue(engineCount, isLspd) {
-  // LSPD: $12k reimbursement + $1.5k bonus; all others: $12k reimbursement only
+function mechCalculateEngineValue(engineCount, isLspd, enginePayer) {
+  if (enginePayer === "kintsugi") {
+    // Kintsugi paid: mechanic earns the LSPD bonus only (no reimbursement)
+    return engineCount * (isLspd ? MECH_ENGINE_BONUS_LSPD : 0);
+  }
+  // Mechanic paid or old data: full reimbursement + LSPD bonus
   return engineCount * (MECH_ENGINE_REIMBURSEMENT + (isLspd ? MECH_ENGINE_BONUS_LSPD : 0));
 }
 
@@ -216,8 +220,8 @@ function mechBuildWeeklyStats(mechanicName, sourceJobs) {
     weekRec.civEngineReplacements = (weekRec.civEngineReplacements || 0) + (j.civEngineReplacements || 0);
     // Accumulate engine pay per job, applying the $1,500 bonus only for LSPD
     const isLspd = (j.department || "").toUpperCase() === "LSPD";
-    weekRec.enginePayTotal += mechCalculateEngineValue(j.engineReplacements || 0, isLspd)
-                            + mechCalculateEngineValue(j.civEngineReplacements || 0, false); // CIV engines never get the bonus
+    weekRec.enginePayTotal += mechCalculateEngineValue(j.engineReplacements || 0, isLspd, j.enginePayer || "")
+                            + mechCalculateEngineValue(j.civEngineReplacements || 0, false, j.enginePayer || ""); // CIV engines never get the LSPD bonus
     weekRec.harnessPD += j.harnessPD || 0;
     weekRec.harnessCiv += j.harnessCiv || 0;
     weekRec.advKitPD += j.advKitPD || 0;
@@ -915,7 +919,7 @@ async function mechLoad() {
 
     // "Did you buy the engine replacement..." payer column — detect first so we
     // can exclude it from the engine-count column searches.
-    const iEnginePayer = headersLower.findIndex(
+    let iEnginePayer = headersLower.findIndex(
       (h) => h.includes("did you buy") || (h.includes("kintsugi") && h.includes("pay"))
     );
 
@@ -951,6 +955,26 @@ async function mechLoad() {
     let iAdvKitCiv = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && !h.includes("pd"));
     if (iAdvKitPD  === -1) iAdvKitPD  = headersLower.findIndex((h) => h.includes("repair") && h.includes("kit") && h.includes("pd"));
     if (iAdvKitCiv === -1) iAdvKitCiv = headersLower.findIndex((h, i) => i !== iAdvKitPD && h.includes("repair") && h.includes("kit") && !h.includes("pd"));
+
+    // Fallback: if header detection failed, scan data rows to find the engine payer column
+    // by cell values (handles generic headers like "Column 8").
+    if (iEnginePayer === -1) {
+      const knownCols = new Set(
+        [iTime, iMech, iAcrossPD, iAcrossCiv, iEngine, iEngineCiv,
+          iPDRepair, iDept, iHarnessPD, iHarnessCiv, iAdvKitPD, iAdvKitCiv, iWeek, iMonth]
+          .filter(i => i !== -1)
+      );
+      for (let col = 0; col < headers.length && iEnginePayer === -1; col++) {
+        if (knownCols.has(col)) continue;
+        for (let r = 1; r < Math.min(data.length, 11); r++) {
+          const cell = (data[r][col] || "").trim().toLowerCase();
+          if (cell && (cell.includes("kintsugi") || /i bought|bought it|myself/i.test(cell))) {
+            iEnginePayer = col;
+            break;
+          }
+        }
+      }
+    }
 
     if (iTime === -1 || iMech === -1 || (iAcrossPD === -1 && iAcrossCiv === -1)) {
       throw new Error(
@@ -1009,7 +1033,19 @@ async function mechLoad() {
           }
         }
       }
-      
+
+      // Determine who purchased the engine replacement (applies to both PD and CIV)
+      // "mechanic" = mechanic bought it; "kintsugi" = kintsugi bought it; "" = old data
+      let enginePayer = "";
+      if (iEnginePayer !== -1 && (engineCount > 0 || civEngineCount > 0)) {
+        const rawPayer = (row[iEnginePayer] || "").trim().toLowerCase();
+        if (rawPayer.includes("kintsugi")) {
+          enginePayer = "kintsugi";
+        } else if (/i bought|bought it|myself/i.test(rawPayer)) {
+          enginePayer = "mechanic";
+        }
+      }
+
       let dept = iDept !== -1 ? (row[iDept] || "").trim() : "";
 
       // Classify CIV-only jobs: "PD Repair" = "No" (or dept empty + CIV-only)
@@ -1036,6 +1072,7 @@ async function mechLoad() {
         acrossCiv,
         engineReplacements: engineCount,
         civEngineReplacements: civEngineCount,
+        enginePayer,
         harnessPD,
         harnessCiv,
         advKitPD,

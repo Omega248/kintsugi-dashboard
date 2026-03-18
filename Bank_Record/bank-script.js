@@ -388,7 +388,7 @@ async function loadJobsAsPayouts() {
     );
 
     // Engine payer column (detect first to exclude from engine-count searches)
-    const iEnginePayer = headersLower.findIndex(
+    let iEnginePayer = headersLower.findIndex(
       (h) => h.includes("did you buy") || (h.includes("kintsugi") && h.includes("pay"))
     );
 
@@ -417,6 +417,26 @@ async function loadJobsAsPayouts() {
     let iAdvKitCiv = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && !h.includes("pd"));
     if (iAdvKitPD  === -1) iAdvKitPD  = headersLower.findIndex((h) => h.includes("repair") && h.includes("kit") && h.includes("pd"));
     if (iAdvKitCiv === -1) iAdvKitCiv = headersLower.findIndex((h, i) => i !== iAdvKitPD && h.includes("repair") && h.includes("kit") && !h.includes("pd"));
+
+    // Fallback: if header detection failed, scan data rows to find the engine payer column
+    // by cell values (handles generic headers like "Column 8").
+    if (iEnginePayer === -1) {
+      const knownCols = new Set(
+        [iMech, iWeek, iMonth, iAcrossPD, iAcrossCiv, iEnginePD, iEngineCiv,
+          iPDRepair, iDept, iHarnessPD, iHarnessCiv, iAdvKitPD, iAdvKitCiv]
+          .filter(i => i !== -1)
+      );
+      for (let col = 0; col < headerRow.length && iEnginePayer === -1; col++) {
+        if (knownCols.has(col)) continue;
+        for (let r = 1; r < Math.min(rows.length, 11); r++) {
+          const cell = (rows[r][col] || "").trim().toLowerCase();
+          if (cell && (cell.includes("kintsugi") || /i bought|bought it|myself/i.test(cell))) {
+            iEnginePayer = col;
+            break;
+          }
+        }
+      }
+    }
 
     if (iMech === -1 || iWeek === -1 || (iAcrossPD === -1 && iAcrossCiv === -1)) return [];
 
