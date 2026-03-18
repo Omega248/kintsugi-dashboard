@@ -1,9 +1,11 @@
 // ===== Config (values sourced from constants.js) =====
 const JOBS_SHEET    = KINTSUGI_CONFIG.SHEETS.JOBS;
 const CONFIG_SHEET  = KINTSUGI_CONFIG.SHEETS.CONFIG;
-const PAY_PER_REPAIR       = PAYMENT_RATES.PAY_PER_REPAIR;
-const ENGINE_REIMBURSEMENT = PAYMENT_RATES.ENGINE_REIMBURSEMENT;
-const ENGINE_BONUS_LSPD    = PAYMENT_RATES.ENGINE_BONUS_LSPD;
+const PAY_PER_REPAIR         = PAYMENT_RATES.PAY_PER_REPAIR;
+const ENGINE_REIMBURSEMENT   = PAYMENT_RATES.ENGINE_REIMBURSEMENT;
+const ENGINE_BONUS_LSPD      = PAYMENT_RATES.ENGINE_BONUS_LSPD;
+const HARNESS_RATE           = PAYMENT_RATES.HARNESS_RATE;
+const ADVANCED_REPAIR_KIT_RATE = PAYMENT_RATES.ADVANCED_REPAIR_KIT_RATE;
 
 const AUTO_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -72,11 +74,22 @@ async function loadOverview() {
     // Department column
     const iDept = headersLower.findIndex((h) => h.includes("department"));
 
+    // Harness columns: contains "harness"
+    const iHarnessPD  = headersLower.findIndex((h) => h.includes("harness") && h.includes("pd"));
+    const iHarnessCiv = headersLower.findIndex((h) => h.includes("harness") && !h.includes("pd"));
+
+    // Advanced Repair Kit columns: primary "advanced"+"kit", fallback "repair"+"kit"
+    let iAdvKitPD  = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && h.includes("pd"));
+    let iAdvKitCiv = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && !h.includes("pd"));
+    if (iAdvKitPD  === -1) iAdvKitPD  = headersLower.findIndex((h) => h.includes("repair") && h.includes("kit") && h.includes("pd"));
+    if (iAdvKitCiv === -1) iAdvKitCiv = headersLower.findIndex((h, i) => i !== iAdvKitPD && h.includes("repair") && h.includes("kit") && !h.includes("pd"));
+
     const rows = rawData.slice(1);
 
     // global aggregates
     let totalRepairs = 0;
     let totalEnginePay = 0;
+    let totalHarnessKitPay = 0;
     const mechanics = new Set();
     let latestWeekDate = null;
     let lastActivity = null;
@@ -86,8 +99,11 @@ async function loadOverview() {
     let repairsThisMonth = 0;
     let enginePayThisWeek = 0;
     let enginePayThisMonth = 0;
+    let harnessKitPayThisWeek = 0;
+    let harnessKitPayThisMonth = 0;
     const perMechWeek = {};
     const perMechWeekEnginePay = {};
+    const perMechWeekHarnessKitPay = {};
 
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -152,6 +168,15 @@ async function loadOverview() {
       }
       totalEnginePay += enginePay;
 
+      // Harness and Advanced Repair Kit pay for this job
+      const harnessPD  = iHarnessPD  !== -1 ? (Number(row[iHarnessPD]  || 0) || 0) : 0;
+      const harnessCiv = iHarnessCiv !== -1 ? (Number(row[iHarnessCiv] || 0) || 0) : 0;
+      const advKitPD   = iAdvKitPD   !== -1 ? (Number(row[iAdvKitPD]   || 0) || 0) : 0;
+      const advKitCiv  = iAdvKitCiv  !== -1 ? (Number(row[iAdvKitCiv]  || 0) || 0) : 0;
+      const harnessKitPay = (harnessPD + harnessCiv) * HARNESS_RATE
+                          + (advKitPD  + advKitCiv)  * ADVANCED_REPAIR_KIT_RATE;
+      totalHarnessKitPay += harnessKitPay;
+
       // Week ending for global latest week tile
       let weekDate = null;
       const weekRaw = iWeek !== -1 ? row[iWeek] : null;
@@ -188,22 +213,25 @@ async function loadOverview() {
         if (dOnly >= weekStart && dOnly <= weekEnd) {
           repairsThisWeek += across;
           enginePayThisWeek += enginePay;
+          harnessKitPayThisWeek += harnessKitPay;
           if (mech) {
             perMechWeek[mech] = (perMechWeek[mech] || 0) + across;
             perMechWeekEnginePay[mech] = (perMechWeekEnginePay[mech] || 0) + enginePay;
+            perMechWeekHarnessKitPay[mech] = (perMechWeekHarnessKitPay[mech] || 0) + harnessKitPay;
           }
         }
 
         if (dOnly >= monthStart && dOnly <= monthEnd) {
           repairsThisMonth += across;
           enginePayThisMonth += enginePay;
+          harnessKitPayThisMonth += harnessKitPay;
         }
       }
     });
 
-    const totalPayout    = totalRepairs * PAY_PER_REPAIR + totalEnginePay;
-    const payoutThisWeek  = repairsThisWeek  * PAY_PER_REPAIR + enginePayThisWeek;
-    const payoutThisMonth = repairsThisMonth * PAY_PER_REPAIR + enginePayThisMonth;
+    const totalPayout    = totalRepairs * PAY_PER_REPAIR + totalEnginePay + totalHarnessKitPay;
+    const payoutThisWeek  = repairsThisWeek  * PAY_PER_REPAIR + enginePayThisWeek  + harnessKitPayThisWeek;
+    const payoutThisMonth = repairsThisMonth * PAY_PER_REPAIR + enginePayThisMonth + harnessKitPayThisMonth;
 
     // Top mechanic this week
     let topMechName = null;
@@ -265,7 +293,9 @@ async function loadOverview() {
       payoutThisWeek,
       topMechName,
       topMechRepairs,
-      perMechWeek
+      perMechWeek,
+      perMechWeekEnginePay,
+      perMechWeekHarnessKitPay,
     });
 
     setRefreshStatus("Live");
@@ -366,10 +396,13 @@ function setRefreshStatus(state) {
 
 /**
  * Populate the "This Week Live" panel with the latest computed values.
- * @param {{ repairsThisWeek, payoutThisWeek, topMechName, topMechRepairs, perMechWeek }} data
+ * @param {{ repairsThisWeek, payoutThisWeek, topMechName, topMechRepairs, perMechWeek, perMechWeekEnginePay, perMechWeekHarnessKitPay }} data
  */
 function updateThisWeekPanel(data) {
-  const { repairsThisWeek, payoutThisWeek, topMechName, topMechRepairs, perMechWeek } = data;
+  const {
+    repairsThisWeek, payoutThisWeek, topMechName, topMechRepairs,
+    perMechWeek, perMechWeekEnginePay = {}, perMechWeekHarnessKitPay = {},
+  } = data;
 
   const repairsEl = document.getElementById("liveWeekRepairs");
   const payoutEl = document.getElementById("liveWeekPayout");
@@ -384,7 +417,11 @@ function updateThisWeekPanel(data) {
   if (topMechEl) topMechEl.textContent = topMechName || "—";
   if (topMechSubEl) {
     topMechSubEl.textContent = topMechName
-      ? topMechRepairs + " repairs · " + kFmtMoney(topMechRepairs * PAY_PER_REPAIR)
+      ? topMechRepairs + " repairs · " + kFmtMoney(
+          topMechRepairs * PAY_PER_REPAIR
+          + (perMechWeekEnginePay[topMechName]    || 0)
+          + (perMechWeekHarnessKitPay[topMechName] || 0)
+        )
       : "";
   }
 
@@ -402,7 +439,9 @@ function updateThisWeekPanel(data) {
 
     const sorted = Object.entries(perMechWeek).sort((a, b) => b[1] - a[1]);
     const items = sorted.map(([name, reps]) => {
-      const pay = reps * PAY_PER_REPAIR;
+      const pay = reps * PAY_PER_REPAIR
+                + (perMechWeekEnginePay[name]    || 0)
+                + (perMechWeekHarnessKitPay[name] || 0);
       const safeN = kEscapeHtml(name);
       return `<div class="tw-mech-row">
         <span class="tw-mech-name">${safeN}</span>

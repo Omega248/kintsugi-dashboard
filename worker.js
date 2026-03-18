@@ -507,9 +507,11 @@ function parseJobsSheet(rows) {
   // Harness columns: "Harness (PD)" and "Harness (CIV)"
   const iHarnessPD  = lower.findIndex(h => h.includes('harness') && h.includes('pd'));
   const iHarnessCiv = lower.findIndex(h => h.includes('harness') && !h.includes('pd'));
-  // Advanced Repair Kit columns: "Advanced Repair Kits (PD)" and "Advanced Repair Kits (CIV)"
-  const iAdvKitPD  = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && h.includes('pd'));
-  const iAdvKitCiv = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && !h.includes('pd'));
+  // Advanced Repair Kit columns: primary "advanced"+"kit", fallback "repair"+"kit"
+  let iAdvKitPD  = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && h.includes('pd'));
+  let iAdvKitCiv = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && !h.includes('pd'));
+  if (iAdvKitPD  === -1) iAdvKitPD  = lower.findIndex((h) => h.includes('repair') && h.includes('kit') && h.includes('pd'));
+  if (iAdvKitCiv === -1) iAdvKitCiv = lower.findIndex((h, i) => i !== iAdvKitPD && h.includes('repair') && h.includes('kit') && !h.includes('pd'));
 
   if (iMech === -1 || iAcross === -1) return [];
 

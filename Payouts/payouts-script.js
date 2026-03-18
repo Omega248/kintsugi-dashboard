@@ -327,9 +327,11 @@ async function loadPayouts() {
     const iHarnessPD  = headersLower.findIndex((h) => h.includes("harness") && h.includes("pd"));
     const iHarnessCiv = headersLower.findIndex((h) => h.includes("harness") && !h.includes("pd"));
 
-    // Advanced Repair Kit columns: "Advanced Repair Kits (PD)" and "Advanced Repair Kits (CIV)"
-    const iAdvKitPD  = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && h.includes("pd"));
-    const iAdvKitCiv = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && !h.includes("pd"));
+    // Advanced Repair Kit columns: primary "advanced"+"kit", fallback "repair"+"kit"
+    let iAdvKitPD  = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && h.includes("pd"));
+    let iAdvKitCiv = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && !h.includes("pd"));
+    if (iAdvKitPD  === -1) iAdvKitPD  = headersLower.findIndex((h) => h.includes("repair") && h.includes("kit") && h.includes("pd"));
+    if (iAdvKitCiv === -1) iAdvKitCiv = headersLower.findIndex((h, i) => i !== iAdvKitPD && h.includes("repair") && h.includes("kit") && !h.includes("pd"));
 
     if (iMech === -1 || (iAcrossPD === -1 && iAcrossCiv === -1) || iWeek === -1 || iMonth === -1) {
       throw new Error("Missing required columns.");
