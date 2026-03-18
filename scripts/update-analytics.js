@@ -144,19 +144,27 @@ function parseJobsSheet(rows) {
   const iTime   = lower.findIndex(h => h.includes('timestamp'));
   const iWeek   = lower.findIndex(h => h.includes('week') && h.includes('end'));
   const iMonth  = lower.findIndex(h => h.includes('month') && h.includes('end'));
-  // First "Engine Replacement?" → PD engines
-  const iEnginePD  = lower.findIndex(h => h.includes('engine') && h.includes('replacement'));
-  // Second "Engine Replacement?" → CIV engines (after iEnginePD)
+  // Engine payer column must be detected first to exclude it from engine-count searches.
+  const iEnginePayer = lower.findIndex(
+    h => h.includes('did you buy') || (h.includes('kintsugi') && h.includes('pay'))
+  );
+  // First "Engine Replacement?" → PD engines (exclude payer column)
+  const iEnginePD  = lower.findIndex(
+    (h, i) => i !== iEnginePayer && h.includes('engine') && h.includes('replacement')
+  );
+  // Second "Engine Replacement?" → CIV engines (after iEnginePD, exclude payer column)
   const iEngineCiv = iEnginePD !== -1
-    ? lower.findIndex((h, i) => i > iEnginePD && h.includes('engine') && h.includes('replacement'))
+    ? lower.findIndex((h, i) => i > iEnginePD && i !== iEnginePayer && h.includes('engine') && h.includes('replacement'))
     : -1;
   const iDept = lower.findIndex(h => h.includes('department') || h.includes('dept'));
   // Harness columns: "Harness (PD)" and "Harness (CIV)"
   const iHarnessPD  = lower.findIndex(h => h.includes('harness') && h.includes('pd'));
   const iHarnessCiv = lower.findIndex(h => h.includes('harness') && !h.includes('pd'));
   // Advanced Repair Kit columns: "Advanced Repair Kits (PD)" and "Advanced Repair Kits (CIV)"
-  const iAdvKitPD  = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && h.includes('pd'));
-  const iAdvKitCiv = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && !h.includes('pd'));
+  let iAdvKitPD  = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && h.includes('pd'));
+  let iAdvKitCiv = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && !h.includes('pd'));
+  if (iAdvKitPD  === -1) iAdvKitPD  = lower.findIndex(h => h.includes('repair') && h.includes('kit') && h.includes('pd'));
+  if (iAdvKitCiv === -1) iAdvKitCiv = lower.findIndex((h, i) => i !== iAdvKitPD && h.includes('repair') && h.includes('kit') && !h.includes('pd'));
   if (iMech === -1 || (iAcrossPD === -1 && iAcrossCiv === -1)) return [];
   const jobs = [];
   for (let i = 1; i < rows.length; i++) {
@@ -181,6 +189,16 @@ function parseJobsSheet(rows) {
       if (!isNaN(n) && n > 0) { civEngineCount = n; }
       else if (/^(yes|y|true)$/i.test(raw)) { civEngineCount = 1; }
     }
+    // Determine who purchased the engine replacement (applies to both PD and CIV)
+    let enginePayer = '';
+    if (iEnginePayer !== -1 && (pdEngineCount > 0 || civEngineCount > 0)) {
+      const rawPayer = (row[iEnginePayer] || '').trim().toLowerCase();
+      if (rawPayer.includes('kintsugi')) {
+        enginePayer = 'kintsugi';
+      } else if (/^\s*i\b|i bought|bought it|myself/i.test(rawPayer)) {
+        enginePayer = 'mechanic';
+      }
+    }
     const engineCount = pdEngineCount + civEngineCount;
     const harnessPD  = iHarnessPD  !== -1 ? (parseInt(row[iHarnessPD]  || '0', 10) || 0) : 0;
     const harnessCiv = iHarnessCiv !== -1 ? (parseInt(row[iHarnessCiv] || '0', 10) || 0) : 0;
@@ -195,7 +213,7 @@ function parseJobsSheet(rows) {
     const monthEnd = iMonth !== -1 ? parseDateLike(row[iMonth]) : null;
     const bestDate = tsDate || weekEnd || monthEnd;
     jobs.push({ mechanic: mech, across, acrossPD, acrossCiv,
-                engineReplacements: engineCount, pdEngineCount, civEngineCount,
+                engineReplacements: engineCount, pdEngineCount, civEngineCount, enginePayer,
                 harnessPD, harnessCiv, advKitPD, advKitCiv,
                 department: dept, tsDate, weekEnd, monthEnd, bestDate });
   }
@@ -248,12 +266,24 @@ function buildWeeklyStats(jobs) {
     }
     rec.totalRepairs       += j.across || 0;
     rec.engineReplacements += j.engineReplacements || 0;
-    // Bonus only for LSPD; all other departments get reimbursement only
-    // update-analytics.js tracks PD and CIV engine counts separately (matching the
-    // dual-column sheet format), so we apply the LSPD bonus only to PD engines.
+    // Apply payer-aware engine pay: mechanic only gets paid if they (or old data) bought the engine.
+    // "kintsugi" payer: PD gets LSPD bonus only; CIV gets $0.
     const isLspd = (j.department || '').toUpperCase() === 'LSPD';
-    rec.enginePayTotal     += j.pdEngineCount * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0))
-                            + j.civEngineCount * ENGINE_REIMBURSEMENT; // CIV engines: reimbursement only
+    const ep = j.enginePayer || '';
+    let enginePayForJob = 0;
+    if ((j.pdEngineCount || 0) > 0) {
+      if (ep === 'kintsugi') {
+        enginePayForJob += j.pdEngineCount * (isLspd ? ENGINE_BONUS_LSPD : 0);
+      } else {
+        enginePayForJob += j.pdEngineCount * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
+      }
+    }
+    if ((j.civEngineCount || 0) > 0) {
+      if (ep !== 'kintsugi') {
+        enginePayForJob += j.civEngineCount * ENGINE_REIMBURSEMENT;
+      }
+    }
+    rec.enginePayTotal     += enginePayForJob;
     // Harness and Advanced Repair Kit pay
     const totalHarness = (j.harnessPD || 0) + (j.harnessCiv || 0);
     const totalAdvKit  = (j.advKitPD  || 0) + (j.advKitCiv  || 0);

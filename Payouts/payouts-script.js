@@ -209,7 +209,9 @@ function calculateEnginePayment(engineReplacementsByDept) {
 //   enginePayer === ""          → old data, fall back to dept-based defaults
 //                                  LSPD: $13,500  |  all others: $12,000
 //
-// CIV engines: $12,000 reimbursement only (no bonus)
+// CIV engines:
+//   enginePayer === "mechanic" or "" → $12,000 reimbursement (mechanic paid / old data)
+//   enginePayer === "kintsugi"       → $0 (kintsugi paid, mechanic is not reimbursed)
 function computeJobEnginePay(pdEngineCount, dept, enginePayer, civEngineCount) {
   let pay = 0;
   const isLspd = dept === "LSPD";
@@ -225,7 +227,14 @@ function computeJobEnginePay(pdEngineCount, dept, enginePayer, civEngineCount) {
     }
   }
 
-  pay += (civEngineCount || 0) * ENGINE_REIMBURSEMENT;
+  if ((civEngineCount || 0) > 0) {
+    if (enginePayer === "kintsugi") {
+      // Kintsugi paid for the CIV engine — mechanic is not reimbursed
+    } else {
+      // Mechanic paid ("mechanic") or old data ("") — full $12,000 reimbursement
+      pay += civEngineCount * ENGINE_REIMBURSEMENT;
+    }
+  }
 
   return pay;
 }
@@ -402,12 +411,12 @@ async function loadPayouts() {
         }
       }
 
-      // Determine who purchased the PD engine replacement
-      // "mechanic" = mechanic bought it (owed 13 500)
-      // "kintsugi" = kintsugi bought it (mechanic gets 1 500 bonus)
+      // Determine who purchased the engine replacement (applies to both PD and CIV)
+      // "mechanic" = mechanic bought it (owed 13 500 for PD / 12 000 for CIV)
+      // "kintsugi" = kintsugi bought it (mechanic gets 1 500 bonus for PD LSPD only; $0 for CIV)
       // ""         = old data — fall back to dept-based defaults
       let enginePayer = "";
-      if (iEnginePayer !== -1 && pdEngineCount > 0) {
+      if (iEnginePayer !== -1 && (pdEngineCount > 0 || civEngineCount > 0)) {
         const rawPayer = (row[iEnginePayer] || "").trim().toLowerCase();
         if (rawPayer) {
           if (rawPayer.includes("kintsugi")) {

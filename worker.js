@@ -452,7 +452,9 @@ function buildWeeklyStats(jobs) {
  *   enginePayer === "kintsugi"  → kintsugi covered cost, mechanic gets $1,500 bonus only if LSPD
  *   enginePayer === ""          → old data, fall back to dept-based defaults
  *
- * CIV engines: $12,000 reimbursement only (no bonus, payer irrelevant)
+ * CIV engines:
+ *   enginePayer === "mechanic" or "" → $12,000 reimbursement (mechanic paid / old data)
+ *   enginePayer === "kintsugi"       → $0 (kintsugi paid, mechanic is not reimbursed)
  */
 function computeEnginePay(pdEngineCount, dept, enginePayer, civEngineCount) {
   let pay = 0;
@@ -467,7 +469,14 @@ function computeEnginePay(pdEngineCount, dept, enginePayer, civEngineCount) {
       pay += pdEngineCount * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
     }
   }
-  pay += (civEngineCount || 0) * ENGINE_REIMBURSEMENT;
+  if ((civEngineCount || 0) > 0) {
+    if (enginePayer === 'kintsugi') {
+      // Kintsugi paid for the CIV engine — mechanic is not reimbursed
+    } else {
+      // Mechanic paid ('mechanic') or old data ('') — full $12,000 reimbursement
+      pay += civEngineCount * ENGINE_REIMBURSEMENT;
+    }
+  }
   return pay;
 }
 
@@ -480,7 +489,10 @@ function parseJobsSheet(rows) {
   // variations such as "Mechanic Name" vs "Mechanic", or "How many Across?"
   // vs "How many Across".
   const iMech   = lower.findIndex(h => h.includes('mechanic'));
-  const iAcross = lower.findIndex(h => h.includes('across') || h.includes('repairs'));
+  // "How many Across PD?" — PD repair count (contains "across" and "pd")
+  const iAcrossPD  = lower.findIndex(h => h.includes('across') && h.includes('pd'));
+  // "How many Across" (CIV) — civilian repair count (contains "across" but NOT "pd")
+  const iAcrossCiv = lower.findIndex(h => h.includes('across') && !h.includes('pd'));
   const iTime   = lower.findIndex(h => h.includes('timestamp'));
   const iWeek   = lower.findIndex(h => h.includes('week') && h.includes('end'));
   const iMonth  = lower.findIndex(h => h.includes('month') && h.includes('end'));
@@ -513,7 +525,7 @@ function parseJobsSheet(rows) {
   if (iAdvKitPD  === -1) iAdvKitPD  = lower.findIndex((h) => h.includes('repair') && h.includes('kit') && h.includes('pd'));
   if (iAdvKitCiv === -1) iAdvKitCiv = lower.findIndex((h, i) => i !== iAdvKitPD && h.includes('repair') && h.includes('kit') && !h.includes('pd'));
 
-  if (iMech === -1 || iAcross === -1) return [];
+  if (iMech === -1 || (iAcrossPD === -1 && iAcrossCiv === -1)) return [];
 
   const jobs = [];
   for (let i = 1; i < rows.length; i++) {
@@ -523,7 +535,9 @@ function parseJobsSheet(rows) {
     const mech   = (row[iMech] || '').trim();
     if (!mech) continue;
 
-    const across = parseInt(row[iAcross] || '0', 10) || 0;
+    const acrossPD  = iAcrossPD  !== -1 ? (parseInt(row[iAcrossPD]  || '0', 10) || 0) : 0;
+    const acrossCiv = iAcrossCiv !== -1 ? (parseInt(row[iAcrossCiv] || '0', 10) || 0) : 0;
+    const across = acrossPD + acrossCiv;
 
     let pdEngineCount = 0;
     if (iEnginePD !== -1) {
@@ -541,10 +555,10 @@ function parseJobsSheet(rows) {
       else if (/^(yes|y|true)$/i.test(raw)) { civEngineCount = 1; }
     }
 
-    // Determine who purchased the PD engine replacement
+    // Determine who purchased the engine replacement (applies to both PD and CIV)
     // "mechanic" = mechanic bought it; "kintsugi" = kintsugi bought it; "" = old data
     let enginePayer = '';
-    if (iEnginePayer !== -1 && pdEngineCount > 0) {
+    if (iEnginePayer !== -1 && (pdEngineCount > 0 || civEngineCount > 0)) {
       const rawPayer = (row[iEnginePayer] || '').trim().toLowerCase();
       if (rawPayer.includes('kintsugi')) {
         enginePayer = 'kintsugi';
@@ -572,6 +586,8 @@ function parseJobsSheet(rows) {
     jobs.push({
       mechanic:           mech,
       across,
+      acrossPD,
+      acrossCiv,
       engineReplacements: engineCount,
       pdEngineCount,
       civEngineCount,
