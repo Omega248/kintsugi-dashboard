@@ -868,7 +868,7 @@ function renderMonthly() {
       harnessCiv: 0,
       advKitPD: 0,
       advKitCiv: 0,
-      harnessKitBillingAccumulated: 0,
+      harnessKitPayAccumulated: 0,
     };
     mAgg.repairs += j.across;
     mAgg.acrossPD += j.acrossPD || 0;
@@ -880,9 +880,9 @@ function renderMonthly() {
     mAgg.harnessCiv += j.harnessCiv || 0;
     mAgg.advKitPD += j.advKitPD || 0;
     mAgg.advKitCiv += j.advKitCiv || 0;
-    mAgg.harnessKitBillingAccumulated +=
-      ((j.harnessPD || 0) + (j.harnessCiv || 0)) * HARNESS_BILLING_RATE +
-      ((j.advKitPD || 0) + (j.advKitCiv || 0)) * ADVANCED_REPAIR_KIT_BILLING_RATE;
+    mAgg.harnessKitPayAccumulated +=
+      ((j.harnessPD || 0) + (j.harnessCiv || 0)) * HARNESS_RATE +
+      ((j.advKitPD || 0) + (j.advKitCiv || 0)) * ADVANCED_REPAIR_KIT_RATE;
     if (j.engineReplacements > 0 && j.department) {
       mAgg.engineReplacementsByDept[j.department] = 
         (mAgg.engineReplacementsByDept[j.department] || 0) + j.engineReplacements;
@@ -896,7 +896,7 @@ function renderMonthly() {
     monthlyBody.innerHTML =
       '<tr><td colspan="6" style="padding:8px; color:#6b7280;">No monthly records for this selection.</td></tr>';
     if (headerCell) {
-      headerCell.textContent = "Total Repair Value ($2,500/repair)";
+      headerCell.textContent = "Total Repair Value ($700/repair)";
     }
     return;
   }
@@ -926,7 +926,7 @@ function renderMonthly() {
     let yearRepairs = 0;
     yearRows.forEach((r) => {
       const engineValue = calculateEngineValue(r.engineReplacementsByDept || {});
-      const totalValue = r.repairs * REPAIR_RATE + engineValue + (r.harnessKitBillingAccumulated || 0);
+      const totalValue = r.repairs * PAY_PER_REPAIR + engineValue + (r.harnessKitPayAccumulated || 0);
       yearTotal += totalValue;
       yearRepairs += r.repairs;
     });
@@ -967,7 +967,7 @@ function renderMonthly() {
       const civEngineReps = r.civEngineReplacements || 0;
       const totalEngineReps = pdEngineReps + civEngineReps;
       const engineValue = calculateEngineValue(r.engineReplacementsByDept || {});
-      const totalValue = r.repairs * REPAIR_RATE + engineValue + (r.harnessKitBillingAccumulated || 0);
+      const totalValue = r.repairs * PAY_PER_REPAIR + engineValue + (r.harnessKitPayAccumulated || 0);
       const totalHarnessCount = (r.harnessPD || 0) + (r.harnessCiv || 0);
       const totalAdvKitCount = (r.advKitPD || 0) + (r.advKitCiv || 0);
 
@@ -1078,9 +1078,9 @@ function renderJobs() {
       const pdEngineReps = j.engineReplacements || 0;
       const engineRate = (j.department === "BCSO" && pdEngineReps > 0) ?
         ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
-      monthTotal += j.across * REPAIR_RATE + pdEngineReps * engineRate
-        + ((j.harnessPD || 0) + (j.harnessCiv || 0)) * HARNESS_BILLING_RATE
-        + ((j.advKitPD || 0) + (j.advKitCiv || 0)) * ADVANCED_REPAIR_KIT_BILLING_RATE;
+      monthTotal += j.across * PAY_PER_REPAIR + pdEngineReps * engineRate
+        + ((j.harnessPD || 0) + (j.harnessCiv || 0)) * HARNESS_RATE
+        + ((j.advKitPD || 0) + (j.advKitCiv || 0)) * ADVANCED_REPAIR_KIT_RATE;
     });
 
     const groupId = `jg-${++groupCounter}`;
@@ -1123,9 +1123,9 @@ function renderJobs() {
       const totalHarnessCount = (j.harnessPD || 0) + (j.harnessCiv || 0);
       const totalAdvKitCount = (j.advKitPD || 0) + (j.advKitCiv || 0);
       const totalValue =
-        j.across * REPAIR_RATE + pdEngineReps * engineRate
-        + totalHarnessCount * HARNESS_BILLING_RATE
-        + totalAdvKitCount * ADVANCED_REPAIR_KIT_BILLING_RATE;
+        j.across * PAY_PER_REPAIR + pdEngineReps * engineRate
+        + totalHarnessCount * HARNESS_RATE
+        + totalAdvKitCount * ADVANCED_REPAIR_KIT_RATE;
 
       const mechLabel = j.mechanic; // keep Jobs view as raw mechanic name
 
@@ -1406,7 +1406,7 @@ function exportCurrentViewCsv() {
         harnessCiv: 0,
         advKitPD: 0,
         advKitCiv: 0,
-        harnessKitBillingAccumulated: 0,
+        harnessKitPayAccumulated: 0,
       };
       mAgg.repairs += j.across;
       mAgg.acrossPD += j.acrossPD || 0;
@@ -1417,9 +1417,9 @@ function exportCurrentViewCsv() {
       mAgg.harnessCiv += j.harnessCiv || 0;
       mAgg.advKitPD += j.advKitPD || 0;
       mAgg.advKitCiv += j.advKitCiv || 0;
-      mAgg.harnessKitBillingAccumulated +=
-        ((j.harnessPD || 0) + (j.harnessCiv || 0)) * HARNESS_BILLING_RATE +
-        ((j.advKitPD || 0) + (j.advKitCiv || 0)) * ADVANCED_REPAIR_KIT_BILLING_RATE;
+      mAgg.harnessKitPayAccumulated +=
+        ((j.harnessPD || 0) + (j.harnessCiv || 0)) * HARNESS_RATE +
+        ((j.advKitPD || 0) + (j.advKitCiv || 0)) * ADVANCED_REPAIR_KIT_RATE;
       if (j.engineReplacements > 0 && j.department) {
         mAgg.engineReplacementsByDept[j.department] = 
           (mAgg.engineReplacementsByDept[j.department] || 0) + j.engineReplacements;
@@ -1434,7 +1434,7 @@ function exportCurrentViewCsv() {
       const pdEngineReps = r.engineReplacements || 0;
       const civEngineReps = r.civEngineReplacements || 0;
       const engineValue = calculateEngineValue(r.engineReplacementsByDept || {});
-      const totalValue = r.repairs * REPAIR_RATE + engineValue + (r.harnessKitBillingAccumulated || 0);
+      const totalValue = r.repairs * PAY_PER_REPAIR + engineValue + (r.harnessKitPayAccumulated || 0);
       return {
         "Month Ending": kFmtDate(r.monthEnd),
         "PD Repairs": r.acrossPD,
@@ -1516,9 +1516,9 @@ function exportCurrentViewCsv() {
                          ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
       const totalHarnessCount = (j.harnessPD || 0) + (j.harnessCiv || 0);
       const totalAdvKitCount = (j.advKitPD || 0) + (j.advKitCiv || 0);
-      const totalValue = j.across * REPAIR_RATE + pdEngineReps * engineRate
-        + totalHarnessCount * HARNESS_BILLING_RATE
-        + totalAdvKitCount * ADVANCED_REPAIR_KIT_BILLING_RATE;
+      const totalValue = j.across * PAY_PER_REPAIR + pdEngineReps * engineRate
+        + totalHarnessCount * HARNESS_RATE
+        + totalAdvKitCount * ADVANCED_REPAIR_KIT_RATE;
       return {
         Timestamp: j.tsDate ? kFmtDate(j.tsDate) : "",
         Mechanic: j.mechanic,

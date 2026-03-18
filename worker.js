@@ -1495,7 +1495,9 @@ async function handleAskCommand(interaction, env, ctx) {
   const { application_id: appId, token } = interaction;
   const question  = (interaction.data?.options?.find(o => o.name === 'question')?.value ?? '').trim();
   const channelId = interaction.channel_id ?? null;
-  const asker     = (interaction.member?.user ?? interaction.user)?.username ?? null;
+  const askerMember = interaction.member ?? null;
+  const askerUser   = askerMember?.user ?? interaction.user ?? null;
+  const asker       = askerMember?.nick || askerUser?.global_name || (askerUser?.username ? resolveUsername(askerUser.username) : null);
 
   ctx.waitUntil((async () => {
     let answer;
@@ -1517,11 +1519,14 @@ async function handleAskCommand(interaction, env, ctx) {
       const messages = [{ role: 'system', content: systemContent }];
 
       // Include recent non-bot messages as conversation context.
-      // Resolve Discord usernames to in-character names so the AI can reference staff correctly.
+      // Use server nickname when available, falling back to display name or resolved username.
       const contextLines = channelMsgs
         .filter(m => !m.author?.bot)
         .slice(-8)
-        .map(m => `${resolveUsername(m.author?.username)}: ${m.content}`)
+        .map(m => {
+          const displayName = m.member?.nick || m.author?.global_name || resolveUsername(m.author?.username);
+          return `${displayName}: ${m.content}`;
+        })
         .join('\n');
 
       if (contextLines) {
@@ -1549,7 +1554,7 @@ async function handleAskCommand(interaction, env, ctx) {
     }
 
     // Prefix shows who asked and what they asked so the public reply has context.
-    const askerName = asker ? resolveUsername(asker) : null;
+    const askerName = asker ?? null;
     const prefix = askerName
       ? `**${askerName}** asked: *${(question || '…').slice(0, MAX_QUESTION_PREVIEW_LENGTH)}${question.length > MAX_QUESTION_PREVIEW_LENGTH ? '…' : ''}*\n\n`
       : '';
@@ -3351,11 +3356,14 @@ export class DiscordGateway {
       const messages = [{ role: 'system', content: systemContent }];
 
       // Include recent non-bot messages as conversation context.
-      // Resolve Discord usernames to in-character names so the AI can reference staff correctly.
+      // Use server nickname when available, falling back to display name or resolved username.
       const contextLines = channelMsgs
         .filter(m => !m.author?.bot)
         .slice(-8)
-        .map(m => `${resolveUsername(m.author?.username)}: ${m.content}`)
+        .map(m => {
+          const displayName = m.member?.nick || m.author?.global_name || resolveUsername(m.author?.username);
+          return `${displayName}: ${m.content}`;
+        })
         .join('\n');
 
       if (contextLines) {
