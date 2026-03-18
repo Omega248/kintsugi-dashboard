@@ -336,11 +336,29 @@ async function loadPayouts() {
     const iHarnessPD  = headersLower.findIndex((h) => h.includes("harness") && h.includes("pd"));
     const iHarnessCiv = headersLower.findIndex((h) => h.includes("harness") && !h.includes("pd"));
 
-    // Advanced Repair Kit columns: primary "advanced"+"kit", fallback "repair"+"kit"
+    // Advanced Repair Kit columns: primary "advanced"+"kit", fallback "repair"+"kit",
+    // then "kit"+"sales", then any "kit" column (excluding engine/harness/across columns).
     let iAdvKitPD  = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && h.includes("pd"));
     let iAdvKitCiv = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && !h.includes("pd"));
     if (iAdvKitPD  === -1) iAdvKitPD  = headersLower.findIndex((h) => h.includes("repair") && h.includes("kit") && h.includes("pd"));
     if (iAdvKitCiv === -1) iAdvKitCiv = headersLower.findIndex((h, i) => i !== iAdvKitPD && h.includes("repair") && h.includes("kit") && !h.includes("pd"));
+    if (iAdvKitPD  === -1) iAdvKitPD  = headersLower.findIndex((h) => h.includes("kit") && h.includes("sales") && h.includes("pd"));
+    if (iAdvKitCiv === -1) iAdvKitCiv = headersLower.findIndex((h, i) => i !== iAdvKitPD && h.includes("kit") && h.includes("sales") && !h.includes("pd"));
+    // Last-resort: any "kit" column not already bound to engine/harness/across
+    if (iAdvKitPD === -1) {
+      iAdvKitPD = headersLower.findIndex(
+        (h, i) => i !== iAdvKitCiv && i !== iEnginePayer && i !== iEnginePD && i !== iEngineCiv
+          && i !== iHarnessPD && i !== iHarnessCiv
+          && h.includes("kit") && h.includes("pd")
+      );
+    }
+    if (iAdvKitCiv === -1) {
+      iAdvKitCiv = headersLower.findIndex(
+        (h, i) => (iAdvKitPD === -1 || i !== iAdvKitPD) && i !== iEnginePayer && i !== iEnginePD && i !== iEngineCiv
+          && i !== iHarnessPD && i !== iHarnessCiv
+          && h.includes("kit") && !h.includes("pd")
+      );
+    }
 
     if (iMech === -1 || (iAcrossPD === -1 && iAcrossCiv === -1) || iWeek === -1 || iMonth === -1) {
       throw new Error("Missing required columns.");
@@ -1086,10 +1104,7 @@ function renderJobs() {
   monthBuckets.forEach(({ monthEnd, jobs: monthJobs }) => {
     let monthTotal = 0;
     monthJobs.forEach((j) => {
-      const pdEngineReps = j.engineReplacements || 0;
-      const engineRate = (j.department === "BCSO" && pdEngineReps > 0) ?
-        ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
-      monthTotal += j.across * PAY_PER_REPAIR + pdEngineReps * engineRate
+      monthTotal += j.across * PAY_PER_REPAIR + (j.enginePayForMechanic || 0)
         + ((j.harnessPD || 0) + (j.harnessCiv || 0)) * HARNESS_RATE
         + ((j.advKitPD || 0) + (j.advKitCiv || 0)) * ADVANCED_REPAIR_KIT_RATE;
     });
@@ -1128,13 +1143,10 @@ function renderJobs() {
       const pdEngineReps = j.engineReplacements || 0;
       const civEngineReps = j.civEngineReplacements || 0;
       const pdEngineLabel = pdEngineReps ? "Yes" : "No";
-      // Use BCSO rate for BCSO engine replacements, standard rate for others
-      const engineRate = (j.department === "BCSO" && pdEngineReps > 0) ?
-        ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
       const totalHarnessCount = (j.harnessPD || 0) + (j.harnessCiv || 0);
       const totalAdvKitCount = (j.advKitPD || 0) + (j.advKitCiv || 0);
       const totalValue =
-        j.across * PAY_PER_REPAIR + pdEngineReps * engineRate
+        j.across * PAY_PER_REPAIR + (j.enginePayForMechanic || 0)
         + totalHarnessCount * HARNESS_RATE
         + totalAdvKitCount * ADVANCED_REPAIR_KIT_RATE;
 
@@ -1522,12 +1534,9 @@ function exportCurrentViewCsv() {
       const civEngineReps = j.civEngineReplacements || 0;
       const pdEngineLabel = pdEngineReps ? "Yes" : "No";
       const civEngineLabel = civEngineReps ? "Yes" : "No";
-      // Use BCSO rate for BCSO, standard rate for others
-      const engineRate = (j.department === "BCSO" && pdEngineReps > 0) ? 
-                         ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
       const totalHarnessCount = (j.harnessPD || 0) + (j.harnessCiv || 0);
       const totalAdvKitCount = (j.advKitPD || 0) + (j.advKitCiv || 0);
-      const totalValue = j.across * PAY_PER_REPAIR + pdEngineReps * engineRate
+      const totalValue = j.across * PAY_PER_REPAIR + (j.enginePayForMechanic || 0)
         + totalHarnessCount * HARNESS_RATE
         + totalAdvKitCount * ADVANCED_REPAIR_KIT_RATE;
       return {
