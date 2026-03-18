@@ -124,6 +124,36 @@ function fmtMoney(n) {
   return '$' + Math.round(Number.isFinite(n) ? n : 0).toLocaleString('en-US');
 }
 
+// ===== Engine pay helper =====
+
+/**
+ * Compute mechanic engine pay for a single job, accounting for who purchased
+ * the engine and whether the repair is PD or civilian (CIV).
+ *
+ * PD engines:
+ *   enginePayer === "mechanic"  → mechanic covered engine cost → $12,000 + $1,500 bonus if LSPD
+ *   enginePayer === "kintsugi"  → kintsugi covered cost, mechanic gets $1,500 bonus only if LSPD
+ *   enginePayer === ""          → old data, fall back to dept-based defaults
+ *
+ * CIV engines: $12,000 reimbursement only (no bonus, payer irrelevant)
+ */
+function computeEnginePay(pdEngineCount, dept, enginePayer, civEngineCount) {
+  let pay = 0;
+  const isLspd = (dept || '').toUpperCase() === 'LSPD';
+  if (pdEngineCount > 0) {
+    if (enginePayer === 'mechanic') {
+      pay += pdEngineCount * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
+    } else if (enginePayer === 'kintsugi') {
+      pay += pdEngineCount * (isLspd ? ENGINE_BONUS_LSPD : 0);
+    } else {
+      // No payer info (old data): default to full reimbursement + LSPD bonus
+      pay += pdEngineCount * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
+    }
+  }
+  pay += (civEngineCount || 0) * ENGINE_REIMBURSEMENT;
+  return pay;
+}
+
 // ===== Sheet parsers =====
 
 function parseJobsSheet(rows) {
@@ -134,8 +164,24 @@ function parseJobsSheet(rows) {
   const iAcross = lower.findIndex(h => h.includes('across') || h.includes('repairs'));
   const iTime   = lower.findIndex(h => h.includes('timestamp'));
   const iWeek   = lower.findIndex(h => h.includes('week') && h.includes('end'));
-  const iEngine = lower.findIndex(h => h.includes('engine') && h.includes('replacement'));
   const iDept   = lower.findIndex(h => h.includes('department') || h.includes('dept'));
+
+  // Engine payer column must be detected first to exclude it from engine-count searches.
+  const iEnginePayer = lower.findIndex(
+    h => h.includes('did you buy') || (h.includes('kintsugi') && h.includes('pay'))
+  );
+  // PD engine replacement (first occurrence, excluding payer column)
+  const iEnginePD = lower.findIndex(
+    (h, i) => i !== iEnginePayer && h.includes('engine') && h.includes('replacement')
+  );
+  // CIV engine replacement (second occurrence, excluding payer column)
+  const iEngineCiv =
+    iEnginePD !== -1
+      ? lower.findIndex(
+          (h, i) => i > iEnginePD && i !== iEnginePayer && h.includes('engine') && h.includes('replacement')
+        )
+      : -1;
+
   if (iMech === -1 || iAcross === -1) return [];
   const jobs = [];
   for (let i = 1; i < rows.length; i++) {
@@ -145,18 +191,50 @@ function parseJobsSheet(rows) {
     if (!mech) continue;
     const across = parseInt(row[iAcross] || '0', 10) || 0;
     if (!across) continue;
-    let engineCount = 0;
-    if (iEngine !== -1) {
-      const raw = (row[iEngine] || '').trim();
+
+    let pdEngineCount = 0;
+    if (iEnginePD !== -1) {
+      const raw = (row[iEnginePD] || '').trim();
       const n   = Number(raw);
-      if (!isNaN(n) && n > 0) { engineCount = n; }
-      else if (/^(yes|y|true)$/i.test(raw)) { engineCount = 1; }
+      if (!isNaN(n) && n > 0) { pdEngineCount = n; }
+      else if (/^(yes|y|true)$/i.test(raw)) { pdEngineCount = 1; }
     }
+
+    let civEngineCount = 0;
+    if (iEngineCiv !== -1) {
+      const raw = (row[iEngineCiv] || '').trim();
+      const n   = Number(raw);
+      if (!isNaN(n) && n > 0) { civEngineCount = n; }
+      else if (/^(yes|y|true)$/i.test(raw)) { civEngineCount = 1; }
+    }
+
+    // Determine who purchased the PD engine replacement
+    // "mechanic" = mechanic bought it; "kintsugi" = kintsugi bought it; "" = old data
+    let enginePayer = '';
+    if (iEnginePayer !== -1 && pdEngineCount > 0) {
+      const rawPayer = (row[iEnginePayer] || '').trim().toLowerCase();
+      if (rawPayer.includes('kintsugi')) {
+        enginePayer = 'kintsugi';
+      } else if (/^\s*i\b|i bought|bought it|myself/i.test(rawPayer)) {
+        enginePayer = 'mechanic';
+      }
+    }
+
     const dept     = iDept !== -1 ? (row[iDept] || '').trim() : '';
     const tsDate   = iTime !== -1 ? parseDateLike(row[iTime])  : null;
     const weekEnd  = iWeek !== -1 ? parseDateLike(row[iWeek])  : null;
     const bestDate = tsDate || weekEnd;
-    jobs.push({ mechanic: mech, across, engineReplacements: engineCount, department: dept, weekEnd, bestDate });
+    jobs.push({
+      mechanic:           mech,
+      across,
+      engineReplacements: pdEngineCount + civEngineCount,
+      pdEngineCount,
+      civEngineCount,
+      enginePayer,
+      department:         dept,
+      weekEnd,
+      bestDate,
+    });
   }
   return jobs;
 }
@@ -324,9 +402,7 @@ async function main() {
     rec.jobs++;
     rec.repairs            += j.across || 0;
     rec.engineReplacements += j.engineReplacements || 0;
-    // Bonus only for LSPD; all other departments get reimbursement only
-    const isLspd = (j.department || '').toUpperCase() === 'LSPD';
-    rec.enginePayTotal     += j.engineReplacements * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
+    rec.enginePayTotal     += computeEnginePay(j.pdEngineCount || 0, j.department, j.enginePayer || '', j.civEngineCount || 0);
   }
 
   const payouts = Array.from(mechMap.values()).map(m => {
