@@ -1,7 +1,9 @@
 // ===== Config (values sourced from constants.js) =====
 const JOBS_SHEET    = KINTSUGI_CONFIG.SHEETS.JOBS;
 const CONFIG_SHEET  = KINTSUGI_CONFIG.SHEETS.CONFIG;
-const PAY_PER_REPAIR = PAYMENT_RATES.PAY_PER_REPAIR;
+const PAY_PER_REPAIR       = PAYMENT_RATES.PAY_PER_REPAIR;
+const ENGINE_REIMBURSEMENT = PAYMENT_RATES.ENGINE_REIMBURSEMENT;
+const ENGINE_BONUS_LSPD    = PAYMENT_RATES.ENGINE_BONUS_LSPD;
 
 const AUTO_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -16,50 +18,65 @@ async function loadOverview() {
     // Show loading state
     if (status) status.textContent = "Loading dashboard...";
     
-    const { data: rows } = await kFetchCSV(JOBS_SHEET, { header: true });
-    
-    if (!rows.length) {
+    const rawData = await kFetchCSV(JOBS_SHEET);
+
+    if (rawData.length < 2) {
       if (status) status.textContent = "";
       kShowEmpty('stat-boxes', 'No jobs data available yet.');
       return;
     }
 
-    // infer keys — detect PD and CIV repair columns separately
-    const sample = rows[0];
-    const allSampleKeys = Object.keys(sample);
-    const mechKey =
-      allSampleKeys.find((k) =>
-        k.toLowerCase().includes("mechanic")
-      ) || "Mechanic";
+    // Detect column indices from header row.
+    // Use raw-array mode so duplicate column names (e.g. two "Engine Replacement?"
+    // columns for PD and CIV) can be distinguished by their position.
+    const headers = rawData[0].map((h) => h.trim());
+    const headersLower = headers.map((h) => h.toLowerCase());
 
-    // PD repairs: "How many Across PD?" (contains "across" AND "pd")
-    const acrossPDKey =
-      allSampleKeys.find((k) => {
-        const l = k.toLowerCase();
-        return l.includes("across") && l.includes("pd");
-      }) || null;
+    const iMech = headersLower.findIndex((h) => h.includes("mechanic"));
 
-    // CIV repairs: "How many Across" (contains "across" but NOT "pd")
-    const acrossCivKey =
-      allSampleKeys.find((k) => {
-        const l = k.toLowerCase();
-        return l.includes("across") && !l.includes("pd");
-      }) ||
-      allSampleKeys.find((k) => k.toLowerCase().includes("repairs")) ||
-      null;
+    // PD repairs: contains "across" AND "pd"
+    const iAcrossPD = headersLower.findIndex(
+      (h) => h.includes("across") && h.includes("pd")
+    );
+    // CIV repairs: contains "across" but NOT "pd"; fall back to generic "repairs"
+    let iAcrossCiv = headersLower.findIndex(
+      (h) => h.includes("across") && !h.includes("pd")
+    );
+    if (iAcrossCiv === -1) {
+      iAcrossCiv = headersLower.findIndex((h) => h.includes("repairs"));
+    }
 
-    const weekKey =
-      Object.keys(sample).find((k) =>
-        k.toLowerCase().includes("week ending")
-      ) || null;
+    const iWeek = headersLower.findIndex((h) => h.includes("week ending"));
+    const iTs   = headersLower.findIndex((h) => h.includes("timestamp"));
 
-    const tsKey =
-      Object.keys(sample).find((k) =>
-        k.toLowerCase().includes("timestamp")
-      ) || null;
+    // Engine payer column — detect FIRST so it can be excluded from the engine
+    // replacement column searches (codebase convention).
+    const iEnginePayer = headersLower.findIndex(
+      (h) => h.includes("did you buy") || (h.includes("kintsugi") && h.includes("pay"))
+    );
+    // PD engine replacement: first "engine replacement" column, excluding payer column
+    const iEnginePD = headersLower.findIndex(
+      (h, i) => i !== iEnginePayer && h.includes("engine") && h.includes("replacement")
+    );
+    // CIV engine replacement: second "engine replacement" column (after iEnginePD)
+    const iEngineCiv =
+      iEnginePD !== -1
+        ? headersLower.findIndex(
+            (h, i) =>
+              i > iEnginePD &&
+              i !== iEnginePayer &&
+              h.includes("engine") &&
+              h.includes("replacement")
+          )
+        : -1;
+    // Department column
+    const iDept = headersLower.findIndex((h) => h.includes("department"));
+
+    const rows = rawData.slice(1);
 
     // global aggregates
     let totalRepairs = 0;
+    let totalEnginePay = 0;
     const mechanics = new Set();
     let latestWeekDate = null;
     let lastActivity = null;
@@ -67,7 +84,10 @@ async function loadOverview() {
     // time-bucketed aggregates
     let repairsThisWeek = 0;
     let repairsThisMonth = 0;
+    let enginePayThisWeek = 0;
+    let enginePayThisMonth = 0;
     const perMechWeek = {};
+    const perMechWeekEnginePay = {};
 
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -82,20 +102,61 @@ async function loadOverview() {
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
     const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
-    rows.forEach((r) => {
-      const mech = (r[mechKey] || "").trim();
+    rows.forEach((row) => {
+      const mech = iMech !== -1 ? (row[iMech] || "").trim() : "";
       if (mech) mechanics.add(mech);
 
       // Sum PD + CIV repairs for total count
-      const acrossPD = acrossPDKey ? Number(r[acrossPDKey] || 0) || 0 : 0;
-      const acrossCiv = acrossCivKey ? Number(r[acrossCivKey] || 0) || 0 : 0;
+      const acrossPD  = iAcrossPD  !== -1 ? (Number(row[iAcrossPD]  || 0) || 0) : 0;
+      const acrossCiv = iAcrossCiv !== -1 ? (Number(row[iAcrossCiv] || 0) || 0) : 0;
       const across = acrossPD + acrossCiv;
       totalRepairs += across;
 
+      // Engine pay for this job
+      let enginePay = 0;
+      const pdEngineRaw  = iEnginePD  !== -1 ? (row[iEnginePD]  || "").trim() : "";
+      const civEngineRaw = iEngineCiv !== -1 ? (row[iEngineCiv] || "").trim() : "";
+      let pdEngineCount = 0;
+      if (pdEngineRaw) {
+        const n = Number(pdEngineRaw);
+        if (!isNaN(n) && n > 0) pdEngineCount = n;
+        else if (/^(yes|y|true)$/i.test(pdEngineRaw)) pdEngineCount = 1;
+      }
+      let civEngineCount = 0;
+      if (civEngineRaw) {
+        const n = Number(civEngineRaw);
+        if (!isNaN(n) && n > 0) civEngineCount = n;
+        else if (/^(yes|y|true)$/i.test(civEngineRaw)) civEngineCount = 1;
+      }
+      if (pdEngineCount > 0 || civEngineCount > 0) {
+        const dept    = iDept        !== -1 ? (row[iDept]        || "").trim().toUpperCase() : "";
+        const payerRaw = iEnginePayer !== -1 ? (row[iEnginePayer] || "").trim().toLowerCase() : "";
+        let enginePayer = "";
+        if (payerRaw) {
+          if (payerRaw.includes("kintsugi")) enginePayer = "kintsugi";
+          else if (/^\s*i\b|i bought|bought it|myself/i.test(payerRaw)) enginePayer = "mechanic";
+        }
+        const isLspd = dept === "LSPD";
+        if (pdEngineCount > 0) {
+          if (enginePayer === "mechanic") {
+            enginePay += pdEngineCount * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
+          } else if (enginePayer === "kintsugi") {
+            // Kintsugi paid — mechanic earns the LSPD bonus only (or $0 for non-LSPD)
+            enginePay += pdEngineCount * (isLspd ? ENGINE_BONUS_LSPD : 0);
+          } else {
+            // Old data without payer info: default to full reimbursement
+            enginePay += pdEngineCount * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
+          }
+        }
+        enginePay += civEngineCount * ENGINE_REIMBURSEMENT;
+      }
+      totalEnginePay += enginePay;
+
       // Week ending for global latest week tile
       let weekDate = null;
-      if (weekKey && r[weekKey]) {
-        const d = parseDateLike(r[weekKey]);
+      const weekRaw = iWeek !== -1 ? row[iWeek] : null;
+      if (weekRaw) {
+        const d = parseDateLike(weekRaw);
         if (d && !isNaN(d)) {
           weekDate = d;
           if (!latestWeekDate || d > latestWeekDate) {
@@ -106,8 +167,9 @@ async function loadOverview() {
 
       // Prefer timestamp for "this week/month" classification, fall back to week ending
       let jobDate = null;
-      if (tsKey && r[tsKey]) {
-        const d = parseDateLike(r[tsKey]);
+      const tsRaw = iTs !== -1 ? row[iTs] : null;
+      if (tsRaw) {
+        const d = parseDateLike(tsRaw);
         if (d && !isNaN(d)) jobDate = d;
       }
       if (!jobDate) jobDate = weekDate;
@@ -125,20 +187,23 @@ async function loadOverview() {
 
         if (dOnly >= weekStart && dOnly <= weekEnd) {
           repairsThisWeek += across;
+          enginePayThisWeek += enginePay;
           if (mech) {
             perMechWeek[mech] = (perMechWeek[mech] || 0) + across;
+            perMechWeekEnginePay[mech] = (perMechWeekEnginePay[mech] || 0) + enginePay;
           }
         }
 
         if (dOnly >= monthStart && dOnly <= monthEnd) {
           repairsThisMonth += across;
+          enginePayThisMonth += enginePay;
         }
       }
     });
 
-    const totalPayout = totalRepairs * PAY_PER_REPAIR;
-    const payoutThisWeek = repairsThisWeek * PAY_PER_REPAIR;
-    const payoutThisMonth = repairsThisMonth * PAY_PER_REPAIR;
+    const totalPayout    = totalRepairs * PAY_PER_REPAIR + totalEnginePay;
+    const payoutThisWeek  = repairsThisWeek  * PAY_PER_REPAIR + enginePayThisWeek;
+    const payoutThisMonth = repairsThisMonth * PAY_PER_REPAIR + enginePayThisMonth;
 
     // Top mechanic this week
     let topMechName = null;
