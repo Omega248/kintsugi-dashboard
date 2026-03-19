@@ -2418,6 +2418,37 @@ function buildCurrentWeekSummary(allJobs) {
 }
 
 /**
+ * Scan the most recent `limit` messages in a channel for an existing bot
+ * message whose first embed has the given title.  Returns the message ID if
+ * found, or null if not found / on error.  Used as a fallback when the KV
+ * store does not have a persisted message ID.
+ */
+async function findExistingBotMessage(channelId, botToken, embedTitle, limit = 50) {
+  if (!channelId || !botToken || !embedTitle) return null;
+  try {
+    const res = await fetch(
+      `https://discord.com/api/v10/channels/${channelId}/messages?limit=${limit}`,
+      { headers: { 'Authorization': `Bot ${botToken}` } }
+    );
+    if (!res.ok) return null;
+    const messages = await res.json();
+    if (!Array.isArray(messages)) return null;
+    for (const msg of messages) {
+      if (
+        msg.author?.bot &&
+        Array.isArray(msg.embeds) &&
+        msg.embeds.some(e => e.title === embedTitle)
+      ) {
+        return msg.id;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * POST a message to a Discord channel using the bot token.
  * Returns the message ID on success, or null on failure.
  */
@@ -2482,6 +2513,11 @@ function validateConfig(env) {
   const required = ['DISCORD_BOT_TOKEN'];
   return required.filter(k => !env[k]);
 }
+
+// Embed titles used both when building payloads and when scanning channel
+// history for an existing message — defined here so they stay in sync.
+const ANALYTICS_EMBED_TITLE = '📊 Kintsugi Motorworks — Weekly Analytics';
+const JOBS_EMBED_TITLE       = '📋 Weekly Job Activity';
 
 /**
  * Build the weekly analytics embed payload so it can be reused for both
@@ -2555,7 +2591,7 @@ function buildAnalyticsPayload(summary, prevSummary = null) {
 
   return {
     embeds: [{
-      title:     '📊 Kintsugi Motorworks — Weekly Analytics',
+      title:     ANALYTICS_EMBED_TITLE,
       color:     0x4f46e5,
       fields,
       timestamp: new Date().toISOString(),
@@ -2589,18 +2625,31 @@ async function postWeeklyAnalytics(env, summary, prevSummary = null) {
 
   const payload = buildAnalyticsPayload(summary, prevSummary);
 
-  // Try to edit the existing analytics message
+  // 1. Try the KV-persisted message ID (fastest path)
   if (env.KV) {
     const storedId = await env.KV.get('analytics_message_id');
     if (storedId) {
       const edited = await botEdit(channelId, env.DISCORD_BOT_TOKEN, storedId, payload);
       if (edited === true) return true;
       if (edited !== false) return false; // transient error — skip posting a new message
-      // edited === false: message was deleted — fall through to post a new one
+      // edited === false: message was deleted — fall through
     }
   }
 
-  // Post a new message and persist its ID
+  // 2. Scan the channel for an existing analytics message (fallback when KV is
+  //    empty or the stored message was deleted)
+  const scannedId = await findExistingBotMessage(channelId, env.DISCORD_BOT_TOKEN, ANALYTICS_EMBED_TITLE);
+  if (scannedId) {
+    const edited = await botEdit(channelId, env.DISCORD_BOT_TOKEN, scannedId, payload);
+    if (edited === true) {
+      if (env.KV) await env.KV.put('analytics_message_id', scannedId);
+      return true;
+    }
+    if (edited !== false) return false; // transient error
+    // edited === false: message deleted between scan and edit — fall through
+  }
+
+  // 3. Post a new message and persist its ID
   const messageId = await botPost(channelId, env.DISCORD_BOT_TOKEN, payload);
   if (messageId && env.KV) {
     await env.KV.put('analytics_message_id', messageId);
@@ -2626,7 +2675,7 @@ function buildJobsPayload(summary) {
 
   return {
     embeds: [{
-      title:     '📋 Weekly Job Activity',
+      title:     JOBS_EMBED_TITLE,
       description,
       color:     0x4f46e5,
       timestamp: new Date().toISOString(),
@@ -2647,18 +2696,31 @@ async function postJobsUpdate(env, summary) {
 
   const payload = buildJobsPayload(summary);
 
-  // Try to edit the existing jobs message
+  // 1. Try the KV-persisted message ID (fastest path)
   if (env.KV) {
     const storedId = await env.KV.get('jobs_message_id');
     if (storedId) {
       const edited = await botEdit(env.JOBS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, storedId, payload);
       if (edited === true) return true;
       if (edited !== false) return false; // transient error — skip posting a new message
-      // edited === false: message was deleted — fall through to post a new one
+      // edited === false: message was deleted — fall through
     }
   }
 
-  // Post a new message and persist its ID
+  // 2. Scan the channel for an existing jobs message (fallback when KV is
+  //    empty or the stored message was deleted)
+  const scannedId = await findExistingBotMessage(env.JOBS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, JOBS_EMBED_TITLE);
+  if (scannedId) {
+    const edited = await botEdit(env.JOBS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, scannedId, payload);
+    if (edited === true) {
+      if (env.KV) await env.KV.put('jobs_message_id', scannedId);
+      return true;
+    }
+    if (edited !== false) return false; // transient error
+    // edited === false: message deleted between scan and edit — fall through
+  }
+
+  // 3. Post a new message and persist its ID
   const messageId = await botPost(env.JOBS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, payload);
   if (messageId && env.KV) {
     await env.KV.put('jobs_message_id', messageId);
