@@ -10,18 +10,29 @@
 //
 //   DISCORD_BOT_TOKEN=Bot.xxxxx DISCORD_CHANNEL_ID=1234567890 node update-analytics.js
 //
-// To find and edit an existing analytics message the script searches the last
-// 50 messages in the channel for one posted by this bot with the analytics
-// title.  If none is found a new message is posted.
+// Message-ID persistence (prevents duplicate posts):
+//   The workflow passes the stored message ID via ANALYTICS_MESSAGE_ID.
+//   The script tries to edit that message directly; falls back to a channel
+//   scan only if the ID is unset or the message was deleted.  The final
+//   message ID is written to $GITHUB_OUTPUT so the workflow can save it as
+//   the ANALYTICS_MESSAGE_ID repository variable for the next run.
 //
 // Requirements:
 //   - Node.js 18+ (built-in fetch)
 //   - DISCORD_BOT_TOKEN   — Bot token from the Discord Developer Portal
 //   - DISCORD_CHANNEL_ID  — ID of the #analytics channel
+//
+// Optional:
+//   - ANALYTICS_MESSAGE_ID — Discord message ID of the existing analytics
+//     message.  When provided the script edits it directly instead of
+//     scanning channel history.  Set automatically by the workflow.
 // =======================================
 
-const BOT_TOKEN  = process.env.DISCORD_BOT_TOKEN;
-const CHANNEL_ID = process.env.DISCORD_CHANNEL_ID;
+import { appendFileSync } from 'node:fs';
+
+const BOT_TOKEN        = process.env.DISCORD_BOT_TOKEN;
+const CHANNEL_ID       = process.env.DISCORD_CHANNEL_ID;
+const STORED_MESSAGE_ID = process.env.ANALYTICS_MESSAGE_ID || '';
 
 if (!BOT_TOKEN || !CHANNEL_ID) {
   console.error(
@@ -483,6 +494,7 @@ async function editMessage(messageId, payload) {
     },
     body: JSON.stringify(payload),
   });
+  if (res.status === 404) return null; // message was deleted or never existed
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(`Discord PATCH error (${res.status}): ${JSON.stringify(data)}`);
@@ -537,22 +549,49 @@ async function main() {
 
   const payload = buildAnalyticsPayload(summary);
 
-  // Look for an existing analytics message to edit so the channel stays tidy
-  console.log('\nSearching channel for existing analytics message…');
-  const existingId = await findExistingAnalyticsMessage();
+  let finalMessageId = null;
 
-  if (existingId) {
-    console.log(`Found existing message (${existingId}) — editing…`);
-    await editMessage(existingId, payload);
-    console.log(`✅ Analytics message updated!  Message ID: ${existingId}`);
-  } else {
+  // 1. Try the stored message ID directly — no channel scan needed
+  if (STORED_MESSAGE_ID) {
+    console.log(`\nUsing stored message ID (${STORED_MESSAGE_ID})…`);
+    const result = await editMessage(STORED_MESSAGE_ID, payload);
+    if (result !== null) {
+      console.log(`✅ Analytics message updated!  Message ID: ${result}`);
+      finalMessageId = result;
+    } else {
+      console.log('Stored message not found (deleted?) — scanning channel for a replacement…');
+    }
+  }
+
+  // 2. Fall back to channel scan if no stored ID or stored message was deleted
+  if (!finalMessageId) {
+    console.log('\nSearching channel for existing analytics message…');
+    const existingId = await findExistingAnalyticsMessage();
+
+    if (existingId) {
+      console.log(`Found existing message (${existingId}) — editing…`);
+      const result = await editMessage(existingId, payload);
+      if (result !== null) {
+        console.log(`✅ Analytics message updated!  Message ID: ${result}`);
+        finalMessageId = result;
+      }
+    }
+  }
+
+  // 3. Post a brand-new message if nothing was found or editable
+  if (!finalMessageId) {
     console.log('No existing message found — posting new…');
-    const messageId = await postMessage(payload);
-    console.log(`✅ Analytics message posted!  Message ID: ${messageId}`);
+    finalMessageId = await postMessage(payload);
+    console.log(`✅ Analytics message posted!  Message ID: ${finalMessageId}`);
     console.log('   Tip: Pin this message in Discord so it stays visible at the top of the channel.');
   }
 
   console.log(`   Channel: ${CHANNEL_ID}`);
+
+  // Persist the message ID for the next run via GitHub Actions output
+  if (process.env.GITHUB_OUTPUT && finalMessageId) {
+    appendFileSync(process.env.GITHUB_OUTPUT, `message_id=${finalMessageId}\n`);
+  }
 }
 
 main().catch(err => {

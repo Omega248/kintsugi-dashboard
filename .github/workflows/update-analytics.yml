@@ -16,6 +16,12 @@
 #   ANALYTICS_CHANNEL_ID — Discord channel ID for the #analytics channel
 #                          (right-click channel in Discord → Copy Channel ID)
 #
+# Optional repository variable (set automatically after the first run):
+#   ANALYTICS_MESSAGE_ID — Discord message ID of the analytics embed.
+#                          The workflow reads this to edit the message in place
+#                          rather than scanning channel history.  Updated
+#                          automatically whenever a new message is posted.
+#
 # Optional workflow input:
 #   channel_id — Override the target channel ID at run time.
 #                Leave blank to use the ANALYTICS_CHANNEL_ID secret.
@@ -40,6 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      variables: write
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
@@ -52,9 +59,34 @@ jobs:
           node-version: '22'
 
       - name: Update analytics message
+        id: analytics
         env:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           # Use the manually-supplied channel_id if provided, otherwise fall
           # back to the ANALYTICS_CHANNEL_ID secret.
           DISCORD_CHANNEL_ID: ${{ inputs.channel_id != '' && inputs.channel_id || secrets.ANALYTICS_CHANNEL_ID }}
+          # Pass the stored message ID so the script can edit it directly
+          # instead of scanning channel history (prevents duplicate posts).
+          ANALYTICS_MESSAGE_ID: ${{ vars.ANALYTICS_MESSAGE_ID }}
         run: node scripts/update-analytics.js
+
+      - name: Persist analytics message ID
+        if: steps.analytics.outputs.message_id != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NEW_ID="${{ steps.analytics.outputs.message_id }}"
+          # Try to update the existing variable; create it if it doesn't exist yet.
+          gh api \
+            --method PATCH \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${{ github.repository }}/actions/variables/ANALYTICS_MESSAGE_ID" \
+            -f name=ANALYTICS_MESSAGE_ID \
+            -f value="$NEW_ID" \
+          || gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${{ github.repository }}/actions/variables" \
+            -f name=ANALYTICS_MESSAGE_ID \
+            -f value="$NEW_ID"

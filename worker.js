@@ -2442,7 +2442,11 @@ async function botPost(channelId, botToken, payload) {
 
 /**
  * Edit an existing message in a Discord channel using the bot token.
- * Returns true on success, false on failure (e.g. message was deleted → 404).
+ * Returns:
+ *   true  — message was edited successfully
+ *   false — message was not found (404); caller should post a new one
+ *   null  — transient error (rate-limit, server error, network failure);
+ *           caller should skip posting a new message this run
  */
 async function botEdit(channelId, botToken, messageId, payload) {
   if (!channelId || !botToken || !messageId) return false;
@@ -2458,9 +2462,12 @@ async function botEdit(channelId, botToken, messageId, payload) {
         body: JSON.stringify(payload),
       }
     );
-    return res.ok;
+    if (res.ok) return true;
+    if (res.status === 404) return false; // message was deleted — post a new one
+    // Rate-limit (429), server error (5xx), etc. — don't post a duplicate
+    return null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -2587,8 +2594,9 @@ async function postWeeklyAnalytics(env, summary, prevSummary = null) {
     const storedId = await env.KV.get('analytics_message_id');
     if (storedId) {
       const edited = await botEdit(channelId, env.DISCORD_BOT_TOKEN, storedId, payload);
-      if (edited) return true;
-      // Message was deleted or is in a different channel — fall through to post a new one
+      if (edited === true) return true;
+      if (edited !== false) return false; // transient error — skip posting a new message
+      // edited === false: message was deleted — fall through to post a new one
     }
   }
 
@@ -2644,8 +2652,9 @@ async function postJobsUpdate(env, summary) {
     const storedId = await env.KV.get('jobs_message_id');
     if (storedId) {
       const edited = await botEdit(env.JOBS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, storedId, payload);
-      if (edited) return true;
-      // Message was deleted — fall through to post a new one
+      if (edited === true) return true;
+      if (edited !== false) return false; // transient error — skip posting a new message
+      // edited === false: message was deleted — fall through to post a new one
     }
   }
 
