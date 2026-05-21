@@ -87,6 +87,56 @@ const ENGINE_PAY_DEFAULT    = ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD;
 const HARNESS_RATE          = 500;
 const ADVANCED_REPAIR_KIT_RATE = 500;
 
+const DEPARTMENT_CONFIG = {
+  EMS: {
+    color: 0xFF1493,
+    engineBonus: 0,
+    emoji: '🏥',
+  },
+  LSPD: {
+    color: 0x000000,
+    engineBonus: ENGINE_BONUS_LSPD,
+    emoji: '⚫',
+  },
+  BCSO: {
+    color: 0xD2B48C,
+    engineBonus: 0,
+    emoji: '🟤',
+  },
+  ODPD: {
+    color: 0x00FFFF,
+    engineBonus: ENGINE_BONUS_LSPD,
+    emoji: '🔷',
+  },
+};
+
+function normalizeDepartment(dept) {
+  return String(dept || '').trim().toUpperCase();
+}
+
+function getDepartmentConfig(dept) {
+  return DEPARTMENT_CONFIG[normalizeDepartment(dept)] || {
+    color: 0x22c55e,
+    engineBonus: 0,
+    emoji: '🏢',
+  };
+}
+
+function getDepartmentEngineBonus(dept) {
+  return getDepartmentConfig(dept).engineBonus || 0;
+}
+
+function computeDepartmentEngineCharge(dept) {
+  return ENGINE_REIMBURSEMENT + getDepartmentEngineBonus(dept);
+}
+
+function computeInvoiceJobTotal(job) {
+  return (
+    (job.across || 0) * PAY_PER_REPAIR +
+    (job.engineReplacements || 0) * computeDepartmentEngineCharge(job.department)
+  );
+}
+
 // ===== Discord embed display limits =====
 const DISCORD_FIELD_MAX_CHARS = 1024; // Discord API field value character limit
 const DISCORD_MAX_MECHANICS   = 10;   // Max mechanics to list in a single embed field
@@ -301,7 +351,7 @@ function filterByMonth(jobs, year, month) {
 function buildInvoiceCsv(jobs) {
   const header = 'Date,Mechanic,Officer,License Plate,Repairs,Engine Replacements,Job Total ($)';
   const rows = jobs.map(j => {
-    const jobTotal = (j.across || 0) * PAY_PER_REPAIR + (j.engineReplacements || 0) * ENGINE_REIMBURSEMENT;
+    const jobTotal = computeInvoiceJobTotal(j);
     return [
       fmtDate(j.bestDate),
       j.mechanic,
@@ -321,8 +371,8 @@ function buildInvoiceCsv(jobs) {
 function buildInvoiceEmbed(dept, monthLabel, jobs) {
   const totalRepairs = jobs.reduce((s, j) => s + (j.across || 0), 0);
   const totalEngines = jobs.reduce((s, j) => s + (j.engineReplacements || 0), 0);
-  const grandTotal   = totalRepairs * PAY_PER_REPAIR + totalEngines * ENGINE_REIMBURSEMENT;
-  const color = dept.toUpperCase() === 'BCSO' ? 0xd4a017 : dept.toUpperCase() === 'LSPD' ? 0x1e90ff : 0x22c55e;
+  const grandTotal = jobs.reduce((sum, j) => sum + computeInvoiceJobTotal(j), 0);
+  const color = getDepartmentConfig(dept).color;
   return {
     title:     `📋 ${dept} — Monthly Invoice`,
     color,
@@ -458,17 +508,19 @@ function buildWeeklyStats(jobs) {
  */
 function computeEnginePay(pdEngineCount, dept, enginePayer, civEngineCount) {
   let pay = 0;
-  const isLspd = (dept || '').toUpperCase() === 'LSPD';
+  const departmentBonus = getDepartmentEngineBonus(dept);
+
   if (pdEngineCount > 0) {
     if (enginePayer === 'mechanic') {
-      pay += pdEngineCount * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
+      pay += pdEngineCount * (ENGINE_REIMBURSEMENT + departmentBonus);
     } else if (enginePayer === 'kintsugi') {
-      pay += pdEngineCount * (isLspd ? ENGINE_BONUS_LSPD : 0);
+      pay += pdEngineCount * departmentBonus;
     } else {
-      // No payer info (old data): default to full reimbursement + LSPD bonus
-      pay += pdEngineCount * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
+      // No payer info (old data): default to full reimbursement + department bonus
+      pay += pdEngineCount * (ENGINE_REIMBURSEMENT + departmentBonus);
     }
   }
+
   if ((civEngineCount || 0) > 0) {
     if (enginePayer === 'kintsugi') {
       // Kintsugi paid for the CIV engine — mechanic is not reimbursed
@@ -477,6 +529,7 @@ function computeEnginePay(pdEngineCount, dept, enginePayer, civEngineCount) {
       pay += civEngineCount * ENGINE_REIMBURSEMENT;
     }
   }
+
   return pay;
 }
 
@@ -496,13 +549,24 @@ function parseJobsSheet(rows) {
   const iTime   = lower.findIndex(h => h.includes('timestamp'));
   const iWeek   = lower.findIndex(h => h.includes('week') && h.includes('end'));
   const iMonth  = lower.findIndex(h => h.includes('month') && h.includes('end'));
-  const iCop    = lower.findIndex(h => h.includes('cop') || (h.includes('officer') && !h.includes('timestamp')));
+  const iCop    = lower.findIndex(
+    h =>
+      h.includes('cop') ||
+      h.includes('officer') ||
+      h.includes('owner of vehicle') ||
+      h.includes('vehicle owner')
+  );
   const iPlate  = lower.findIndex(h => h.includes('plate') || h.includes('license') || h.includes('licence'));
   const iDept   = lower.findIndex(h => h.includes('department') || h.includes('dept') || h.includes('division') || h.includes('unit'));
 
   // Engine payer column must be detected first to exclude it from engine-count searches.
   let iEnginePayer = lower.findIndex(
-    h => h.includes('did you buy') || (h.includes('kintsugi') && h.includes('pay'))
+  h =>
+    h.includes('did you buy') ||
+    h.includes('who paid') ||
+    h.includes('engine payer') ||
+    (h.includes('engine') && h.includes('paid')) ||
+    (h.includes('kintsugi') && h.includes('pay'))
   );
   // PD engine replacement (first occurrence, excluding payer column)
   const iEnginePD = lower.findIndex(
@@ -1075,8 +1139,10 @@ Repair payout: $700 per repair
 
 Engine replacement payout: $12,000
 
-LSPD engine replacement payout: $13,500 total  
-($12,000 engine + $1,500 LSPD bonus)
+LSPD / ODPD engine replacement payout: $13,500 total  
+($12,000 engine + $1,500 department bonus)
+
+BCSO / EMS engine replacement payout: $12,000 total
 
 Harness payout: $500 per harness
 
@@ -1378,7 +1444,7 @@ async function handleViewLogs(request, env) {
 // Regex patterns used by buildSheetDataContext to decide whether to hit the
 // Google Sheets API.  Extracted as constants for clarity and easy maintenance.
 const DATA_QUESTION_REGEX    = /\b(earn|made|make|paid|pay(?:out)?s?|owe|invoice|bill|how much|this week|last week|last month|this month|mechanic|total)\b/;
-const INVOICE_QUESTION_REGEX = /\b(owe|invoice|bill|department|dept|lspd|bcso|sasp|sheriff|police)\b/;
+const INVOICE_QUESTION_REGEX = /\b(owe|invoice|bill|department|dept|ems|lspd|bcso|odpd|sasp|sheriff|police)\b/;
 
 // Maximum characters of the original question shown in the public reply prefix.
 const MAX_QUESTION_PREVIEW_LENGTH = 120;
@@ -1497,7 +1563,7 @@ async function buildSheetDataContext(question) {
 
         context += `\nInvoice data — ${monthLabel}:\n`;
         for (const [dept, rec] of deptMap) {
-          const total = rec.repairs * PAY_PER_REPAIR + rec.engines * ENGINE_REIMBURSEMENT;
+          const total = rec.repairs * PAY_PER_REPAIR + rec.engines * computeDepartmentEngineCharge(dept);
           context += `  ${dept}: ${rec.repairs} repair${rec.repairs !== 1 ? 's' : ''}`;
           if (rec.engines) {
             context += `, ${rec.engines} engine${rec.engines !== 1 ? 's' : ''}`;
@@ -1932,12 +1998,15 @@ async function handleInvoicePanelButton(interaction, env, ctx) {
         allJobs.map(j => j.department).filter(Boolean)
       )].sort((a, b) => a.localeCompare(b));
 
-      // Fall back to the two known departments when the sheet lacks a dept column
-      const deptList = depts.length > 0 ? depts : ['BCSO', 'LSPD'];
+      // Always include every supported department, even when the sheet has no rows for it yet.
+      const defaultDepartments = ['EMS', 'LSPD', 'BCSO', 'ODPD'];
+      const deptList = depts.length > 0
+        ? [...new Set([...defaultDepartments, ...depts.map(d => normalizeDepartment(d))])].sort()
+        : defaultDepartments;
       const options = deptList.map(d => ({
         label: d,
         value: d,
-        emoji: { name: d === 'BCSO' ? '🟡' : d === 'LSPD' ? '🔵' : '🏢' },
+        emoji: { name: getDepartmentConfig(d).emoji },
       }));
 
       await editOriginalMessage(appId, token, {
