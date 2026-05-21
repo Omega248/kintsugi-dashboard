@@ -701,8 +701,16 @@ function parseJobsSheet(rows) {
       advKitPD = 0;
     }
 
-    const hasGovernmentBillableWork = acrossPD > 0 || pdEngineCount > 0 || harnessPD > 0 || advKitPD > 0;
-    const hasCivilianBillableWork   = acrossCiv > 0 || civEngineCount > 0 || harnessCiv > 0 || advKitCiv > 0;
+    // Department routing rule from the Google Form:
+    // Government Repair = No  -> CIV
+    // Government Repair = Yes -> selected department
+    // If no department is present, fall back to CIV so civilian rows are not lost.
+    let resolvedDepartment = normalizeDepartment(iDept !== -1 ? (row[iDept] || '').trim() : '');
+    if (isExplicitCivilianRepair) {
+      resolvedDepartment = 'CIV';
+    } else if (!resolvedDepartment) {
+      resolvedDepartment = 'CIV';
+    }
 
     const across = acrossPD + acrossCiv;
     const totalHarness = harnessPD + harnessCiv;
@@ -732,15 +740,7 @@ function parseJobsSheet(rows) {
       advKitCiv,
       cop:                iCop   !== -1 ? (row[iCop]   || '').trim() : '',
       plate:              iPlate !== -1 ? (row[iPlate] || '').trim() : '',
-      department:         (() => {
-        let resolvedDepartment = normalizeDepartment(iDept !== -1 ? (row[iDept] || '').trim() : '');
-        if (isExplicitCivilianRepair || (!hasGovernmentBillableWork && hasCivilianBillableWork)) {
-          resolvedDepartment = 'CIV';
-        } else if (!resolvedDepartment) {
-          resolvedDepartment = 'CIV';
-        }
-        return resolvedDepartment;
-      })(),
+      department:         resolvedDepartment,
       tsDate, weekEnd, monthEnd, bestDate,
     });
   }
