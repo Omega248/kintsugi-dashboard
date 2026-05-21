@@ -572,6 +572,15 @@ function parseJobsSheet(rows) {
   );
   const iPlate  = lower.findIndex(h => h.includes('plate') || h.includes('license') || h.includes('licence'));
   const iDept   = lower.findIndex(h => h.includes('department') || h.includes('dept') || h.includes('division') || h.includes('unit'));
+  const iGovernmentRepair = lower.findIndex(
+    h =>
+      (h.includes('government') || h.includes('pd')) &&
+      h.includes('repair') &&
+      !h.includes('advanced') &&
+      !h.includes('kit') &&
+      !h.includes('engine') &&
+      !h.includes('harness')
+  );
 
   // Engine payer column must be detected first to exclude it from engine-count searches.
   let iEnginePayer = lower.findIndex(
@@ -685,6 +694,20 @@ function parseJobsSheet(rows) {
     const monthEnd= iMonth !== -1 ? parseDateLike(row[iMonth]) : null;
     const bestDate = tsDate || weekEnd || monthEnd;
 
+    const rawGovernmentRepair = iGovernmentRepair !== -1
+      ? String(row[iGovernmentRepair] || '').trim().toLowerCase()
+      : '';
+    const isExplicitCivilianRepair = /^(no|n|false|0)$/i.test(rawGovernmentRepair);
+    const hasGovernmentBillableWork = acrossPD > 0 || pdEngineCount > 0 || harnessPD > 0 || advKitPD > 0;
+    const hasCivilianBillableWork = acrossCiv > 0 || civEngineCount > 0 || harnessCiv > 0 || advKitCiv > 0;
+
+    let resolvedDepartment = normalizeDepartment(iDept !== -1 ? (row[iDept] || '').trim() : '');
+    if (isExplicitCivilianRepair || (!hasGovernmentBillableWork && hasCivilianBillableWork)) {
+      resolvedDepartment = 'CIV';
+    } else if (!resolvedDepartment) {
+      resolvedDepartment = 'CIV';
+    }
+
     jobs.push({
       mechanic:           mech,
       across,
@@ -700,7 +723,7 @@ function parseJobsSheet(rows) {
       advKitCiv,
       cop:                iCop   !== -1 ? (row[iCop]   || '').trim() : '',
       plate:              iPlate !== -1 ? (row[iPlate] || '').trim() : '',
-      department:         normalizeDepartment(iDept !== -1 ? (row[iDept] || '').trim() : '') || 'CIV',
+      department:         resolvedDepartment,
       tsDate, weekEnd, monthEnd, bestDate,
     });
   }
@@ -1128,7 +1151,7 @@ Form: Kintsugi PD Repairs form (link in USEFUL LINKS)
 Fields to fill in: Mechanic name, Week Ending, Month Ending, How many Across PD, Department, Engine Replacement (if applicable), who paid for the engine
 
 Standard Repairs (CIV)
-Same form — fill in "How many Across" (CIV field). If Department is blank, the job is treated as CIV.
+Same form — fill in "How many Across" (CIV field). If Government Repair is No/0, or Department is blank, the job is treated as CIV.
 
 Harness
 Tracked on the same job submission form
