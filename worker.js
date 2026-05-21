@@ -548,13 +548,18 @@ function parseJobsSheet(rows) {
   const lower    = headers.map(h => h.toLowerCase());
 
   // Use fuzzy matching (like the web dashboard) to tolerate minor header
-  // variations such as "Mechanic Name" vs "Mechanic", or "How many Across?"
-  // vs "How many Across".
+  // variations such as "Mechanic Name" vs "Mechanic", "PD" vs "Government",
+  // or "How many Across?" vs "How many Across".
+  const isGovernmentHeader = h => h.includes('pd') || h.includes('government') || h.includes('gov');
+  const isCivilianHeader   = h => h.includes('civ') || h.includes('civilian');
+
   const iMech   = lower.findIndex(h => h.includes('mechanic'));
-  // "How many Across PD?" — PD repair count (contains "across" and "pd")
-  const iAcrossPD  = lower.findIndex(h => h.includes('across') && h.includes('pd'));
-  // "How many Across" (CIV) — civilian repair count (contains "across" but NOT "pd")
-  const iAcrossCiv = lower.findIndex(h => h.includes('across') && !h.includes('pd'));
+  // Government / PD repair count. Supports both old "(PD)" and current "(Government)" form headers.
+  const iAcrossPD  = lower.findIndex(h => h.includes('across') && isGovernmentHeader(h) && !isCivilianHeader(h));
+  // Civilian repair count. Supports explicit CIV/Civilian headers; falls back to the non-government across column.
+  const iAcrossCiv = lower.findIndex(h => h.includes('across') && isCivilianHeader(h)) !== -1
+    ? lower.findIndex(h => h.includes('across') && isCivilianHeader(h))
+    : lower.findIndex(h => h.includes('across') && !isGovernmentHeader(h));
   const iTime   = lower.findIndex(h => h.includes('timestamp'));
   const iWeek   = lower.findIndex(h => h.includes('week') && h.includes('end'));
   const iMonth  = lower.findIndex(h => h.includes('month') && h.includes('end'));
@@ -574,29 +579,33 @@ function parseJobsSheet(rows) {
     h.includes('did you buy') ||
     h.includes('who paid') ||
     h.includes('engine payer') ||
+    h === 'question' ||
     (h.includes('engine') && h.includes('paid')) ||
     (h.includes('kintsugi') && h.includes('pay'))
   );
-  // PD engine replacement (first occurrence, excluding payer column)
-  const iEnginePD = lower.findIndex(
-    (h, i) => i !== iEnginePayer && h.includes('engine') && h.includes('replacement')
+  // Government / PD engine replacement. Supports both old "(PD)" and current "(Government)" headers.
+  let iEnginePD = lower.findIndex(
+    (h, i) => i !== iEnginePayer && h.includes('engine') && h.includes('replacement') && isGovernmentHeader(h) && !isCivilianHeader(h)
   );
-  // CIV engine replacement (second occurrence, excluding payer column)
-  const iEngineCiv =
-    iEnginePD !== -1
-      ? lower.findIndex(
-          (h, i) => i > iEnginePD && i !== iEnginePayer && h.includes('engine') && h.includes('replacement')
-        )
-      : -1;
+  // Fallback for old/odd sheets: use first non-CIV engine replacement column.
+  if (iEnginePD === -1) {
+    iEnginePD = lower.findIndex(
+      (h, i) => i !== iEnginePayer && h.includes('engine') && h.includes('replacement') && !isCivilianHeader(h)
+    );
+  }
+  // CIV engine replacement.
+  const iEngineCiv = lower.findIndex(
+    (h, i) => i !== iEnginePayer && h.includes('engine') && h.includes('replacement') && isCivilianHeader(h)
+  );
 
-  // Harness columns: "Harness (PD)" and "Harness (CIV)"
-  const iHarnessPD  = lower.findIndex(h => h.includes('harness') && h.includes('pd'));
-  const iHarnessCiv = lower.findIndex(h => h.includes('harness') && !h.includes('pd'));
-  // Advanced Repair Kit columns: primary "advanced"+"kit", fallback "repair"+"kit"
-  let iAdvKitPD  = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && h.includes('pd'));
-  let iAdvKitCiv = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && !h.includes('pd'));
-  if (iAdvKitPD  === -1) iAdvKitPD  = lower.findIndex((h) => h.includes('repair') && h.includes('kit') && h.includes('pd'));
-  if (iAdvKitCiv === -1) iAdvKitCiv = lower.findIndex((h, i) => i !== iAdvKitPD && h.includes('repair') && h.includes('kit') && !h.includes('pd'));
+  // Harness columns: supports "Harness (PD)", "Harness (Government)", and "Harness (CIV)".
+  const iHarnessPD  = lower.findIndex(h => h.includes('harness') && isGovernmentHeader(h) && !isCivilianHeader(h));
+  const iHarnessCiv = lower.findIndex(h => h.includes('harness') && isCivilianHeader(h));
+  // Advanced Repair Kit columns: supports "Advanced Repair Kits (PD)", "(Government)", and "(CIV)".
+  let iAdvKitPD  = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && isGovernmentHeader(h) && !isCivilianHeader(h));
+  let iAdvKitCiv = lower.findIndex(h => h.includes('advanced') && h.includes('kit') && isCivilianHeader(h));
+  if (iAdvKitPD  === -1) iAdvKitPD  = lower.findIndex((h) => h.includes('repair') && h.includes('kit') && isGovernmentHeader(h) && !isCivilianHeader(h));
+  if (iAdvKitCiv === -1) iAdvKitCiv = lower.findIndex((h) => h.includes('repair') && h.includes('kit') && isCivilianHeader(h));
 
   // Fallback: if header detection failed, scan data rows to find the engine payer column
   // by cell values (handles generic headers like "Column 8").
