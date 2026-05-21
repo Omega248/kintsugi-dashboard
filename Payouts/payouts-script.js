@@ -162,7 +162,7 @@ function calculateEngineValue(engineReplacementsByDept) {
   let totalValue = 0;
   for (const dept in engineReplacementsByDept) {
     const count = engineReplacementsByDept[dept];
-    const rate = (dept === "BCSO") ? ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
+    const rate = (dept === "BCSO" || dept === "EMS" || dept === "CIV") ? ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
     totalValue += count * rate;
   }
   return totalValue;
@@ -178,12 +178,12 @@ function calculateEnginePayment(engineReplacementsByDept) {
   if (!engineReplacementsByDept) return 0;
   
   const bcsoEngines = engineReplacementsByDept["BCSO"] || 0;
-  const lspdEngines = engineReplacementsByDept["LSPD"] || 0;
+  const lspdEngines = (engineReplacementsByDept["LSPD"] || 0) + (engineReplacementsByDept["ODPD"] || 0);
   
   // Calculate total for other departments
   let otherEngines = 0;
   for (const dept in engineReplacementsByDept) {
-    if (dept !== "BCSO" && dept !== "LSPD") {
+    if (dept !== "BCSO" && dept !== "EMS" && dept !== "CIV" && dept !== "LSPD" && dept !== "ODPD") {
       otherEngines += engineReplacementsByDept[dept] || 0;
     }
   }
@@ -214,7 +214,7 @@ function calculateEnginePayment(engineReplacementsByDept) {
 //   enginePayer === "kintsugi"       → $0 (kintsugi paid, mechanic is not reimbursed)
 function computeJobEnginePay(pdEngineCount, dept, enginePayer, civEngineCount) {
   let pay = 0;
-  const isLspd = dept === "LSPD";
+  const isLspd = dept === "LSPD" || dept === "ODPD";
 
   if (pdEngineCount > 0) {
     if (enginePayer === "mechanic") {
@@ -296,76 +296,73 @@ async function loadPayouts() {
     const iWeek = headers.indexOf("Week Ending");
     const iMonth = headers.indexOf("Month Ending");
 
-    // "How many Across PD?" — PD repair count (contains "pd")
+    // Current form wording uses Government/CIV. Older sheets may still use PD.
+    const isGovernmentHeader = (h) => h.includes("pd") || h.includes("government") || h.includes("gov");
+    const isCivilianHeader = (h) => h.includes("civ") || h.includes("civilian");
+    const normalizeDepartment = (dept) => String(dept || "").trim().toUpperCase();
+
+    // Government / PD repair count.
     const iAcrossPD = headersLower.findIndex(
-      (h) => h.includes("across") && h.includes("pd")
+      (h) => h.includes("across") && isGovernmentHeader(h) && !isCivilianHeader(h)
     );
-    // "How many Across" (CIV) — civilian repair count (contains "across" but NOT "pd")
+    // CIV repair count.
     const iAcrossCiv = headersLower.findIndex(
-      (h) => h.includes("across") && !h.includes("pd")
+      (h) => h.includes("across") && isCivilianHeader(h)
+    );
+
+    // Government Repair routing question. No = civilian repair.
+    const iGovernmentRepair = headersLower.findIndex(
+      (h) =>
+        (h.includes("government") && h.includes("repair") && !h.includes("advanced") && !h.includes("kit")) ||
+        h === "pd repair" ||
+        (h.includes("pd") && h.includes("repair") && !h.includes("advanced") && !h.includes("kit"))
     );
 
     // "Did you buy the engine replacement, or did kintsugi pay for it?"
     // Must be detected BEFORE engine replacement columns so we can exclude it from those searches.
     let iEnginePayer = headersLower.findIndex(
-      (h) => h.includes("did you buy") || (h.includes("kintsugi") && h.includes("pay"))
+      (h) =>
+        h.includes("did you buy") ||
+        h.includes("who paid") ||
+        h.includes("engine payer") ||
+        h === "question" ||
+        (h.includes("engine") && h.includes("paid")) ||
+        (h.includes("kintsugi") && h.includes("pay"))
     );
 
-    // First "Engine Replacement?" column → PD engine replacement
-    // Exclude the payer question column which also contains "engine" and "replacement".
-    const iEnginePD = headersLower.findIndex(
-      (h, i) => i !== iEnginePayer && h.includes("engine") && h.includes("replacement")
+    // Government / PD engine replacement.
+    let iEnginePD = headersLower.findIndex(
+      (h, i) => i !== iEnginePayer && h.includes("engine") && h.includes("replacement") && isGovernmentHeader(h) && !isCivilianHeader(h)
     );
-    // Second "Engine Replacement?" column → CIV engine replacement (after iEnginePD)
-    const iEngineCiv =
-      iEnginePD !== -1
-        ? headersLower.findIndex(
-            (h, i) => i > iEnginePD && i !== iEnginePayer && h.includes("engine") && h.includes("replacement")
-          )
-        : -1;
-
-    // "PD Repair" — yes/no column indicating whether the job is a PD repair
-    const iPDRepair = headersLower.findIndex(
-      (h) => h === "pd repair" || (h.includes("pd") && h.includes("repair") && !h.includes("across") && !h.includes("kit"))
+    if (iEnginePD === -1) {
+      iEnginePD = headersLower.findIndex(
+        (h, i) => i !== iEnginePayer && h.includes("engine") && h.includes("replacement") && !isCivilianHeader(h)
+      );
+    }
+    // CIV engine replacement.
+    const iEngineCiv = headersLower.findIndex(
+      (h, i) => i !== iEnginePayer && h.includes("engine") && h.includes("replacement") && isCivilianHeader(h)
     );
 
     // find department column
     const iDept = headersLower.findIndex((h) => h.includes("department"));
 
-    // Harness columns: "Harness (PD)" and "Harness (CIV)"
-    const iHarnessPD  = headersLower.findIndex((h) => h.includes("harness") && h.includes("pd"));
-    const iHarnessCiv = headersLower.findIndex((h) => h.includes("harness") && !h.includes("pd"));
+    // Harness columns.
+    const iHarnessPD  = headersLower.findIndex((h) => h.includes("harness") && isGovernmentHeader(h) && !isCivilianHeader(h));
+    const iHarnessCiv = headersLower.findIndex((h) => h.includes("harness") && isCivilianHeader(h));
 
-    // Advanced Repair Kit columns: primary "advanced"+"kit", fallback "repair"+"kit",
-    // then "kit"+"sales", then any "kit" column (excluding engine/harness/across columns).
-    let iAdvKitPD  = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && h.includes("pd"));
-    let iAdvKitCiv = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && !h.includes("pd"));
-    if (iAdvKitPD  === -1) iAdvKitPD  = headersLower.findIndex((h) => h.includes("repair") && h.includes("kit") && h.includes("pd"));
-    if (iAdvKitCiv === -1) iAdvKitCiv = headersLower.findIndex((h, i) => i !== iAdvKitPD && h.includes("repair") && h.includes("kit") && !h.includes("pd"));
-    if (iAdvKitPD  === -1) iAdvKitPD  = headersLower.findIndex((h) => h.includes("kit") && h.includes("sales") && h.includes("pd"));
-    if (iAdvKitCiv === -1) iAdvKitCiv = headersLower.findIndex((h, i) => i !== iAdvKitPD && h.includes("kit") && h.includes("sales") && !h.includes("pd"));
-    // Last-resort: any "kit" column not already bound to engine/harness/across
-    if (iAdvKitPD === -1) {
-      iAdvKitPD = headersLower.findIndex(
-        (h, i) => i !== iAdvKitCiv && i !== iEnginePayer && i !== iEnginePD && i !== iEngineCiv
-          && i !== iHarnessPD && i !== iHarnessCiv
-          && h.includes("kit") && h.includes("pd")
-      );
-    }
-    if (iAdvKitCiv === -1) {
-      iAdvKitCiv = headersLower.findIndex(
-        (h, i) => (iAdvKitPD === -1 || i !== iAdvKitPD) && i !== iEnginePayer && i !== iEnginePD && i !== iEngineCiv
-          && i !== iHarnessPD && i !== iHarnessCiv
-          && h.includes("kit") && !h.includes("pd")
-      );
-    }
+    // Advanced Repair Kit columns.
+    let iAdvKitPD  = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && isGovernmentHeader(h) && !isCivilianHeader(h));
+    let iAdvKitCiv = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && isCivilianHeader(h));
+    if (iAdvKitPD  === -1) iAdvKitPD  = headersLower.findIndex((h) => h.includes("repair") && h.includes("kit") && isGovernmentHeader(h) && !isCivilianHeader(h));
+    if (iAdvKitCiv === -1) iAdvKitCiv = headersLower.findIndex((h) => h.includes("repair") && h.includes("kit") && isCivilianHeader(h));
 
     // Fallback: if header detection failed, scan data rows to find the engine payer column
     // by cell values (handles generic headers like "Column 8").
     if (iEnginePayer === -1) {
       const knownCols = new Set(
         [iMech, iTime, iOwner, iPlate, iAcrossPD, iAcrossCiv, iEnginePD, iEngineCiv,
-          iPDRepair, iDept, iHarnessPD, iHarnessCiv, iAdvKitPD, iAdvKitCiv, iWeek, iMonth]
+          iGovernmentRepair, iDept, iHarnessPD, iHarnessCiv, iAdvKitPD, iAdvKitCiv, iWeek, iMonth]
           .filter(i => i !== -1)
       );
       for (let col = 0; col < headers.length && iEnginePayer === -1; col++) {
@@ -403,25 +400,25 @@ async function loadPayouts() {
       const mech = (row[iMech] || "").trim();
       if (!mech) continue;
 
-      // PD repair count ("How many Across PD?")
-      const acrossPD = iAcrossPD !== -1 ? (Number(row[iAcrossPD] || "0") || 0) : 0;
-      // CIV repair count ("How many Across")
-      const acrossCiv = iAcrossCiv !== -1 ? (Number(row[iAcrossCiv] || "0") || 0) : 0;
-      const across = acrossPD + acrossCiv;
+      // Government / PD repair count.
+      let acrossPD = iAcrossPD !== -1 ? (Number(row[iAcrossPD] || "0") || 0) : 0;
+      // CIV repair count.
+      let acrossCiv = iAcrossCiv !== -1 ? (Number(row[iAcrossCiv] || "0") || 0) : 0;
+
+      const governmentRepairRaw = iGovernmentRepair !== -1
+        ? String(row[iGovernmentRepair] || "").trim().toLowerCase()
+        : "";
+      const isExplicitCivilianRepair = /^(no|n|false|0)$/i.test(governmentRepairRaw);
 
       // Harness counts
-      const harnessPD  = iHarnessPD  !== -1 ? (Number(row[iHarnessPD]  || "0") || 0) : 0;
-      const harnessCiv = iHarnessCiv !== -1 ? (Number(row[iHarnessCiv] || "0") || 0) : 0;
-      const totalHarness = harnessPD + harnessCiv;
+      let harnessPD  = iHarnessPD  !== -1 ? (Number(row[iHarnessPD]  || "0") || 0) : 0;
+      let harnessCiv = iHarnessCiv !== -1 ? (Number(row[iHarnessCiv] || "0") || 0) : 0;
 
       // Advanced Repair Kit counts
-      const advKitPD  = iAdvKitPD  !== -1 ? (Number(row[iAdvKitPD]  || "0") || 0) : 0;
-      const advKitCiv = iAdvKitCiv !== -1 ? (Number(row[iAdvKitCiv] || "0") || 0) : 0;
-      const totalAdvKit = advKitPD + advKitCiv;
+      let advKitPD  = iAdvKitPD  !== -1 ? (Number(row[iAdvKitPD]  || "0") || 0) : 0;
+      let advKitCiv = iAdvKitCiv !== -1 ? (Number(row[iAdvKitCiv] || "0") || 0) : 0;
 
-      if (!across && !totalHarness && !totalAdvKit) continue;
-
-      // PD engine replacements (first "Engine Replacement?" column)
+      // Government / PD engine replacements
       let pdEngineCount = 0;
       if (iEnginePD !== -1) {
         const rawEngine = (row[iEnginePD] || "").trim();
@@ -449,6 +446,24 @@ async function loadPayouts() {
         }
       }
 
+      if (isExplicitCivilianRepair) {
+        acrossCiv += acrossPD;
+        civEngineCount += pdEngineCount;
+        harnessCiv += harnessPD;
+        advKitCiv += advKitPD;
+
+        acrossPD = 0;
+        pdEngineCount = 0;
+        harnessPD = 0;
+        advKitPD = 0;
+      }
+
+      const across = acrossPD + acrossCiv;
+      const totalHarness = harnessPD + harnessCiv;
+      const totalAdvKit = advKitPD + advKitCiv;
+
+      if (!across && !pdEngineCount && !civEngineCount && !totalHarness && !totalAdvKit) continue;
+
       // Determine who purchased the engine replacement (applies to both PD and CIV)
       // "mechanic" = mechanic bought it (owed 13 500 for PD / 12 000 for CIV)
       // "kintsugi" = kintsugi bought it (mechanic gets 1 500 bonus for PD LSPD only; $0 for CIV)
@@ -473,18 +488,15 @@ async function loadPayouts() {
       const tsDate = tsRaw ? kParseDateLike(tsRaw) || new Date(tsRaw) : null;
       const owner = iOwner !== -1 ? (row[iOwner] || "").trim() : "";
       const plate = iPlate !== -1 ? (row[iPlate] || "").trim() : "";
-      let dept = iDept !== -1 ? (row[iDept] || "").trim() : "";
-
-      // Classify CIV-only jobs: "PD Repair" = "No" (or dept empty + only CIV repairs)
-      if (!dept) {
-        const pdRepairFlag = iPDRepair !== -1 ? (row[iPDRepair] || "").trim().toLowerCase() : "";
-        if (pdRepairFlag === "no" || (acrossCiv > 0 && acrossPD === 0)) {
-          dept = "CIV";
-        }
+      let dept = normalizeDepartment(iDept !== -1 ? (row[iDept] || "").trim() : "");
+      if (isExplicitCivilianRepair) {
+        dept = "CIV";
+      } else if (!dept) {
+        dept = "CIV";
       }
 
       mechanics.add(mech);
-      if (dept) departments.add(dept);
+      departments.add(dept);
 
       const mKey = monthKey(monthEnd);
       monthKeys.add(mKey);
@@ -640,6 +652,7 @@ function populateFilters() {
 
   if (deptSel) {
     deptSel.innerHTML = '<option value="all">All Departments</option>';
+    ["CIV", "EMS", "LSPD", "BCSO", "ODPD"].forEach((d) => departments.add(d));
     Array.from(departments)
       .sort()
       .forEach((d) => {
@@ -1564,7 +1577,7 @@ function exportCurrentViewCsv() {
         Mechanic: j.mechanic,
         Owner: j.owner,
         Plate: j.plate,
-        "PD Repairs": j.acrossPD || 0,
+        "PD Repairs": repairCount,
         "CIV Repairs": j.acrossCiv || 0,
         "Total Repairs": j.across,
         "PD Engine Replacement": pdEngineLabel,
@@ -1623,11 +1636,12 @@ function generateBill() {
 
   // Create bill rows with proper rates (PD billing only — CIV repairs not charged to department)
   const billRows = filteredJobs.map((j) => {
-    const engineReps = j.engineReplacements || 0;
-    // Use BCSO rate for BCSO, standard rate for others
-    const engineRate = (j.department === "BCSO" && engineReps > 0) ? 
-                       ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
-    const repairValue = (j.acrossPD || 0) * REPAIR_RATE;
+    const repairCount = j.department === "CIV" ? (j.acrossCiv || 0) : (j.acrossPD || 0);
+    const engineReps = j.department === "CIV" ? (j.civEngineReplacements || 0) : (j.engineReplacements || 0);
+    // EMS/CIV use the BCSO-style engine rate. LSPD/ODPD use the standard rate.
+    const engineRate = (j.department === "BCSO" || j.department === "EMS" || j.department === "CIV")
+                       ? ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
+    const repairValue = repairCount * REPAIR_RATE;
     const engineValue = engineReps * engineRate;
     const totalValue = repairValue + engineValue;
 
@@ -1637,7 +1651,7 @@ function generateBill() {
       "Owner": j.owner,
       "Plate": j.plate,
       "Department": j.department,
-      "PD Repairs (Across)": j.acrossPD || 0,
+      "PD Repairs (Across)": repairCount,
       "Repair Value": repairValue,
       "Engine Replacements": engineReps,
       "Engine Replacement Value": engineValue,
@@ -1734,11 +1748,14 @@ function generateDeptInvoice(dept) {
     return 0;
   });
 
-  const engineRate = dept === "BCSO" ? ENGINE_REPLACEMENT_RATE_BCSO : ENGINE_REPLACEMENT_RATE;
+  const engineRate = (dept === "BCSO" || dept === "EMS" || dept === "CIV")
+    ? ENGINE_REPLACEMENT_RATE_BCSO
+    : ENGINE_REPLACEMENT_RATE;
 
   const billRows = sortedJobs.map((j) => {
-    const engineReps = j.engineReplacements || 0;
-    const repairValue = (j.acrossPD || 0) * REPAIR_RATE;
+    const repairCount = dept === "CIV" ? (j.acrossCiv || 0) : (j.acrossPD || 0);
+    const engineReps = dept === "CIV" ? (j.civEngineReplacements || 0) : (j.engineReplacements || 0);
+    const repairValue = repairCount * REPAIR_RATE;
     const engineValue = engineReps * engineRate;
     const total = repairValue + engineValue;
     return {
@@ -1746,7 +1763,7 @@ function generateDeptInvoice(dept) {
       "Mechanic": j.mechanic,
       "Officer / Owner": j.owner,
       "License Plate": j.plate,
-      "PD Repairs": j.acrossPD || 0,
+      "PD Repairs": repairCount,
       "Engine Replacements": engineReps,
       "Repair Value ($)": repairValue,
       "Engine Replacement Value ($)": engineValue,
