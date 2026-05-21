@@ -572,8 +572,13 @@ function parseJobsSheet(rows) {
   );
   const iPlate  = lower.findIndex(h => h.includes('plate') || h.includes('license') || h.includes('licence'));
   const iDept   = lower.findIndex(h => h.includes('department') || h.includes('dept') || h.includes('division') || h.includes('unit'));
-  const iGovernmentRepair = lower.findIndex(h =>
-    (h.includes('government') || h.includes('pd')) && h.includes('repair') && !h.includes('advanced')
+  // Explicit Government Repair routing question. In the current Google Form,
+  // "No" sends the user to the Civilian Repair section. Treat that row as CIV.
+  const iGovernmentRepair = lower.findIndex(
+    h =>
+      (h.includes('government') && h.includes('repair') && !h.includes('advanced') && !h.includes('kit')) ||
+      (h === 'pd repair') ||
+      (h.includes('pd') && h.includes('repair') && !h.includes('advanced') && !h.includes('kit'))
   );
 
   // Engine payer column must be detected first to exclude it from engine-count searches.
@@ -615,7 +620,7 @@ function parseJobsSheet(rows) {
   if (iEnginePayer === -1) {
     const knownCols = new Set(
       [iMech, iTime, iAcrossPD, iAcrossCiv, iEnginePD, iEngineCiv,
-        iCop, iPlate, iDept, iHarnessPD, iHarnessCiv, iAdvKitPD, iAdvKitCiv, iWeek, iMonth]
+        iCop, iPlate, iDept, iGovernmentRepair, iHarnessPD, iHarnessCiv, iAdvKitPD, iAdvKitCiv, iWeek, iMonth]
         .filter(i => i !== -1)
     );
     for (let col = 0; col < headers.length && iEnginePayer === -1; col++) {
@@ -681,24 +686,25 @@ function parseJobsSheet(rows) {
     let advKitPD   = iAdvKitPD   !== -1 ? (parseInt(row[iAdvKitPD]   || '0', 10) || 0) : 0;
     let advKitCiv  = iAdvKitCiv  !== -1 ? (parseInt(row[iAdvKitCiv]  || '0', 10) || 0) : 0;
 
-    const hasGovernmentBillableWork = Boolean(acrossPD || pdEngineCount || harnessPD || advKitPD);
-    const hasCivilianBillableWork   = Boolean(acrossCiv || civEngineCount || harnessCiv || advKitCiv);
-
-    if (isExplicitCivilianRepair && hasGovernmentBillableWork) {
-      acrossCiv      += acrossPD;
-      acrossPD        = 0;
+    if (isExplicitCivilianRepair) {
+      // The form's first question routes "No" to the CIV section. If any
+      // government-side fields were still filled, move them to CIV so the row
+      // is counted as civilian everywhere: payouts, invoices, analytics, and CSVs.
+      acrossCiv += acrossPD;
       civEngineCount += pdEngineCount;
-      pdEngineCount   = 0;
-      harnessCiv     += harnessPD;
-      harnessPD       = 0;
-      advKitCiv      += advKitPD;
-      advKitPD        = 0;
+      harnessCiv += harnessPD;
+      advKitCiv += advKitPD;
+
+      acrossPD = 0;
+      pdEngineCount = 0;
+      harnessPD = 0;
+      advKitPD = 0;
     }
 
-    const finalGovernmentBillableWork = Boolean(acrossPD || pdEngineCount || harnessPD || advKitPD);
-    const finalCivilianBillableWork   = Boolean(acrossCiv || civEngineCount || harnessCiv || advKitCiv);
+    const hasGovernmentBillableWork = acrossPD > 0 || pdEngineCount > 0 || harnessPD > 0 || advKitPD > 0;
+    const hasCivilianBillableWork   = acrossCiv > 0 || civEngineCount > 0 || harnessCiv > 0 || advKitCiv > 0;
 
-    const across       = acrossPD + acrossCiv;
+    const across = acrossPD + acrossCiv;
     const totalHarness = harnessPD + harnessCiv;
     const totalAdvKit  = advKitPD  + advKitCiv;
     const engineCount  = pdEngineCount + civEngineCount;
@@ -726,9 +732,15 @@ function parseJobsSheet(rows) {
       advKitCiv,
       cop:                iCop   !== -1 ? (row[iCop]   || '').trim() : '',
       plate:              iPlate !== -1 ? (row[iPlate] || '').trim() : '',
-      department:         (isExplicitCivilianRepair || (!finalGovernmentBillableWork && finalCivilianBillableWork))
-        ? 'CIV'
-        : (normalizeDepartment(iDept !== -1 ? (row[iDept] || '').trim() : '') || 'CIV'),
+      department:         (() => {
+        let resolvedDepartment = normalizeDepartment(iDept !== -1 ? (row[iDept] || '').trim() : '');
+        if (isExplicitCivilianRepair || (!hasGovernmentBillableWork && hasCivilianBillableWork)) {
+          resolvedDepartment = 'CIV';
+        } else if (!resolvedDepartment) {
+          resolvedDepartment = 'CIV';
+        }
+        return resolvedDepartment;
+      })(),
       tsDate, weekEnd, monthEnd, bestDate,
     });
   }
@@ -1156,7 +1168,7 @@ Form: Kintsugi PD Repairs form (link in USEFUL LINKS)
 Fields to fill in: Mechanic name, Week Ending, Month Ending, How many Across PD, Department, Engine Replacement (if applicable), who paid for the engine
 
 Standard Repairs (CIV)
-Same form — fill in "How many Across" (CIV field). If Department is blank, the job is treated as CIV.
+Same form — choose "No" on Government Repair, then fill in "How many Across" (CIV field). If Department is blank, or Government Repair is No, the job is treated as CIV.
 
 Harness
 Tracked on the same job submission form
