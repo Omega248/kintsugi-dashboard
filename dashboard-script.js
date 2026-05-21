@@ -36,60 +36,114 @@ async function loadOverview() {
 
     const iMech = headersLower.findIndex((h) => h.includes("mechanic"));
 
-    // PD repairs: contains "across" AND "pd"
+    // Current form wording uses Government/CIV. Older sheets may still use PD.
+    const isGovernmentHeader = (h) =>
+      h.includes("pd") || h.includes("government") || h.includes("gov");
+
+    const isCivilianHeader = (h) =>
+      h.includes("civ") || h.includes("civilian");
+
+    const normaliseDepartment = (dept) =>
+      String(dept || "").trim().toUpperCase();
+
+    const departmentEngineBonus = (dept) => {
+      const d = normaliseDepartment(dept);
+      return d === "LSPD" || d === "ODPD" ? ENGINE_BONUS_LSPD : 0;
+    };
+
+    // Government / PD repairs.
     const iAcrossPD = headersLower.findIndex(
-      (h) => h.includes("across") && h.includes("pd")
+      (h) => h.includes("across") && isGovernmentHeader(h) && !isCivilianHeader(h)
     );
-    // CIV repairs: contains "across" but NOT "pd"; fall back to generic "repairs"
+
+    // CIV repairs.
     let iAcrossCiv = headersLower.findIndex(
-      (h) => h.includes("across") && !h.includes("pd")
+      (h) => h.includes("across") && isCivilianHeader(h)
     );
     if (iAcrossCiv === -1) {
-      iAcrossCiv = headersLower.findIndex((h) => h.includes("repairs"));
+      iAcrossCiv = headersLower.findIndex(
+        (h) =>
+          h.includes("repair") &&
+          !isGovernmentHeader(h) &&
+          !h.includes("engine") &&
+          !h.includes("harness") &&
+          !h.includes("kit") &&
+          !h.includes("advanced")
+      );
     }
 
     const iWeek = headersLower.findIndex((h) => h.includes("week ending"));
     const iTs   = headersLower.findIndex((h) => h.includes("timestamp"));
 
-    // Engine payer column — detect FIRST so it can be excluded from the engine
-    // replacement column searches (codebase convention).
-    let iEnginePayer = headersLower.findIndex(
-      (h) => h.includes("did you buy") || (h.includes("kintsugi") && h.includes("pay"))
-    );
-    // PD engine replacement: first "engine replacement" column, excluding payer column
-    const iEnginePD = headersLower.findIndex(
-      (h, i) => i !== iEnginePayer && h.includes("engine") && h.includes("replacement")
-    );
-    // CIV engine replacement: second "engine replacement" column (after iEnginePD)
-    const iEngineCiv =
-      iEnginePD !== -1
-        ? headersLower.findIndex(
-            (h, i) =>
-              i > iEnginePD &&
-              i !== iEnginePayer &&
-              h.includes("engine") &&
-              h.includes("replacement")
-          )
-        : -1;
     // Department column
     const iDept = headersLower.findIndex((h) => h.includes("department"));
 
-    // Harness columns: contains "harness"
-    const iHarnessPD  = headersLower.findIndex((h) => h.includes("harness") && h.includes("pd"));
-    const iHarnessCiv = headersLower.findIndex((h) => h.includes("harness") && !h.includes("pd"));
+    // Government Repair routing question. In the form:
+    // No  = civilian repair
+    // Yes = government repair using selected department
+    const iGovernmentRepair = headersLower.findIndex(
+      (h) =>
+        (h.includes("government") && h.includes("repair") && !h.includes("advanced") && !h.includes("kit")) ||
+        h === "pd repair" ||
+        (h.includes("pd") && h.includes("repair") && !h.includes("advanced") && !h.includes("kit"))
+    );
 
-    // Advanced Repair Kit columns: primary "advanced"+"kit", fallback "repair"+"kit"
-    let iAdvKitPD  = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && h.includes("pd"));
-    let iAdvKitCiv = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && !h.includes("pd"));
-    if (iAdvKitPD  === -1) iAdvKitPD  = headersLower.findIndex((h) => h.includes("repair") && h.includes("kit") && h.includes("pd"));
-    if (iAdvKitCiv === -1) iAdvKitCiv = headersLower.findIndex((h, i) => i !== iAdvKitPD && h.includes("repair") && h.includes("kit") && !h.includes("pd"));
+    // Engine payer column — detect FIRST so it can be excluded from the engine
+    // replacement column searches.
+    let iEnginePayer = headersLower.findIndex(
+      (h) =>
+        h.includes("did you buy") ||
+        h.includes("who paid") ||
+        h.includes("engine payer") ||
+        h === "question" ||
+        (h.includes("engine") && h.includes("paid")) ||
+        (h.includes("kintsugi") && h.includes("pay"))
+    );
+
+    // Government / PD engine replacement.
+    let iEnginePD = headersLower.findIndex(
+      (h, i) =>
+        i !== iEnginePayer &&
+        h.includes("engine") &&
+        h.includes("replacement") &&
+        isGovernmentHeader(h) &&
+        !isCivilianHeader(h)
+    );
+    if (iEnginePD === -1) {
+      iEnginePD = headersLower.findIndex(
+        (h, i) =>
+          i !== iEnginePayer &&
+          h.includes("engine") &&
+          h.includes("replacement") &&
+          !isCivilianHeader(h)
+      );
+    }
+
+    // CIV engine replacement.
+    const iEngineCiv = headersLower.findIndex(
+      (h, i) =>
+        i !== iEnginePayer &&
+        h.includes("engine") &&
+        h.includes("replacement") &&
+        isCivilianHeader(h)
+    );
+
+    // Harness columns: supports Harness (Government)/(PD) and Harness (CIV).
+    const iHarnessPD  = headersLower.findIndex((h) => h.includes("harness") && isGovernmentHeader(h) && !isCivilianHeader(h));
+    const iHarnessCiv = headersLower.findIndex((h) => h.includes("harness") && isCivilianHeader(h));
+
+    // Advanced Repair Kit columns: supports Government/PD and CIV.
+    let iAdvKitPD  = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && isGovernmentHeader(h) && !isCivilianHeader(h));
+    let iAdvKitCiv = headersLower.findIndex((h) => h.includes("advanced") && h.includes("kit") && isCivilianHeader(h));
+    if (iAdvKitPD  === -1) iAdvKitPD  = headersLower.findIndex((h) => h.includes("repair") && h.includes("kit") && isGovernmentHeader(h) && !isCivilianHeader(h));
+    if (iAdvKitCiv === -1) iAdvKitCiv = headersLower.findIndex((h) => h.includes("repair") && h.includes("kit") && isCivilianHeader(h));
 
     // Fallback: if header detection failed, scan data rows to find the engine payer column
     // by cell values (handles generic headers like "Column 8").
     if (iEnginePayer === -1) {
       const knownCols = new Set(
         [iMech, iTs, iAcrossPD, iAcrossCiv, iEnginePD, iEngineCiv,
-          iDept, iHarnessPD, iHarnessCiv, iAdvKitPD, iAdvKitCiv, iWeek]
+          iDept, iGovernmentRepair, iHarnessPD, iHarnessCiv, iAdvKitPD, iAdvKitCiv, iWeek]
           .filter(i => i !== -1)
       );
       for (let col = 0; col < headers.length && iEnginePayer === -1; col++) {
@@ -142,14 +196,17 @@ async function loadOverview() {
       const mech = iMech !== -1 ? (row[iMech] || "").trim() : "";
       if (mech) mechanics.add(mech);
 
-      // Sum PD + CIV repairs for total count
-      const acrossPD  = iAcrossPD  !== -1 ? (Number(row[iAcrossPD]  || 0) || 0) : 0;
-      const acrossCiv = iAcrossCiv !== -1 ? (Number(row[iAcrossCiv] || 0) || 0) : 0;
-      const across = acrossPD + acrossCiv;
-      totalRepairs += across;
+      // Government Repair = No means the row is CIV, regardless of selected department.
+      const governmentRepairRaw = iGovernmentRepair !== -1
+        ? String(row[iGovernmentRepair] || "").trim().toLowerCase()
+        : "";
+      const isExplicitCivilianRepair = /^(no|n|false|0)$/i.test(governmentRepairRaw);
 
-      // Engine pay for this job
-      let enginePay = 0;
+      // Sum Government/PD + CIV repairs for total count.
+      let acrossPD  = iAcrossPD  !== -1 ? (Number(row[iAcrossPD]  || 0) || 0) : 0;
+      let acrossCiv = iAcrossCiv !== -1 ? (Number(row[iAcrossCiv] || 0) || 0) : 0;
+
+      // Engine counts for this job.
       const pdEngineRaw  = iEnginePD  !== -1 ? (row[iEnginePD]  || "").trim() : "";
       const civEngineRaw = iEngineCiv !== -1 ? (row[iEngineCiv] || "").trim() : "";
       let pdEngineCount = 0;
@@ -164,41 +221,64 @@ async function loadOverview() {
         if (!isNaN(n) && n > 0) civEngineCount = n;
         else if (/^(yes|y|true)$/i.test(civEngineRaw)) civEngineCount = 1;
       }
+
+      // Harness and Advanced Repair Kit counts for this job.
+      let harnessPD  = iHarnessPD  !== -1 ? (Number(row[iHarnessPD]  || 0) || 0) : 0;
+      let harnessCiv = iHarnessCiv !== -1 ? (Number(row[iHarnessCiv] || 0) || 0) : 0;
+      let advKitPD   = iAdvKitPD   !== -1 ? (Number(row[iAdvKitPD]   || 0) || 0) : 0;
+      let advKitCiv  = iAdvKitCiv  !== -1 ? (Number(row[iAdvKitCiv]  || 0) || 0) : 0;
+
+      if (isExplicitCivilianRepair) {
+        // Form source of truth: No on Government Repair sends the job to CIV.
+        // Move any accidentally-filled government-side values into CIV.
+        acrossCiv += acrossPD;
+        civEngineCount += pdEngineCount;
+        harnessCiv += harnessPD;
+        advKitCiv += advKitPD;
+
+        acrossPD = 0;
+        pdEngineCount = 0;
+        harnessPD = 0;
+        advKitPD = 0;
+      }
+
+      const across = acrossPD + acrossCiv;
+      totalRepairs += across;
+
+      const resolvedDept = isExplicitCivilianRepair
+        ? "CIV"
+        : (normaliseDepartment(iDept !== -1 ? row[iDept] : "") || "CIV");
+
+      // Engine pay for this job.
+      let enginePay = 0;
       if (pdEngineCount > 0 || civEngineCount > 0) {
-        const dept    = iDept        !== -1 ? (row[iDept]        || "").trim().toUpperCase() : "";
         const payerRaw = iEnginePayer !== -1 ? (row[iEnginePayer] || "").trim().toLowerCase() : "";
         let enginePayer = "";
         if (payerRaw) {
           if (payerRaw.includes("kintsugi")) enginePayer = "kintsugi";
           else if (/^\s*i\b|i bought|bought it|myself/i.test(payerRaw)) enginePayer = "mechanic";
         }
-        const isLspd = dept === "LSPD";
+
+        const deptBonus = departmentEngineBonus(resolvedDept);
         if (pdEngineCount > 0) {
           if (enginePayer === "mechanic") {
-            enginePay += pdEngineCount * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
+            enginePay += pdEngineCount * (ENGINE_REIMBURSEMENT + deptBonus);
           } else if (enginePayer === "kintsugi") {
-            // Kintsugi paid — mechanic earns the LSPD bonus only (or $0 for non-LSPD)
-            enginePay += pdEngineCount * (isLspd ? ENGINE_BONUS_LSPD : 0);
+            enginePay += pdEngineCount * deptBonus;
           } else {
-            // Old data without payer info: default to full reimbursement
-            enginePay += pdEngineCount * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
+            enginePay += pdEngineCount * (ENGINE_REIMBURSEMENT + deptBonus);
           }
         }
         if (civEngineCount > 0) {
           if (enginePayer !== "kintsugi") {
-            // Mechanic paid or old data — full $12,000 reimbursement
+            // Mechanic paid or old data — full $12,000 reimbursement.
             enginePay += civEngineCount * ENGINE_REIMBURSEMENT;
           }
-          // kintsugi paid CIV engine — mechanic is not reimbursed
+          // Kintsugi paid CIV engine — mechanic is not reimbursed.
         }
       }
       totalEnginePay += enginePay;
 
-      // Harness and Advanced Repair Kit pay for this job
-      const harnessPD  = iHarnessPD  !== -1 ? (Number(row[iHarnessPD]  || 0) || 0) : 0;
-      const harnessCiv = iHarnessCiv !== -1 ? (Number(row[iHarnessCiv] || 0) || 0) : 0;
-      const advKitPD   = iAdvKitPD   !== -1 ? (Number(row[iAdvKitPD]   || 0) || 0) : 0;
-      const advKitCiv  = iAdvKitCiv  !== -1 ? (Number(row[iAdvKitCiv]  || 0) || 0) : 0;
       const harnessKitPay = (harnessPD + harnessCiv) * HARNESS_RATE
                           + (advKitPD  + advKitCiv)  * ADVANCED_REPAIR_KIT_RATE;
       totalHarnessKitPay += harnessKitPay;
