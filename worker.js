@@ -88,6 +88,11 @@ const HARNESS_RATE          = 500;
 const ADVANCED_REPAIR_KIT_RATE = 500;
 
 const DEPARTMENT_CONFIG = {
+  CIV: {
+    color: 0x808080,
+    engineBonus: 0,
+    emoji: '🚗',
+  },
   EMS: {
     color: 0xFF1493,
     engineBonus: 0,
@@ -126,6 +131,10 @@ function getDepartmentEngineBonus(dept) {
   return getDepartmentConfig(dept).engineBonus || 0;
 }
 
+function getJobDepartment(job) {
+  return normalizeDepartment(job?.department) || 'CIV';
+}
+
 function computeDepartmentEngineCharge(dept) {
   return ENGINE_REIMBURSEMENT + getDepartmentEngineBonus(dept);
 }
@@ -133,7 +142,7 @@ function computeDepartmentEngineCharge(dept) {
 function computeInvoiceJobTotal(job) {
   return (
     (job.across || 0) * PAY_PER_REPAIR +
-    (job.engineReplacements || 0) * computeDepartmentEngineCharge(job.department)
+    (job.engineReplacements || 0) * computeDepartmentEngineCharge(getJobDepartment(job))
   );
 }
 
@@ -682,7 +691,7 @@ function parseJobsSheet(rows) {
       advKitCiv,
       cop:                iCop   !== -1 ? (row[iCop]   || '').trim() : '',
       plate:              iPlate !== -1 ? (row[iPlate] || '').trim() : '',
-      department:         iDept  !== -1 ? (row[iDept]  || '').trim() : '',
+      department:         normalizeDepartment(iDept !== -1 ? (row[iDept] || '').trim() : '') || 'CIV',
       tsDate, weekEnd, monthEnd, bestDate,
     });
   }
@@ -1110,7 +1119,7 @@ Form: Kintsugi PD Repairs form (link in USEFUL LINKS)
 Fields to fill in: Mechanic name, Week Ending, Month Ending, How many Across PD, Department, Engine Replacement (if applicable), who paid for the engine
 
 Standard Repairs (CIV)
-Same form — fill in "How many Across" (CIV field)
+Same form — fill in "How many Across" (CIV field). If Department is blank, the job is treated as CIV.
 
 Harness
 Tracked on the same job submission form
@@ -1142,7 +1151,7 @@ Engine replacement payout: $12,000
 LSPD / ODPD engine replacement payout: $13,500 total  
 ($12,000 engine + $1,500 department bonus)
 
-BCSO / EMS engine replacement payout: $12,000 total
+BCSO / EMS / CIV engine replacement payout: $12,000 total
 
 Harness payout: $500 per harness
 
@@ -1444,7 +1453,7 @@ async function handleViewLogs(request, env) {
 // Regex patterns used by buildSheetDataContext to decide whether to hit the
 // Google Sheets API.  Extracted as constants for clarity and easy maintenance.
 const DATA_QUESTION_REGEX    = /\b(earn|made|make|paid|pay(?:out)?s?|owe|invoice|bill|how much|this week|last week|last month|this month|mechanic|total)\b/;
-const INVOICE_QUESTION_REGEX = /\b(owe|invoice|bill|department|dept|ems|lspd|bcso|odpd|sasp|sheriff|police)\b/;
+const INVOICE_QUESTION_REGEX = /\b(owe|invoice|bill|department|dept|civ|civilian|ems|lspd|bcso|odpd|sasp|sheriff|police)\b/;
 
 // Maximum characters of the original question shown in the public reply prefix.
 const MAX_QUESTION_PREVIEW_LENGTH = 120;
@@ -1554,7 +1563,7 @@ async function buildSheetDataContext(question) {
         // Group by department.
         const deptMap = new Map();
         for (const j of monthJobs) {
-          const dept = (j.department || 'Unknown').trim() || 'Unknown';
+          const dept = getJobDepartment(j);
           let rec = deptMap.get(dept);
           if (!rec) { rec = { repairs: 0, engines: 0 }; deptMap.set(dept, rec); }
           rec.repairs += j.across || 0;
@@ -1995,11 +2004,11 @@ async function handleInvoicePanelButton(interaction, env, ctx) {
       const allJobs = parseJobsSheet(jobRows);
 
       const depts = [...new Set(
-        allJobs.map(j => j.department).filter(Boolean)
+        allJobs.map(j => getJobDepartment(j)).filter(Boolean)
       )].sort((a, b) => a.localeCompare(b));
 
       // Always include every supported department, even when the sheet has no rows for it yet.
-      const defaultDepartments = ['EMS', 'LSPD', 'BCSO', 'ODPD'];
+      const defaultDepartments = ['CIV', 'EMS', 'LSPD', 'BCSO', 'ODPD'];
       const deptList = depts.length > 0
         ? [...new Set([...defaultDepartments, ...depts.map(d => normalizeDepartment(d))])].sort()
         : defaultDepartments;
@@ -2052,7 +2061,7 @@ async function handleInvoiceDeptSelect(interaction, env, ctx) {
       const monthEndMap = new Map();
       for (const j of allJobs) {
         if (!j.monthEnd) continue;
-        if (j.department && j.department.toLowerCase() !== dept.toLowerCase()) continue;
+        if (getJobDepartment(j) !== normalizeDepartment(dept)) continue;
         const iso = j.monthEnd.toISOString().slice(0, 10);
         if (!monthEndMap.has(iso)) monthEndMap.set(iso, j.monthEnd);
       }
@@ -2123,7 +2132,7 @@ async function handleInvoiceMonthSelect(interaction, env, ctx) {
       const deptJobs = allJobs.filter(j => {
         if (!j.monthEnd) return false;
         if (j.monthEnd.toISOString().slice(0, 10) !== monthValue) return false;
-        if (dept && j.department && j.department.toLowerCase() !== dept.toLowerCase()) return false;
+        if (dept && getJobDepartment(j) !== normalizeDepartment(dept)) return false;
         return true;
       });
 
