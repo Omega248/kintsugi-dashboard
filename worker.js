@@ -1993,7 +1993,7 @@ async function handleWeekSelect(interaction, ctx) {
 
 /**
  * "Generate Monthly Invoice" button pressed — step 1 of 3.
- * Defers with an ephemeral message then loads available departments from the sheet.
+ * Defers with an ephemeral message then shows the fixed supported department list.
  */
 async function handleInvoicePanelButton(interaction, env, ctx) {
   const { application_id: appId, token } = interaction;
@@ -2003,15 +2003,9 @@ async function handleInvoicePanelButton(interaction, env, ctx) {
       const jobRows = await fetchSheet(JOBS_SHEET);
       const allJobs = parseJobsSheet(jobRows);
 
-      const depts = [...new Set(
-        allJobs.map(j => getJobDepartment(j)).filter(Boolean)
-      )].sort((a, b) => a.localeCompare(b));
-
-      // Always include every supported department, even when the sheet has no rows for it yet.
-      const defaultDepartments = ['CIV', 'EMS', 'LSPD', 'BCSO', 'ODPD'];
-      const deptList = depts.length > 0
-        ? [...new Set([...defaultDepartments, ...depts.map(d => normalizeDepartment(d))])].sort()
-        : defaultDepartments;
+      // Fixed supported department list. Do not derive the select menu from the sheet,
+      // because blank CIV rows and old sheet data can make CIV disappear from the menu.
+      const deptList = ['CIV', 'EMS', 'LSPD', 'BCSO', 'ODPD'];
       const options = deptList.map(d => ({
         label: d,
         value: d,
