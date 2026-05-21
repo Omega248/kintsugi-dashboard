@@ -44,6 +44,31 @@ const PAYMENT_RATES = {
   BINS_PER_15: 10
 };
 
+
+// ===== Department Configuration =====
+const DEPARTMENT_CONFIG = {
+  CIV:  { color: 0x808080, engineBonus: 0, emoji: "🚗", billingEngineRate: PAYMENT_RATES.ENGINE_REPLACEMENT_RATE_BCSO },
+  EMS:  { color: 0xFF1493, engineBonus: 0, emoji: "🏥", billingEngineRate: PAYMENT_RATES.ENGINE_REPLACEMENT_RATE_BCSO },
+  LSPD: { color: 0x000000, engineBonus: PAYMENT_RATES.ENGINE_BONUS_LSPD, emoji: "⚫", billingEngineRate: PAYMENT_RATES.ENGINE_REPLACEMENT_RATE },
+  BCSO: { color: 0xD2B48C, engineBonus: 0, emoji: "🟤", billingEngineRate: PAYMENT_RATES.ENGINE_REPLACEMENT_RATE_BCSO },
+  ODPD: { color: 0x00FFFF, engineBonus: PAYMENT_RATES.ENGINE_BONUS_LSPD, emoji: "🔷", billingEngineRate: PAYMENT_RATES.ENGINE_REPLACEMENT_RATE }
+};
+
+const DEFAULT_DEPARTMENTS = ["CIV", "EMS", "LSPD", "BCSO", "ODPD"];
+
+function normaliseDepartment(dept) {
+  return String(dept || "").trim().toUpperCase();
+}
+
+function getDepartmentConfig(dept) {
+  return DEPARTMENT_CONFIG[normaliseDepartment(dept)] || {
+    color: 0x22c55e,
+    engineBonus: 0,
+    emoji: "🏢",
+    billingEngineRate: PAYMENT_RATES.ENGINE_REPLACEMENT_RATE_BCSO
+  };
+}
+
 // ===== UI Constants =====
 const UI_CONSTANTS = {
   // Pagination
