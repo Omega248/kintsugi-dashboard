@@ -2850,46 +2850,249 @@ async function postJobsUpdate(env, summary) {
 }
 
 /**
- * Send the payday reminder ping to the #payouts channel.
- * Only fires on Sunday (the week-ending day, evaluated in UTC) so the reminder
- * is never sent mid-week leading up to payday.  Sends at most once per Sunday,
- * tracked in KV so the hourly cron never double-pings.
- * Uses DISCORD_BOT_TOKEN, PAYOUTS_CHANNEL_ID, RIPTIDE_USER_ID, and the KV namespace from env.
+ * Post the weekly payday reminder to Discord.
+ *
+ * Runs from the Cloudflare cron on Monday at 05:00 UTC.
+ * Deduplication uses:
+ *   1. KV timestamp key: last_reminder_timestamp
+ *   2. KV date/week key: last_reminder_week
+ *   3. Best-effort in-memory timestamp fallback if KV fails
+ *
+ * KV failures are logged but do not block the Discord message from being posted.
  *
  * @param {object} env
- * @param {Date}   weekEndDate  - The week-ending date (used in the message text).
- * @param {number} [totalPayout=0] - Total mechanic payout for the week (shown in the reminder).
+ * @param {Date}   weekEndDate       - The week-ending Sunday being paid.
+ * @param {number} [totalPayout=0]   - Total mechanic payout for the week.
+ * @returns {Promise<boolean>} true if posted or safely skipped, false if Discord post failed/config missing.
  */
 async function postPaydayReminder(env, weekEndDate, totalPayout = 0) {
-  if (!env.DISCORD_BOT_TOKEN || !env.PAYOUTS_CHANNEL_ID) return false;
-  if (!weekEndDate) return false;
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const nowMs = now.getTime();
 
-  // Only send the reminder on the actual week-ending day (Sunday in UTC).
-  // Any other day of the week returns early so the channel is never spammed
-  // with early reminders.
-  const today = new Date();
-  if (today.getUTCDay() !== 0) return false; // 0 = Sunday
+  const KV_TTL_SECONDS = 86400; // 24 hours
+  const DEDUPE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-  // Use today's date (the Sunday) as the deduplication key.
-  // weekEndDate may reference the previous completed week when the current
-  // week has no data yet, so keying off today guarantees one send per Sunday.
-  const todayKey = today.toISOString().slice(0, 10);
-  if (env.KV) {
-    const lastKey = await env.KV.get('last_reminder_week');
-    if (lastKey === todayKey) return true; // already sent this Sunday
-  }
+  const DATE_KEY = 'last_reminder_week';
+  const TIMESTAMP_KEY = 'last_reminder_timestamp';
 
-  const mention    = env.RIPTIDE_USER_ID ? `<@${env.RIPTIDE_USER_ID}>` : '**@riptide248**';
-  const payoutNote = totalPayout > 0 ? ` Total due: **${fmtMoney(totalPayout)}**.` : '';
+  // Best-effort isolate-local fallback.
+  // This is not a replacement for KV, but helps prevent repeat posts in the same warm isolate if KV fails.
+  const MEMORY_TIMESTAMP_KEY = '__kintsugi_last_payday_reminder_timestamp';
 
-  const messageId = await botPost(env.PAYOUTS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, {
-    content: `${mention} 💰 **Payday reminder!** Payouts are due to be processed for the week ending **${fmtDate(weekEndDate)}**.${payoutNote} Please review and mark them as processed in the dashboard when done.`,
+  const kvAvailable = !!env.KV;
+
+  console.log('[payday-reminder] start', {
+    now: nowIso,
+    kvAvailable,
+    weekEndDate: weekEndDate ? new Date(weekEndDate).toISOString() : null,
+    totalPayout,
   });
 
-  if (messageId !== null && env.KV) {
-    await env.KV.put('last_reminder_week', todayKey);
+  if (!env.DISCORD_BOT_TOKEN || !env.PAYOUTS_CHANNEL_ID) {
+    console.warn('[payday-reminder] skipped_missing_config', {
+      now: nowIso,
+      hasDiscordBotToken: !!env.DISCORD_BOT_TOKEN,
+      hasPayoutsChannelId: !!env.PAYOUTS_CHANNEL_ID,
+    });
+    return false;
   }
-  return messageId !== null;
+
+  if (!weekEndDate) {
+    console.warn('[payday-reminder] skipped_missing_week_end_date', { now: nowIso });
+    return false;
+  }
+
+  if (!kvAvailable) {
+    console.warn('[payday-reminder] kv_not_available_using_memory_fallback', { now: nowIso });
+  }
+
+  // Monday UTC check.
+  // The cron enforces this, but this also prevents accidental manual/hourly calls from posting.
+  // 1 = Monday.
+  if (now.getUTCDay() !== 1) {
+    console.log('[payday-reminder] skipped_not_monday_utc', {
+      now: nowIso,
+      utcDay: now.getUTCDay(),
+    });
+    return true;
+  }
+
+  // Use the Monday run date as the date dedupe key.
+  const todayKey = now.toISOString().slice(0, 10);
+
+  let kvTimestampRaw = null;
+  let kvDateRaw = null;
+
+  if (kvAvailable) {
+    try {
+      kvTimestampRaw = await env.KV.get(TIMESTAMP_KEY);
+      console.log('[payday-reminder] kv_get_timestamp_ok', {
+        now: nowIso,
+        key: TIMESTAMP_KEY,
+        value: kvTimestampRaw,
+      });
+    } catch (err) {
+      console.error('[payday-reminder] kv_get_timestamp_failed', {
+        now: nowIso,
+        key: TIMESTAMP_KEY,
+        error: err?.message || String(err),
+      });
+    }
+
+    try {
+      kvDateRaw = await env.KV.get(DATE_KEY);
+      console.log('[payday-reminder] kv_get_date_ok', {
+        now: nowIso,
+        key: DATE_KEY,
+        value: kvDateRaw,
+      });
+    } catch (err) {
+      console.error('[payday-reminder] kv_get_date_failed', {
+        now: nowIso,
+        key: DATE_KEY,
+        error: err?.message || String(err),
+      });
+    }
+  }
+
+  // Primary dedupe: timestamp within 24 hours.
+  if (kvTimestampRaw) {
+    const lastSentMs = Number(kvTimestampRaw);
+
+    if (Number.isFinite(lastSentMs)) {
+      const elapsedMs = nowMs - lastSentMs;
+
+      if (elapsedMs >= 0 && elapsedMs < DEDUPE_WINDOW_MS) {
+        console.log('[payday-reminder] skipped_kv_timestamp_dedupe', {
+          now: nowIso,
+          lastSent: new Date(lastSentMs).toISOString(),
+          elapsedMs,
+        });
+        return true;
+      }
+    } else {
+      console.warn('[payday-reminder] invalid_kv_timestamp_ignored', {
+        now: nowIso,
+        rawValue: kvTimestampRaw,
+      });
+    }
+  }
+
+  // Secondary dedupe: date/week key.
+  if (kvDateRaw === todayKey) {
+    console.log('[payday-reminder] skipped_kv_date_dedupe', {
+      now: nowIso,
+      key: DATE_KEY,
+      value: kvDateRaw,
+    });
+    return true;
+  }
+
+  // Backup dedupe if KV is unavailable or read failed.
+  const memoryLastSentMs = Number(globalThis[MEMORY_TIMESTAMP_KEY] || 0);
+  if (Number.isFinite(memoryLastSentMs) && memoryLastSentMs > 0) {
+    const elapsedMs = nowMs - memoryLastSentMs;
+
+    if (elapsedMs >= 0 && elapsedMs < DEDUPE_WINDOW_MS) {
+      console.log('[payday-reminder] skipped_memory_timestamp_dedupe', {
+        now: nowIso,
+        lastSent: new Date(memoryLastSentMs).toISOString(),
+        elapsedMs,
+      });
+      return true;
+    }
+  }
+
+  const mention = env.RIPTIDE_USER_ID ? `<@${env.RIPTIDE_USER_ID}>` : '**@riptide248**';
+  const payoutNote = totalPayout > 0 ? ` Total due: **${fmtMoney(totalPayout)}**.` : '';
+
+  const content =
+    `${mention} 💰 **Payday reminder!** Payouts are due to be processed for the week ending **${fmtDate(weekEndDate)}**.` +
+    `${payoutNote} Please review and mark them as processed in the dashboard when done.`;
+
+  console.log('[payday-reminder] posting_discord_message', {
+    now: nowIso,
+    channelId: env.PAYOUTS_CHANNEL_ID,
+    weekEndDate: fmtDate(weekEndDate),
+    totalPayout,
+  });
+
+  let messageId = null;
+
+  try {
+    messageId = await botPost(env.PAYOUTS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, { content });
+  } catch (err) {
+    console.error('[payday-reminder] discord_post_threw', {
+      now: nowIso,
+      error: err?.message || String(err),
+    });
+    return false;
+  }
+
+  if (messageId === null) {
+    console.error('[payday-reminder] discord_post_failed', {
+      now: nowIso,
+      channelId: env.PAYOUTS_CHANNEL_ID,
+    });
+    return false;
+  }
+
+  console.log('[payday-reminder] discord_post_sent', {
+    now: nowIso,
+    messageId,
+  });
+
+  // Set memory fallback immediately after successful post.
+  globalThis[MEMORY_TIMESTAMP_KEY] = nowMs;
+
+  // Store both KV keys after successful Discord post.
+  // KV failures are logged but do not turn a successful Discord post into a failure.
+  if (kvAvailable) {
+    try {
+      await env.KV.put(DATE_KEY, todayKey, { expirationTtl: KV_TTL_SECONDS });
+      console.log('[payday-reminder] kv_put_date_ok', {
+        now: nowIso,
+        key: DATE_KEY,
+        value: todayKey,
+        ttl: KV_TTL_SECONDS,
+      });
+    } catch (err) {
+      console.error('[payday-reminder] kv_put_date_failed', {
+        now: nowIso,
+        key: DATE_KEY,
+        value: todayKey,
+        error: err?.message || String(err),
+      });
+    }
+
+    try {
+      await env.KV.put(TIMESTAMP_KEY, String(nowMs), { expirationTtl: KV_TTL_SECONDS });
+      console.log('[payday-reminder] kv_put_timestamp_ok', {
+        now: nowIso,
+        key: TIMESTAMP_KEY,
+        value: String(nowMs),
+        ttl: KV_TTL_SECONDS,
+      });
+    } catch (err) {
+      console.error('[payday-reminder] kv_put_timestamp_failed', {
+        now: nowIso,
+        key: TIMESTAMP_KEY,
+        value: String(nowMs),
+        error: err?.message || String(err),
+      });
+    }
+  }
+
+  console.log('[payday-reminder] completed', {
+    now: nowIso,
+    messageId,
+    kvAvailable,
+    storedDateKey: todayKey,
+    storedTimestamp: nowMs,
+  });
+
+  return true;
 }
 
 // ===== Dashboard API: POST /api/notify-payouts =====
@@ -3750,12 +3953,12 @@ export default {
 
   /**
    * Scheduled handler — runs on the Cron Trigger defined in wrangler.jsonc.
-   * Fires once per hour to:
-   *   1. Validates that DISCORD_BOT_TOKEN is present.
-   *   2. Reads live job data from the Google Sheet.
-   *   3. Posts/edits the week's analytics summary in #analytics (requires ANALYTICS_CHANNEL_ID).
-   *   4. Posts the weekly job-activity list in #jobs (requires JOBS_CHANNEL_ID).
-   *   5. Sends a deduplicated payday reminder ping in #payouts (requires PAYOUTS_CHANNEL_ID).
+   * Fires weekly on Monday at 05:00 UTC to:
+   *   1. Validate that DISCORD_BOT_TOKEN is present.
+   *   2. Read live job data from the Google Sheet.
+   *   3. Post/edit the week's analytics summary in #analytics (requires ANALYTICS_CHANNEL_ID).
+   *   4. Post the weekly job-activity list in #jobs (requires JOBS_CHANNEL_ID).
+   *   5. Send one deduplicated payday reminder ping in #payouts (requires PAYOUTS_CHANNEL_ID).
    * Steps 3–5 are skipped gracefully when their channel ID secret is not configured.
    * Steps 3 and 4 edit the same pinned message each run (via KV-stored message ID) rather
    * than posting new messages, so the channel is never spammed.
