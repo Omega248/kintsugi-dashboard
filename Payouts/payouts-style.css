@@ -324,45 +324,59 @@
 
 #weeklyWrap th:nth-child(1),
 #weeklyWrap td:nth-child(1) {
-  width: 22%;
+  width: 16%;
   text-align: left;
   padding-left: 16px;
 }
 
 #weeklyWrap th:nth-child(2),
 #weeklyWrap td:nth-child(2) {
-  width: 14%;
+  width: 12%;
   text-align: center;
 }
 
 #weeklyWrap th:nth-child(3),
 #weeklyWrap td:nth-child(3) {
-  width: 7%;
+  width: 6%;
   text-align: center;
 }
 
 /* Money Earned */
 #weeklyWrap th:nth-child(4),
 #weeklyWrap td:nth-child(4) {
-  width: 16%;
+  width: 14%;
   text-align: right;
 }
 
 #weeklyWrap th:nth-child(5),
 #weeklyWrap td:nth-child(5) {
-  width: 18%;
+  width: 16%;
   text-align: center;
 }
 
 #weeklyWrap th:nth-child(6),
 #weeklyWrap td:nth-child(6) {
-  width: 14%;
+  width: 12%;
   text-align: center;
 }
 
 #weeklyWrap th:nth-child(7),
 #weeklyWrap td:nth-child(7) {
-  width: 9%;
+  width: 8%;
+  text-align: center;
+}
+
+#weeklyWrap th:nth-child(8),
+#weeklyWrap td:nth-child(8) {
+  width: 8%;
+  text-align: center;
+  padding-right: 8px;
+}
+
+/* Actions column */
+#weeklyWrap th:nth-child(9),
+#weeklyWrap td:nth-child(9) {
+  width: 10%;
   text-align: center;
   padding-right: 16px;
 }
@@ -469,12 +483,13 @@
   padding: 6px 12px;
   font-size: var(--font-size-sm);
   white-space: nowrap;
-  min-width: 85px;
+  min-width: 80px;
   border-radius: var(--radius-full);
   background: rgba(79, 70, 229, 0.15);
   color: var(--text-primary);
   border: 1px solid rgba(79, 70, 229, 0.3);
   transition: all var(--duration-fast) var(--ease-smooth);
+  cursor: pointer;
 }
 
 .btn-copy-summary:hover {
@@ -512,6 +527,23 @@
   .seg-tabs {
     width: 100%;
     justify-content: center;
+  }
+
+  /* Adjust column widths on mobile */
+  #weeklyWrap th:nth-child(1),
+  #weeklyWrap td:nth-child(1) {
+    width: 15%;
+  }
+
+  #weeklyWrap th:nth-child(4),
+  #weeklyWrap td:nth-child(4) {
+    width: 12%;
+  }
+
+  #weeklyWrap th:nth-child(9),
+  #weeklyWrap td:nth-child(9) {
+    width: 12%;
+    padding-right: 8px;
   }
 }
 
