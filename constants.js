@@ -52,7 +52,7 @@ const DEPARTMENT_CONFIG = {
   LSPD: { color: 0x000000, engineBonus: PAYMENT_RATES.ENGINE_BONUS_LSPD, emoji: "⚫", billingEngineRate: PAYMENT_RATES.ENGINE_REPLACEMENT_RATE },
   BCSO: { color: 0xD2B48C, engineBonus: 0, emoji: "🟤", billingEngineRate: PAYMENT_RATES.ENGINE_REPLACEMENT_RATE_BCSO },
   ODPD: { color: 0x00FFFF, engineBonus: PAYMENT_RATES.ENGINE_BONUS_LSPD, emoji: "🔷", billingEngineRate: PAYMENT_RATES.ENGINE_REPLACEMENT_RATE },
-  SASM: { color: 0xFF6B35, engineBonus: 0, emoji: "🟠", billingEngineRate: PAYMENT_RATES.ENGINE_REPLACEMENT_RATE_BCSO }
+  SASM: { color: 0xFF6B35, engineBonus: PAYMENT_RATES.ENGINE_BONUS_LSPD, emoji: "🟠", billingEngineRate: PAYMENT_RATES.ENGINE_REPLACEMENT_RATE }
 };
 
 const DEFAULT_DEPARTMENTS = ["CIV", "EMS", "LSPD", "BCSO", "ODPD", "SASM"];
