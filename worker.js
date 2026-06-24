@@ -1698,7 +1698,7 @@ async function handleAskCommand(interaction, env, ctx) {
 
       messages.push({ role: 'user', content: question || '(no question provided)' });
 
-      const result = await env.AI.run('@cf/meta/llama-3-8b-instruct', {
+      const result = await env.AI.run('@cf/meta/llama-4-scout-17b-16e-instruct', {
         messages,
         max_tokens: 400,
       });
@@ -3806,7 +3806,7 @@ export class DiscordGateway {
 
       messages.push({ role: 'user', content: question || '(no question — just mentioned me)' });
 
-      const result = await this.env.AI.run('@cf/meta/llama-3-8b-instruct', {
+      const result = await this.env.AI.run('@cf/meta/llama-4-scout-17b-16e-instruct', {
         messages,
         max_tokens: 400,
       });
