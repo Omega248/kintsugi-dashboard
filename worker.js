@@ -59,6 +59,11 @@
 // =======================================
 
 // ===== Sheet config (mirrors kintsugi-core.js) =====
+import {
+  PAYMENT_RATES,
+  departmentEngineBonus as sharedDepartmentEngineBonus,
+} from './rates.js';
+
 const SHEET_ID        = '1EJxx9BAUyBgj9XImCXQ5_3nr_o5BXyLZ9SSkaww71Ks';
 const JOBS_SHEET      = 'Form responses 1';
 const STATE_IDS_SHEET = "State ID's";
@@ -79,13 +84,15 @@ function getTriggerToken(env) {
 }
 
 // ===== Pay rates (mirrors constants.js) =====
-const PAY_PER_REPAIR        = 700;
-const ENGINE_REIMBURSEMENT  = 12000;
-const ENGINE_BONUS_LSPD     = 1500;
+// Rates come from rates.js so the bot, the payday embed and the
+// dashboard cannot drift apart. Do not hardcode them here again.
+const PAY_PER_REPAIR        = PAYMENT_RATES.PAY_PER_REPAIR;
+const ENGINE_REIMBURSEMENT  = PAYMENT_RATES.ENGINE_REIMBURSEMENT;
+const ENGINE_BONUS_LSPD     = PAYMENT_RATES.ENGINE_BONUS_LSPD;
 // Combined engine pay per replacement (LSPD/other rate — used when department is unknown)
 const ENGINE_PAY_DEFAULT    = ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD;
-const HARNESS_RATE          = 500;
-const ADVANCED_REPAIR_KIT_RATE = 500;
+const HARNESS_RATE          = PAYMENT_RATES.HARNESS_RATE;
+const ADVANCED_REPAIR_KIT_RATE = PAYMENT_RATES.ADVANCED_REPAIR_KIT_RATE;
 
 const DEPARTMENT_CONFIG = {
   CIV: {
@@ -113,6 +120,11 @@ const DEPARTMENT_CONFIG = {
     engineBonus: ENGINE_BONUS_LSPD,
     emoji: '🔷',
   },
+  SASM: {
+    color: 0xFF6B35,
+    engineBonus: ENGINE_BONUS_LSPD,
+    emoji: '🟠',
+  },
 };
 
 function normalizeDepartment(dept) {
@@ -128,7 +140,11 @@ function getDepartmentConfig(dept) {
 }
 
 function getDepartmentEngineBonus(dept) {
-  return getDepartmentConfig(dept).engineBonus || 0;
+  // Deliberately NOT read from DEPARTMENT_CONFIG. That table also holds
+  // colours and emoji, and when SASM was dropped from it in f24d684 the
+  // bonus silently became 0 and mechanics were underpaid $1,500 per SASM
+  // engine replacement. The money rule lives in rates.js on its own.
+  return sharedDepartmentEngineBonus(dept);
 }
 
 function getJobDepartment(job) {

@@ -7,7 +7,7 @@
   "scripts": {
     "start": "wrangler dev",
     "deploy": "wrangler deploy --config wrangler.jsonc",
-    "test": "node test-invoice-flow.mjs && node test-preferences.cjs"
+    "test": "node test-rates.mjs && node test-preferences.cjs && node test-invoice-flow.mjs"
   },
   "engines": {
     "node": ">=18"

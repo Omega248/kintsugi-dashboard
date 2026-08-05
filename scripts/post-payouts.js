@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { PAYMENT_RATES, departmentEngineBonus } from '../rates.js';
+// Rates and the engine-bonus rule come from rates.js so this script,
+// worker.js and the dashboard cannot disagree about what someone is paid.
 // =======================================
 // Kintsugi Discord Bot — Post Payouts Processed
 //
@@ -40,11 +43,11 @@ const JOBS_SHEET      = 'Form responses 1';
 const STATE_IDS_SHEET = "State ID's";
 
 // ===== Pay rates =====
-const PAY_PER_REPAIR       = 700;
-const ENGINE_REIMBURSEMENT = 12000;
-const ENGINE_BONUS_LSPD    = 1500;
-const HARNESS_RATE             = 500;
-const ADVANCED_REPAIR_KIT_RATE = 500;
+const PAY_PER_REPAIR = PAYMENT_RATES.PAY_PER_REPAIR;
+const ENGINE_REIMBURSEMENT = PAYMENT_RATES.ENGINE_REIMBURSEMENT;
+const ENGINE_BONUS_LSPD = PAYMENT_RATES.ENGINE_BONUS_LSPD;
+const HARNESS_RATE             = PAYMENT_RATES.HARNESS_RATE;
+const ADVANCED_REPAIR_KIT_RATE = PAYMENT_RATES.ADVANCED_REPAIR_KIT_RATE;
 
 // ===== CSV fetch + parse =====
 
@@ -142,15 +145,15 @@ function fmtMoney(n) {
  */
 function computeEnginePay(pdEngineCount, dept, enginePayer, civEngineCount) {
   let pay = 0;
-  const isLspd = ['LSPD', 'ODPD'].includes((dept || '').toUpperCase());
+  const bonus = departmentEngineBonus(dept);
   if (pdEngineCount > 0) {
     if (enginePayer === 'mechanic') {
-      pay += pdEngineCount * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
+      pay += pdEngineCount * (ENGINE_REIMBURSEMENT + bonus);
     } else if (enginePayer === 'kintsugi') {
-      pay += pdEngineCount * (isLspd ? ENGINE_BONUS_LSPD : 0);
+      pay += pdEngineCount * bonus;
     } else {
       // No payer info (old data): default to full reimbursement + LSPD bonus
-      pay += pdEngineCount * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
+      pay += pdEngineCount * (ENGINE_REIMBURSEMENT + bonus);
     }
   }
   if ((civEngineCount || 0) > 0) {

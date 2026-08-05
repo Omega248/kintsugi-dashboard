@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { PAYMENT_RATES, departmentEngineBonus } from '../rates.js';
+// Rates and the engine-bonus rule come from rates.js so this script,
+// worker.js and the dashboard cannot disagree about what someone is paid.
 // =======================================
 // Kintsugi Discord Bot — Update Analytics
 //
@@ -48,12 +51,12 @@ const SHEET_ID   = '1EJxx9BAUyBgj9XImCXQ5_3nr_o5BXyLZ9SSkaww71Ks';
 const JOBS_SHEET = 'Form responses 1';
 
 // ===== Pay rates (mirrors constants.js) =====
-const PAY_PER_REPAIR           = 700;
-const ENGINE_REIMBURSEMENT     = 12000;
-const ENGINE_BONUS_LSPD        = 1500;
+const PAY_PER_REPAIR = PAYMENT_RATES.PAY_PER_REPAIR;
+const ENGINE_REIMBURSEMENT = PAYMENT_RATES.ENGINE_REIMBURSEMENT;
+const ENGINE_BONUS_LSPD = PAYMENT_RATES.ENGINE_BONUS_LSPD;
 const ENGINE_PAY_DEFAULT       = ENGINE_REIMBURSEMENT + ENGINE_BONUS_LSPD;
-const HARNESS_RATE             = 500;
-const ADVANCED_REPAIR_KIT_RATE = 500;
+const HARNESS_RATE             = PAYMENT_RATES.HARNESS_RATE;
+const ADVANCED_REPAIR_KIT_RATE = PAYMENT_RATES.ADVANCED_REPAIR_KIT_RATE;
 
 // Max mechanics to list in the embed field (Discord field value ≤ 1 024 chars)
 const DISCORD_MAX_MECHANICS   = 10;
@@ -370,14 +373,14 @@ function buildWeeklyStats(jobs) {
     rec.engineReplacements += j.engineReplacements || 0;
     // Apply payer-aware engine pay: mechanic only gets paid if they (or old data) bought the engine.
     // "kintsugi" payer: PD gets LSPD bonus only; CIV gets $0.
-    const isLspd = ['LSPD', 'ODPD'].includes((j.department || '').toUpperCase());
+    const bonus = departmentEngineBonus(j.department);
     const ep = j.enginePayer || '';
     let enginePayForJob = 0;
     if ((j.pdEngineCount || 0) > 0) {
       if (ep === 'kintsugi') {
-        enginePayForJob += j.pdEngineCount * (isLspd ? ENGINE_BONUS_LSPD : 0);
+        enginePayForJob += j.pdEngineCount * bonus;
       } else {
-        enginePayForJob += j.pdEngineCount * (ENGINE_REIMBURSEMENT + (isLspd ? ENGINE_BONUS_LSPD : 0));
+        enginePayForJob += j.pdEngineCount * (ENGINE_REIMBURSEMENT + bonus);
       }
     }
     if ((j.civEngineCount || 0) > 0) {
