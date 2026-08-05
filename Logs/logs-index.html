@@ -11,10 +11,13 @@
   <link rel="stylesheet" href="logs-style.css" />
   <script src="../constants.js"></script>
   <script src="../utils.js"></script>
+  <script src="../preferences.js"></script>
+  <script src="../settings-ui.js"></script>
   <script src="../ui-enhancements.js"></script>
   <script src="../kintsugi-core.js"></script>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to main content</a>
   <div class="app">
     <!-- Top Navigation -->
     <header class="top-bar">
@@ -28,11 +31,11 @@
         <a href="../Mechanics/mechanics-index.html" class="nav-pill">Mechanics</a>
         <a href="../Bank_Record/bank-index.html" class="nav-pill">Bank</a>
         <a href="../Analytics/analytics-index.html" class="nav-pill">Analytics</a>
-        <a href="logs-index.html" class="nav-pill active">Logs</a>
+        <a href="logs-index.html" class="nav-pill active" aria-current="page">Logs</a>
       </nav>
     </header>
 
-    <main class="page-shell">
+    <main class="page-shell" id="main">
       <!-- Summary intro -->
       <section class="summary">
         <div class="summary-main">

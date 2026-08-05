@@ -17,7 +17,7 @@ Go to **GitHub → Settings → Secrets and variables → Actions** and add the 
 | `INVOICE_CHANNEL_ID` | Discord → right-click channel → Copy Channel ID | Invoice panel |
 | `TRIGGER_TOKEN` | Any secure random string you generate | Protects dashboard API endpoints |
 | `RIPTIDE_USER_ID` | Discord → right-click user → Copy User ID | *(Optional)* `@mention` on payday |
-| `DEBUG_CHANNEL_ID` | Discord → right-click channel → Copy Channel ID | *(Optional)* Error embeds |
+| `DEBUG_CHANNEL_ID` | Discord → right-click channel → Copy Channel ID | *(Reserved — not yet read by the Worker; see `NOTIFICATIONS.errors` in `worker.js`)* |
 
 > **Tip:** Enable Developer Mode in Discord (User Settings → Advanced → Developer Mode) to unlock the Copy ID options.
 
@@ -73,6 +73,37 @@ Run these workflows as needed from the **Actions** tab:
 | **Post Job Logs Panel** | Permanent panel in `#jobs` |
 | **Post Invoice Panel** | Permanent panel in `#invoice` |
 | **Post Payouts Processed** | Payday embed in `#payouts` |
+
+---
+
+---
+
+## Where Configuration Lives
+
+There is no build step — pages load plain `<script>` tags, so load order in each
+HTML file matters.
+
+| File | Holds | Used by |
+|---|---|---|
+| `constants.js` | Sheet tab names, payment rates, department colours/bonuses, UI limits, error and status message copy | All dashboard pages |
+| `kintsugi-core.js` | `KINTSUGI_SHEET_ID`, CSV fetching/parsing, date and money formatting, loading/error/empty state helpers | All dashboard pages |
+| `preferences.js` | `DEFAULT_PREFS` — the single source of truth for every user setting, plus `PREF_BODY_CLASSES` | All dashboard pages |
+| `worker.js` → `NOTIFICATIONS` | Every Discord message the bot sends: target channel secret, colour, embed title, post-vs-edit behaviour, on/off switch | Cloudflare Worker |
+
+**Adding a user setting:** add a default to `DEFAULT_PREFS` in `preferences.js`,
+then a control with a matching `data-pref` in `settings-ui.js`. If it's just a
+class on `<body>`, add it to `PREF_BODY_CLASSES` and no JavaScript is needed.
+
+**Adding a Discord notification:** add an entry to `NOTIFICATIONS` in
+`worker.js` and read its channel via `notificationChannel('yourKey', env)`.
+Surfaces with a missing channel secret are skipped automatically.
+
+> **Careful:** the `title` of an `edit-in-place` surface is also how the bot
+> finds its existing message to update. Changing a title makes the bot post a
+> new message instead of editing the old one.
+
+Script load order on every page is:
+`constants.js → utils.js → payout-helpers.js → preferences.js → settings-ui.js → ui-enhancements.js → kintsugi-core.js → <page>-script.js`
 
 ---
 

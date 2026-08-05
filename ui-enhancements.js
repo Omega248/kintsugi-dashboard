@@ -154,52 +154,25 @@ function animateNumber(element, start, end, duration = 1000) {
 
 // ===== Accessibility Helpers =====
 
+// These modes are stored in the unified preferences object (preferences.js),
+// which is what applies the body classes on load. They previously kept their
+// own separate localStorage keys, so the settings panel and this file could
+// disagree about whether e.g. compact mode was on.
+
 function toggleHighContrast(enabled) {
-  if (enabled) {
-    document.body.classList.add('high-contrast');
-    localStorage.setItem('high-contrast', 'true');
-  } else {
-    document.body.classList.remove('high-contrast');
-    localStorage.removeItem('high-contrast');
-  }
+  kSetPreference('highContrast', enabled);
+  document.body.classList.toggle('high-contrast', enabled);
 }
 
 function toggleLargeText(enabled) {
-  if (enabled) {
-    document.body.classList.add('large-text');
-    localStorage.setItem('large-text', 'true');
-  } else {
-    document.body.classList.remove('large-text');
-    localStorage.removeItem('large-text');
-  }
+  kSetPreference('largeText', enabled);
+  document.body.classList.toggle('large-text', enabled);
 }
 
 function toggleCompactMode(enabled) {
-  if (enabled) {
-    document.body.classList.add('compact-mode');
-    localStorage.setItem('compact-mode', 'true');
-  } else {
-    document.body.classList.remove('compact-mode');
-    localStorage.removeItem('compact-mode');
-  }
+  kSetPreference('compactMode', enabled);
+  document.body.classList.toggle('compact-mode', enabled);
 }
 
-// Initialize accessibility preferences on load
-function initAccessibility() {
-  if (localStorage.getItem('high-contrast') === 'true') {
-    document.body.classList.add('high-contrast');
-  }
-  if (localStorage.getItem('large-text') === 'true') {
-    document.body.classList.add('large-text');
-  }
-  if (localStorage.getItem('compact-mode') === 'true') {
-    document.body.classList.add('compact-mode');
-  }
-}
-
-// Auto-initialize when DOM is ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initAccessibility);
-} else {
-  initAccessibility();
-}
+// Body classes are applied by kInitPreferences() in preferences.js on
+// DOMContentLoaded — no separate init needed here.

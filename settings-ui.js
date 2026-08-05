@@ -29,6 +29,7 @@ function kInitSettingsUI() {
   panel.id = 'kSettingsPanel';
   panel.className = 'settings-panel';
   panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-modal', 'true');
   panel.setAttribute('aria-label', 'Settings');
   
   panel.innerHTML = `
@@ -45,7 +46,7 @@ function kInitSettingsUI() {
           <div class="settings-item-label">Compact Mode</div>
           <div class="settings-item-description">Reduce spacing and padding</div>
         </div>
-        <div class="settings-toggle" data-pref="compactMode"></div>
+        <div class="settings-toggle" data-pref="compactMode" role="switch" tabindex="0" aria-label="Compact mode"></div>
       </div>
       
       <div class="settings-item">
@@ -53,7 +54,7 @@ function kInitSettingsUI() {
           <div class="settings-item-label">Show Balance Column</div>
           <div class="settings-item-description">Display running balance in tables</div>
         </div>
-        <div class="settings-toggle" data-pref="showBalance"></div>
+        <div class="settings-toggle" data-pref="showBalance" role="switch" tabindex="0" aria-label="Show balance column"></div>
       </div>
       
       <div class="settings-item">
@@ -61,13 +62,41 @@ function kInitSettingsUI() {
           <div class="settings-item-label">Show Tax Information</div>
           <div class="settings-item-description">Display tax-related columns</div>
         </div>
-        <div class="settings-toggle" data-pref="showTax"></div>
+        <div class="settings-toggle" data-pref="showTax" role="switch" tabindex="0" aria-label="Show tax information"></div>
       </div>
     </div>
     
     <div class="settings-group">
+      <h3 class="settings-group-title">Accessibility</h3>
+
+      <div class="settings-item">
+        <div>
+          <div class="settings-item-label">High Contrast</div>
+          <div class="settings-item-description">Stronger borders and maximum contrast colours</div>
+        </div>
+        <div class="settings-toggle" data-pref="highContrast" role="switch" tabindex="0" aria-label="High contrast mode"></div>
+      </div>
+
+      <div class="settings-item">
+        <div>
+          <div class="settings-item-label">Large Text</div>
+          <div class="settings-item-description">Increase font sizes across the app</div>
+        </div>
+        <div class="settings-toggle" data-pref="largeText" role="switch" tabindex="0" aria-label="Large text mode"></div>
+      </div>
+
+      <div class="settings-item">
+        <div>
+          <div class="settings-item-label">Reduce Motion</div>
+          <div class="settings-item-description">Minimise animations and transitions</div>
+        </div>
+        <div class="settings-toggle" data-pref="reduceMotion" role="switch" tabindex="0" aria-label="Reduce motion"></div>
+      </div>
+    </div>
+
+    <div class="settings-group">
       <h3 class="settings-group-title">Preferences</h3>
-      
+
       <div class="settings-item">
         <label class="settings-item-label">Default View</label>
         <select class="select-pill" data-pref="defaultView">
@@ -116,14 +145,11 @@ function kInitSettingsUI() {
 function kUpdateSettingsUI() {
   const prefs = kGetPreferences();
   
-  // Update toggles
+  // Update toggles (class drives the visuals, aria-checked drives screen readers)
   document.querySelectorAll('.settings-toggle').forEach(toggle => {
-    const pref = toggle.dataset.pref;
-    if (prefs[pref]) {
-      toggle.classList.add('active');
-    } else {
-      toggle.classList.remove('active');
-    }
+    const on = !!prefs[toggle.dataset.pref];
+    toggle.classList.toggle('active', on);
+    toggle.setAttribute('aria-checked', String(on));
   });
   
   // Update selects
@@ -144,42 +170,77 @@ function kAttachSettingsListeners() {
   const btn = document.getElementById('kSettingsButton');
   const closeBtn = panel.querySelector('.settings-panel-close');
   
-  // Open settings
+  // Open settings — remember what had focus so we can restore it on close
+  let lastFocused = null;
+
   btn.addEventListener('click', () => {
+    lastFocused = document.activeElement;
     panel.classList.add('open');
     overlay.classList.add('visible');
+    closeBtn.focus();
   });
-  
+
   // Close settings
   const closeSettings = () => {
     panel.classList.remove('open');
     overlay.classList.remove('visible');
+    // Return focus where the user left it, not to the top of the page
+    if (lastFocused && document.contains(lastFocused)) lastFocused.focus();
   };
-  
+
   closeBtn.addEventListener('click', closeSettings);
   overlay.addEventListener('click', closeSettings);
-  
-  // Handle ESC key
+
+  // ESC to close, Tab cycles within the panel while it's open
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && panel.classList.contains('open')) {
+    if (!panel.classList.contains('open')) return;
+
+    if (e.key === 'Escape') {
       closeSettings();
+      return;
+    }
+
+    if (e.key !== 'Tab') return;
+
+    const focusable = panel.querySelectorAll(
+      'button, [href], select, input, [tabindex]:not([tabindex="-1"])'
+    );
+    if (!focusable.length) return;
+
+    const first = focusable[0];
+    const last  = focusable[focusable.length - 1];
+
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
     }
   });
   
-  // Toggle preferences
+  // Toggle preferences (mouse + keyboard — these are divs, not real checkboxes)
   document.querySelectorAll('.settings-toggle').forEach(toggle => {
-    toggle.addEventListener('click', () => {
+    const flip = () => {
       const pref = toggle.dataset.pref;
-      const current = kGetPreference(pref, false);
-      const newValue = !current;
-      
+      const newValue = !kGetPreference(pref, false);
+
       kSetPreference(pref, newValue);
       toggle.classList.toggle('active', newValue);
-      
+      toggle.setAttribute('aria-checked', String(newValue));
+
       // Apply changes immediately
       kApplyPreference(pref, newValue);
-      
+
       kShowToast('Setting updated', 'success', 1500);
+    };
+
+    toggle.addEventListener('click', flip);
+    toggle.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();   // stop Space scrolling the page
+        flip();
+      }
     });
   });
   
@@ -232,11 +293,14 @@ function kAttachSettingsListeners() {
  * @param {*} value - New value
  */
 function kApplyPreference(pref, value) {
+  // Preferences that are purely a class on <body> (compact mode, high
+  // contrast, large text, reduce motion) are handled by the shared map.
+  if (PREF_BODY_CLASSES[pref]) {
+    document.body.classList.toggle(PREF_BODY_CLASSES[pref], value);
+    return;
+  }
+
   switch (pref) {
-    case 'compactMode':
-      document.body.classList.toggle('compact-mode', value);
-      break;
-      
     case 'showBalance':
       const balanceToggle = document.getElementById('toggleBalance');
       if (balanceToggle) {

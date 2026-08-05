@@ -287,7 +287,7 @@ async function loadOverview() {
       let weekDate = null;
       const weekRaw = iWeek !== -1 ? row[iWeek] : null;
       if (weekRaw) {
-        const d = parseDateLike(weekRaw);
+        const d = kParseDateLike(weekRaw);
         if (d && !isNaN(d)) {
           weekDate = d;
           if (!latestWeekDate || d > latestWeekDate) {
@@ -300,7 +300,7 @@ async function loadOverview() {
       let jobDate = null;
       const tsRaw = iTs !== -1 ? row[iTs] : null;
       if (tsRaw) {
-        const d = parseDateLike(tsRaw);
+        const d = kParseDateLike(tsRaw);
         if (d && !isNaN(d)) jobDate = d;
       }
       if (!jobDate) jobDate = weekDate;
@@ -463,20 +463,9 @@ async function loadConfig() {
   }
 }
 
-// ==== Helpers (now using kintsugi-core.js) ====
-// All date/money formatting helpers are in kintsugi-core.js
-
-function parseDateLike(raw) {
-  return kParseDateLike(raw);
-}
-
-function fmtDate(d) {
-  return kFmtDate(d);
-}
-
-function money(n) {
-  return kFmtMoney(n);
-}
+// ==== Helpers ====
+// Date/money formatting lives in kintsugi-core.js and is called directly:
+//   kParseDateLike(raw) · kFmtDate(date) · kFmtMoney(number)
 
 // ==== This Week Live Panel ====
 

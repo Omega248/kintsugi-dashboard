@@ -6,7 +6,8 @@
   "description": "Kintsugi Motorworks dashboard and Discord bot — single unified Cloudflare Worker",
   "scripts": {
     "start": "wrangler dev",
-    "deploy": "wrangler deploy --config wrangler.jsonc"
+    "deploy": "wrangler deploy --config wrangler.jsonc",
+    "test": "node test-invoice-flow.mjs && node test-preferences.cjs"
   },
   "engines": {
     "node": ">=18"

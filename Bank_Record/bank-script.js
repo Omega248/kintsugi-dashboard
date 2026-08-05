@@ -1,16 +1,11 @@
 // ================== CONFIG ==================
 
-// Google Sheet
-const SHEET_ID =
-  "1EJxx9BAUyBgj9XImCXQ5_3nr_o5BXyLZ9SSkaww71Ks";
+// Google Sheet ID comes from KINTSUGI_SHEET_ID in kintsugi-core.js —
+// this page previously kept its own copy, which could drift out of sync.
 
-// Bank data tab (existing)
-const BANK_SHEET =
-  "bank_transactions_64952453_1761436800_1762732799_1762792939175";
-
-// Manual/global values tab inside SAME spreadsheet
-// Structure: columns Key | Value (see description above)
-const MANUAL_SHEET = "Manual";
+// Sheet tab names are defined once in constants.js (KINTSUGI_CONFIG.SHEETS).
+const BANK_SHEET   = KINTSUGI_CONFIG.SHEETS.BANK;
+const MANUAL_SHEET = KINTSUGI_CONFIG.SHEETS.MANUAL;
 
 // Defaults (can be overridden by Manual sheet)
 let BET_RATE = 300;
@@ -185,11 +180,10 @@ function updateUrlFromState() {
 
 // ================== CSV HELPERS ==================
 
-function sheetCsvUrl(sheetName) {
-  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(
-    sheetName
-  )}`;
-}
+// Sheet CSV URLs come from kSheetCsvUrl() in kintsugi-core.js.
+// NOTE: money() below is deliberately NOT kFmtMoney() — this page shows debits,
+// and formats negatives as -$1,234 rather than $-1,234.
+const sheetCsvUrl = kSheetCsvUrl;
 
 function rawParseCSV(text) {
   const rows = [];
@@ -353,14 +347,13 @@ async function loadBankFromSheet() {
  * an array of synthetic "out" transaction objects to be merged into allRows.
  */
 async function loadJobsAsPayouts() {
-  const JOBS_SHEET_NAME = (typeof KINTSUGI_CONFIG !== "undefined" && KINTSUGI_CONFIG.SHEETS && KINTSUGI_CONFIG.SHEETS.JOBS)
-    ? KINTSUGI_CONFIG.SHEETS.JOBS
-    : "Form responses 1";
-  const PAY = (typeof PAYMENT_RATES !== "undefined" && PAYMENT_RATES.PAY_PER_REPAIR) ? PAYMENT_RATES.PAY_PER_REPAIR : 700;
-  const ENG_REIMB = (typeof PAYMENT_RATES !== "undefined" && PAYMENT_RATES.ENGINE_REIMBURSEMENT) ? PAYMENT_RATES.ENGINE_REIMBURSEMENT : 12000;
-  const ENG_BONUS = (typeof PAYMENT_RATES !== "undefined" && PAYMENT_RATES.ENGINE_BONUS_LSPD) ? PAYMENT_RATES.ENGINE_BONUS_LSPD : 1500;
-  const HARNESS = (typeof PAYMENT_RATES !== "undefined" && PAYMENT_RATES.HARNESS_RATE) ? PAYMENT_RATES.HARNESS_RATE : 500;
-  const ADV_KIT = (typeof PAYMENT_RATES !== "undefined" && PAYMENT_RATES.ADVANCED_REPAIR_KIT_RATE) ? PAYMENT_RATES.ADVANCED_REPAIR_KIT_RATE : 500;
+  // constants.js is loaded before this file, so these are always defined.
+  const JOBS_SHEET_NAME = KINTSUGI_CONFIG.SHEETS.JOBS;
+  const PAY       = PAYMENT_RATES.PAY_PER_REPAIR;
+  const ENG_REIMB = PAYMENT_RATES.ENGINE_REIMBURSEMENT;
+  const ENG_BONUS = PAYMENT_RATES.ENGINE_BONUS_LSPD;
+  const HARNESS   = PAYMENT_RATES.HARNESS_RATE;
+  const ADV_KIT   = PAYMENT_RATES.ADVANCED_REPAIR_KIT_RATE;
 
   try {
     const res = await fetch(sheetCsvUrl(JOBS_SHEET_NAME));

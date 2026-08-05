@@ -149,6 +149,88 @@ function computeInvoiceJobTotal(job) {
 // ===== Discord embed display limits =====
 const DISCORD_FIELD_MAX_CHARS = 1024; // Discord API field value character limit
 const DISCORD_MAX_MECHANICS   = 10;   // Max mechanics to list in a single embed field
+
+// =====================================================================
+// Notification surfaces
+// ---------------------------------------------------------------------
+// Every message this bot sends to Discord is described here, so you can
+// see all of them — and which channel each needs — in one place.
+//
+// Each entry:
+//   label       Human-readable name, used in logs and error messages.
+//   channelEnv  Name of the env secret holding the target channel ID.
+//   colour      Embed accent colour (ignored for plain-text messages).
+//   title       Embed title. Also used to find and edit the existing
+//               message instead of posting a duplicate — changing this
+//               will cause one new message to be posted.
+//   mode        'edit-in-place' updates a single pinned-style message.
+//               'post'          sends a new message each time.
+//   enabled     Set false to switch a surface off without removing code.
+//
+// A surface is skipped automatically if its channel secret is missing,
+// so an unset channel is safe, not an error.
+// =====================================================================
+const NOTIFICATIONS = {
+  analytics: {
+    label:      'Weekly analytics summary',
+    channelEnv: 'ANALYTICS_CHANNEL_ID',
+    colour:     0x4f46e5,
+    title:      '📊 Kintsugi Motorworks — Weekly Analytics',
+    mode:       'edit-in-place',
+    enabled:    true,
+  },
+
+  jobs: {
+    label:      'Weekly job activity',
+    channelEnv: 'JOBS_CHANNEL_ID',
+    colour:     0x4f46e5,
+    title:      '📋 Weekly Job Activity',
+    mode:       'edit-in-place',
+    enabled:    true,
+  },
+
+  paydayReminder: {
+    label:      'Payday reminder ping',
+    channelEnv: 'PAYOUTS_CHANNEL_ID',
+    colour:     null,          // plain-text message, not an embed
+    title:      null,
+    mode:       'post',
+    enabled:    true,
+    // Deduplicated so a restart can't double-ping — see sendPaydayReminder().
+  },
+
+  payoutsProcessed: {
+    label:      'Payouts processed confirmation',
+    channelEnv: 'PAYOUTS_CHANNEL_ID',
+    colour:     0x22c55e,
+    title:      null,          // title is built per-week at post time
+    mode:       'post',
+    enabled:    true,
+  },
+
+  errors: {
+    label:      'Bot error embeds',
+    channelEnv: 'DEBUG_CHANNEL_ID',
+    colour:     0xef4444,
+    title:      '⚠️ Kintsugi Bot Error',
+    mode:       'post',
+    // NOT IMPLEMENTED. DEBUG_CHANNEL_ID is documented in the README and
+    // deployed as a secret, but nothing in this worker reads it — errors
+    // currently only go to console.log. Left here, disabled, so the gap
+    // is visible rather than silently missing.
+    enabled:    false,
+  },
+};
+
+/**
+ * Resolve a notification surface to a usable channel ID.
+ * @returns {string|null} Channel ID, or null if disabled/unconfigured.
+ */
+function notificationChannel(key, env) {
+  const surface = NOTIFICATIONS[key];
+  if (!surface || !surface.enabled) return null;
+  return env[surface.channelEnv] || null;
+}
 const InteractionType = {
   PING: 1,
   APPLICATION_COMMAND: 2,
@@ -2636,9 +2718,10 @@ function validateConfig(env) {
 }
 
 // Embed titles used both when building payloads and when scanning channel
-// history for an existing message — defined here so they stay in sync.
-const ANALYTICS_EMBED_TITLE = '📊 Kintsugi Motorworks — Weekly Analytics';
-const JOBS_EMBED_TITLE       = '📋 Weekly Job Activity';
+// history for an existing message — sourced from the NOTIFICATIONS config
+// above so the title and the message-matching logic can never drift apart.
+const ANALYTICS_EMBED_TITLE = NOTIFICATIONS.analytics.title;
+const JOBS_EMBED_TITLE      = NOTIFICATIONS.jobs.title;
 
 /**
  * Build the weekly analytics embed payload so it can be reused for both
@@ -2741,7 +2824,7 @@ async function postWeeklyAnalytics(env, summary, prevSummary = null) {
     console.warn('postWeeklyAnalytics: KV.get(analytics_channel_id) failed:', err?.message);
     return null;
   }) : null;
-  const channelId = kvChannelId || env.ANALYTICS_CHANNEL_ID;
+  const channelId = kvChannelId || notificationChannel('analytics', env);
   if (!env.DISCORD_BOT_TOKEN || !channelId) return false;
 
   const payload = buildAnalyticsPayload(summary, prevSummary);
@@ -2813,7 +2896,8 @@ function buildJobsPayload(summary) {
  * Uses DISCORD_BOT_TOKEN, JOBS_CHANNEL_ID, and the KV namespace from env.
  */
 async function postJobsUpdate(env, summary) {
-  if (!env.DISCORD_BOT_TOKEN || !env.JOBS_CHANNEL_ID) return false;
+  const jobsChannelId = notificationChannel('jobs', env);
+  if (!env.DISCORD_BOT_TOKEN || !jobsChannelId) return false;
 
   const payload = buildJobsPayload(summary);
 
@@ -2821,7 +2905,7 @@ async function postJobsUpdate(env, summary) {
   if (env.KV) {
     const storedId = await env.KV.get('jobs_message_id');
     if (storedId) {
-      const edited = await botEdit(env.JOBS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, storedId, payload);
+      const edited = await botEdit(jobsChannelId, env.DISCORD_BOT_TOKEN, storedId, payload);
       if (edited === true) return true;
       if (edited !== false) return false; // transient error — skip posting a new message
       // edited === false: message was deleted — fall through
@@ -2830,9 +2914,9 @@ async function postJobsUpdate(env, summary) {
 
   // 2. Scan the channel for an existing jobs message (fallback when KV is
   //    empty or the stored message was deleted)
-  const scannedId = await findExistingBotMessage(env.JOBS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, JOBS_EMBED_TITLE);
+  const scannedId = await findExistingBotMessage(jobsChannelId, env.DISCORD_BOT_TOKEN, JOBS_EMBED_TITLE);
   if (scannedId) {
-    const edited = await botEdit(env.JOBS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, scannedId, payload);
+    const edited = await botEdit(jobsChannelId, env.DISCORD_BOT_TOKEN, scannedId, payload);
     if (edited === true) {
       if (env.KV) await env.KV.put('jobs_message_id', scannedId);
       return true;
@@ -2842,7 +2926,7 @@ async function postJobsUpdate(env, summary) {
   }
 
   // 3. Post a new message and persist its ID
-  const messageId = await botPost(env.JOBS_CHANNEL_ID, env.DISCORD_BOT_TOKEN, payload);
+  const messageId = await botPost(jobsChannelId, env.DISCORD_BOT_TOKEN, payload);
   if (messageId && env.KV) {
     await env.KV.put('jobs_message_id', messageId);
   }

@@ -12,10 +12,13 @@
   <script src="../constants.js"></script>
   <script src="../utils.js"></script>
   <script src="../payout-helpers.js"></script>
+  <script src="../preferences.js"></script>
+  <script src="../settings-ui.js"></script>
   <script src="../ui-enhancements.js"></script>
   <script src="../kintsugi-core.js"></script>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to main content</a>
   <div class="app">
     <!-- Shared Top Nav -->
     <header class="top-bar">
@@ -23,9 +26,9 @@
         <div class="brand-title">Kintsugi Motorworks</div>
         <div class="brand-sub">Payouts &amp; jobs</div>
       </div>
-      <nav class="nav-tabs">
+      <nav class="nav-tabs" aria-label="Primary navigation">
         <a href="../index.html" class="nav-pill">Dashboard</a>
-        <a href="payouts-index.html" class="nav-pill active">Payouts</a>
+        <a href="payouts-index.html" class="nav-pill active" aria-current="page">Payouts</a>
         <a href="../Mechanics/mechanics-index.html" class="nav-pill">Mechanics</a>
         <a href="../Bank_Record/bank-index.html" class="nav-pill">Bank</a>
         <a href="../Analytics/analytics-index.html" class="nav-pill">Analytics</a>
@@ -33,7 +36,7 @@
       </nav>
     </header>
 
-    <main class="page-shell">
+    <main class="page-shell" id="main">
       <section class="summary">
         <div class="summary-main">
           <div class="summary-title">Payouts overview</div>

@@ -12,10 +12,13 @@
   <script src="../constants.js"></script>
   <script src="../utils.js"></script>
   <script src="../payout-helpers.js"></script>
+  <script src="../preferences.js"></script>
+  <script src="../settings-ui.js"></script>
   <script src="../ui-enhancements.js"></script>
   <script src="../kintsugi-core.js"></script>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to main content</a>
   <div class="app">
     <!-- Top nav shared across pages -->
     <header class="top-bar">
@@ -27,12 +30,13 @@
         <a href="../index.html" class="nav-pill">Dashboard</a>
         <a href="../Payouts/payouts-index.html" class="nav-pill">Payouts</a>
         <a href="../Mechanics/mechanics-index.html" class="nav-pill">Mechanics</a>
-        <a href="./bank-index.html" class="nav-pill active">Bank</a>
+        <a href="./bank-index.html" class="nav-pill active" aria-current="page">Bank</a>
         <a href="../Analytics/analytics-index.html" class="nav-pill">Analytics</a>
         <a href="../Logs/logs-index.html" class="nav-pill">Logs</a>
       </nav>
     </header>
 
+    <main id="main">
     <!-- Ledger title -->
     <div class="ledger-header">
       <div class="ledger-title">Transaction Viewer</div>
@@ -142,6 +146,7 @@
 
     <!-- Details -->
     <div id="detailsPanel"></div>
+    </main>
   </div>
 
   <script src="bank-script.js"></script>

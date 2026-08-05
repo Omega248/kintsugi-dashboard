@@ -1244,7 +1244,9 @@ body::-webkit-scrollbar-thumb:hover {
   }
 }
 
-/* Reduced motion for accessibility */
+/* Reduced motion for accessibility.
+   Honours the OS-level setting, and the in-app "Reduce Motion" toggle
+   (body.reduce-motion) for users whose OS preference isn't set. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -1252,7 +1254,17 @@ body::-webkit-scrollbar-thumb:hover {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
+}
+
+body.reduce-motion *,
+body.reduce-motion *::before,
+body.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }
 
 /* ===== High Contrast Mode ===== */
@@ -2275,4 +2287,42 @@ body.compact-mode table td {
   .audit-actions .btn {
     width: 100%;
   }
+}
+
+/* =========================================================
+   Consistent interactive states
+   Previously each page defined its own disabled styling (or
+   none at all), so a disabled button could still look and
+   behave like a live one.
+   ========================================================= */
+
+.btn:disabled,
+.btn[aria-disabled="true"],
+button:disabled,
+select:disabled,
+input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;   /* also blocks the hover transform */
+  filter: grayscale(0.4);
+}
+
+/* Async actions: mark the trigger aria-busy="true" while it runs */
+[aria-busy="true"] {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+/* Give the skip link the same visual language as the rest of the app */
+.skip-link {
+  border-radius: 0 0 var(--radius-sm) 0;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  transition: top var(--transition-fast);
+}
+
+/* Toggles are divs with role="switch" — make the keyboard focus obvious */
+.settings-toggle:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 3px;
 }
