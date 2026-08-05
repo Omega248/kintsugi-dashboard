@@ -599,15 +599,36 @@ document.addEventListener("DOMContentLoaded", async () => {
   initKeyboardShortcuts();
   setRefreshStatus("Loading");
 
+  // The intro overlay reports real progress, so each stage below moves
+  // only when the work behind it actually completes. kIntro is optional -
+  // every call is a no-op if kintsugi-intro.js did not load.
+  const intro = window.kIntro || { stage() {}, finish() {} };
+  const t0 = Date.now();
+  const since = () => `${Date.now() - t0}ms`;
+
+  intro.stage('connect', 'active');
+
   // Load overview and config in parallel for better performance
-  try {
-    await Promise.all([
-      loadOverview(),
-      loadConfig()
-    ]);
-  } catch (err) {
-    console.error('Error during dashboard initialization:', err);
+  const [overview, config] = await Promise.allSettled([
+    loadOverview(),
+    loadConfig()
+  ]);
+
+  intro.stage('connect', 'done', since());
+  intro.stage('jobs',   overview.status === 'fulfilled' ? 'done' : 'failed',
+              overview.status === 'fulfilled' ? since() : 'failed');
+  intro.stage('config', config.status   === 'fulfilled' ? 'done' : 'failed',
+              config.status   === 'fulfilled' ? since() : 'failed');
+
+  if (overview.status === 'rejected') {
+    console.error('Error loading overview:', overview.reason);
   }
+  if (config.status === 'rejected') {
+    console.error('Error loading config:', config.reason);
+  }
+
+  intro.stage('compute', 'done', since());
+  intro.finish();
 
   // Start auto-refresh
   startAutoRefresh();

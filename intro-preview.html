@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en" data-kintsugi-intro>
+<head>
+<meta charset="UTF-8" />
+<title>Kintsugi intro — preview harness</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="stylesheet" href="kintsugi-intro.css" />
+<style>
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: #080706;
+    color: #f2efe8;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 48px 24px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 6px; }
+  p  { color: #8a8170; font-size: 14px; line-height: 1.6; margin: 0 0 28px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.12em;
+       color: #8a8170; margin: 32px 0 12px; font-weight: 600; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; }
+  button {
+    padding: 10px 18px; font: inherit; font-size: 13px; cursor: pointer;
+    color: #d4af37; background: transparent; border-radius: 6px;
+    border: 1px solid rgba(212,175,55,.4); transition: background .15s, border-color .15s;
+  }
+  button:hover { background: rgba(212,175,55,.1); border-color: #d4af37; }
+  button:focus-visible { outline: 2px solid #d4af37; outline-offset: 3px; }
+  code { font-family: ui-monospace, monospace; font-size: 12px; color: #d4af37; }
+  .note { border-left: 2px solid #8a6f22; padding: 10px 0 10px 14px; margin-top: 28px;
+          font-size: 13px; color: #8a8170; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Intro preview harness</h1>
+    <p>
+      This page loads the real <code>kintsugi-intro.css</code> and
+      <code>kintsugi-intro.js</code> and drives them through each scenario,
+      so the loading screen can be reviewed without waiting on Google Sheets.
+      Everything below the overlay is this harness, not the dashboard.
+    </p>
+
+    <h2>Scenarios</h2>
+    <div class="row">
+      <button id="happy">Normal load</button>
+      <button id="slow">Slow load (escape hatch appears)</button>
+      <button id="fail">Failed stage</button>
+      <button id="instant">Warm cache (very fast)</button>
+      <button id="reduced">Reduced motion</button>
+    </div>
+
+    <h2>Manual</h2>
+    <div class="row">
+      <button id="rebuild">Rebuild overlay</button>
+      <button id="finish">finish()</button>
+      <button id="dismiss">dismiss()</button>
+    </div>
+
+    <div class="note">
+      Press <code>Escape</code> at any point to dismiss — nobody should ever be
+      trapped behind this screen. A hard failsafe also dismisses it after 12s
+      regardless of what the data is doing.
+    </div>
+  </div>
+
+<script src="kintsugi-intro.js"></script>
+<script>
+  const $ = id => document.getElementById(id);
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+
+  // The overlay removes itself on dismiss, so re-running a scenario
+  // reloads the page to get a clean instance - same as a real visit.
+  function reload(hash) { location.hash = hash; location.reload(); }
+
+  async function run(scenario) {
+    const i = window.kIntro;
+    if (!i || !i.isActive()) return;
+
+    if (scenario === 'happy') {
+      i.stage('connect', 'active');
+      await wait(700);  i.stage('connect', 'done', '0.7s');
+      i.stage('jobs', 'active');
+      await wait(1100); i.stage('jobs', 'done', '1.8s');
+      i.stage('config', 'active');
+      await wait(500);  i.stage('config', 'done', '2.3s');
+      i.stage('compute', 'active');
+      await wait(600);  i.stage('compute', 'done', '2.9s');
+      i.finish();
+
+    } else if (scenario === 'slow') {
+      i.stage('connect', 'active');
+      await wait(1200); i.stage('connect', 'done', '1.2s');
+      i.stage('jobs', 'active');
+      await wait(6000); i.stage('jobs', 'done', '7.2s');
+      i.stage('config', 'done', '7.4s');
+      i.stage('compute', 'done', '7.6s');
+      i.finish();
+
+    } else if (scenario === 'fail') {
+      i.stage('connect', 'active');
+      await wait(800);  i.stage('connect', 'done', '0.8s');
+      i.stage('jobs', 'active');
+      await wait(1400); i.stage('jobs', 'failed', 'failed');
+      i.stage('config', 'done', '2.3s');
+      i.stage('compute', 'done', '2.4s');
+      // deliberately no finish() - the escape hatch is the way out
+
+    } else if (scenario === 'instant') {
+      i.stage('connect', 'done', '40ms');
+      i.stage('jobs', 'done', '90ms');
+      i.stage('config', 'done', '110ms');
+      i.stage('compute', 'done', '130ms');
+      i.finish();
+    }
+  }
+
+  ['happy','slow','fail','instant'].forEach(s =>
+    $(s).addEventListener('click', () => reload('#' + s)));
+
+  $('reduced').addEventListener('click', () => {
+    document.body.classList.toggle('reduce-motion');
+    reload('#happy');
+  });
+
+  $('rebuild').addEventListener('click', () => reload('#idle'));
+  $('finish').addEventListener('click',  () => window.kIntro && window.kIntro.finish());
+  $('dismiss').addEventListener('click', () => window.kIntro && window.kIntro.dismiss());
+
+  const scenario = location.hash.replace('#', '') || 'happy';
+  if (scenario !== 'idle') run(scenario);
+</script>
+</body>
+</html>
