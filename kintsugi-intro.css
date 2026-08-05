@@ -1,60 +1,57 @@
 /* =====================================================================
    Kintsugi intro — the loading screen that gates the dashboard.
    ---------------------------------------------------------------------
-   Black lacquer field, a gold seam network that draws in step with the
-   real data load, and a wordmark reveal. Progress is driven by actual
-   fetch/parse stages in kintsugi-intro.js, not a timer.
+   Every colour here comes from the shared design tokens in
+   shared-styles.css. Nothing is hardcoded and no token is redefined.
 
-   Colours follow the spec in
-   docs/superpowers/specs/2026-08-05-kintsugi-gold-visual-overhaul-design.md
+   That is deliberate. bank-style.css used to declare its own
+   --border-subtle, --radius-lg and --shadow-soft, which silently
+   overrode the shared system and left that page drifting away from the
+   rest of the site. This file consumes tokens and never declares them,
+   so when the gold theme layer lands the intro follows automatically
+   instead of needing a second edit.
+
+   Fallbacks after each var() are only for the preview harness, which
+   loads this file without shared-styles.css.
    ===================================================================== */
 
 .k-intro {
-  --lacquer-0: #050404;
-  --lacquer-1: #080706;
-  --gold: #d4af37;
-  --gold-bright: #f4c430;
-  --gold-deep: #8a6f22;
-  --gold-glow: rgba(212, 175, 55, 0.45);
-  --ink: #f2efe8;
-  --ink-dim: #8a8170;
-
   position: fixed;
   inset: 0;
   z-index: 9999;
   display: grid;
   place-items: center;
-  background: var(--lacquer-0);
+  background: var(--bg-primary, #020817);
   overflow: hidden;
-  /* Opacity/transform only - both composite on the GPU */
-  transition: opacity 700ms cubic-bezier(0.65, 0, 0.35, 1),
-              transform 700ms cubic-bezier(0.65, 0, 0.35, 1);
+  /* opacity + transform only: both composite on the GPU */
+  transition: opacity 760ms cubic-bezier(0.65, 0, 0.35, 1),
+              transform 760ms cubic-bezier(0.65, 0, 0.35, 1);
 }
 
-/* Warm pool of light from above, so the black isn't flat */
+/* Same warm pool of light the page body uses, so dismissing the overlay
+   reveals a continuation rather than a different room. */
 .k-intro::before {
   content: "";
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(900px 520px at 50% -12%, rgba(212, 175, 55, 0.16), transparent 68%),
-    radial-gradient(600px 400px at 50% 110%, rgba(212, 175, 55, 0.06), transparent 70%);
+    radial-gradient(1000px 560px at 50% -12%, rgba(79, 70, 229, 0.14), transparent 68%),
+    radial-gradient(760px 460px at 50% 108%, var(--gold-glow, rgba(212, 175, 55, 0.4)), transparent 74%);
+  opacity: 0.55;
   pointer-events: none;
 }
 
-/* Vignette to pull the eye to the centre */
 .k-intro::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(closest-side at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.75));
+  background: radial-gradient(closest-side at 50% 50%, transparent 52%, rgba(0, 0, 0, 0.72));
   pointer-events: none;
 }
 
-/* The dismissal: lift and fade, revealing the dashboard beneath */
 .k-intro.is-done {
   opacity: 0;
-  transform: scale(1.06);
+  transform: scale(1.05);
   pointer-events: none;
 }
 
@@ -70,27 +67,25 @@
 
 .k-seam {
   fill: none;
-  stroke: var(--gold);
+  stroke: var(--gold-primary, #d4af37);
   stroke-linecap: round;
-  filter: drop-shadow(0 0 4px var(--gold-glow));
-  /* dasharray/offset are set per-path in JS from the real progress value */
-  opacity: 0.85;
+  filter: drop-shadow(0 0 4px var(--gold-glow, rgba(212, 175, 55, 0.4)));
+  opacity: 0.8;
 }
 
 .k-seam--hair {
   stroke-width: 0.6;
-  opacity: 0.45;
+  opacity: 0.4;
 }
 
-/* Molten pulse once loading completes */
 .k-intro.is-complete .k-seam {
   animation: kSeamFlare 900ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 @keyframes kSeamFlare {
-  0%   { stroke: var(--gold);        filter: drop-shadow(0 0 4px var(--gold-glow)); }
-  45%  { stroke: var(--gold-bright); filter: drop-shadow(0 0 14px rgba(244, 196, 48, 0.95)); }
-  100% { stroke: var(--gold-bright); filter: drop-shadow(0 0 8px rgba(244, 196, 48, 0.7)); }
+  0%   { filter: drop-shadow(0 0 4px var(--gold-glow, rgba(212, 175, 55, 0.4))); opacity: 0.8; }
+  45%  { filter: drop-shadow(0 0 14px rgba(244, 196, 48, 0.9));                  opacity: 1;   }
+  100% { filter: drop-shadow(0 0 8px rgba(244, 196, 48, 0.6));                   opacity: 0.95;}
 }
 
 /* ===== Centre stack =============================================== */
@@ -101,8 +96,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 30px;
-  padding: 24px;
+  gap: var(--space-lg, 24px);
+  padding: var(--space-lg, 24px);
   text-align: center;
   max-width: 560px;
   width: 100%;
@@ -111,26 +106,28 @@
 /* ===== Wordmark =================================================== */
 
 .k-intro-mark {
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: clamp(30px, 7vw, 62px);
+  font-family: var(--font-family, system-ui, -apple-system, "Segoe UI", sans-serif);
+  font-size: clamp(30px, 7vw, 60px);
   font-weight: 600;
   letter-spacing: 0.06em;
   line-height: 1.05;
   margin: 0;
-  color: var(--ink);            /* fallback before background-clip applies */
-  background: linear-gradient(135deg, #fff8e2 8%, var(--gold) 52%, var(--gold-deep) 100%);
+  /* solid fallback must come first for browsers without background-clip */
+  color: var(--text-primary, #e8ebf0);
+  background: linear-gradient(135deg,
+              var(--text-primary, #e8ebf0) 4%,
+              var(--gold-primary, #d4af37) 62%,
+              var(--gold-deep, #8a6f22) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  position: relative;
 }
 
-/* Letters lift in one after another */
 .k-intro-mark span {
   display: inline-block;
   opacity: 0;
-  transform: translateY(0.35em);
-  animation: kLetterRise 620ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform: translateY(0.34em);
+  animation: kLetterRise 700ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes kLetterRise {
@@ -139,59 +136,58 @@
 
 .k-intro-sub {
   margin: 0;
-  font-size: clamp(10px, 1.6vw, 12px);
+  font-size: var(--font-size-sm, 12px);
   text-transform: uppercase;
-  letter-spacing: 0.42em;
-  text-indent: 0.42em;          /* balances the trailing letter-space */
-  color: var(--ink-dim);
+  letter-spacing: 0.4em;
+  text-indent: 0.4em;
+  font-weight: 500;
+  color: var(--text-secondary, #9aa4b8);
   opacity: 0;
-  animation: kFade 700ms ease 900ms forwards;
+  animation: kIntroFade 800ms ease 900ms forwards;
 }
 
-@keyframes kFade { to { opacity: 1; } }
+@keyframes kIntroFade { to { opacity: 1; } }
 
-/* Hairline rule that widens as the load progresses */
 .k-intro-rule {
-  width: min(320px, 70vw);
+  width: min(340px, 72vw);
   height: 1px;
-  background: rgba(212, 175, 55, 0.16);
+  background: var(--border-subtle, #161d2e);
   position: relative;
   overflow: hidden;
+  opacity: 0;
+  animation: kIntroFade 700ms ease 1050ms forwards;
 }
 
 .k-intro-rule i {
   position: absolute;
   inset: 0 auto 0 0;
   width: 0%;
-  background: linear-gradient(90deg, var(--gold-deep), var(--gold-bright));
-  box-shadow: 0 0 12px var(--gold-glow);
-  transition: width 520ms cubic-bezier(0.4, 0, 0.2, 1);
+  background: linear-gradient(90deg, var(--gold-deep, #8a6f22), var(--gold-primary, #d4af37), var(--gold-secondary, #f4c430));
+  box-shadow: 0 0 12px var(--gold-glow, rgba(212, 175, 55, 0.4));
+  transition: width 620ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ===== Readout ==================================================== */
 
 .k-intro-readout {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
   opacity: 0;
-  animation: kFade 600ms ease 1100ms forwards;
+  animation: kIntroFade 700ms ease 1200ms forwards;
 }
 
 .k-intro-pct {
   font-size: clamp(26px, 5vw, 40px);
   font-weight: 600;
-  font-variant-numeric: tabular-nums;   /* stops digit jitter while counting */
+  font-variant-numeric: tabular-nums;   /* stops digits jittering while counting */
   letter-spacing: -0.02em;
   line-height: 1;
-  color: var(--gold);
+  color: var(--gold-primary, #d4af37);
 }
 
 .k-intro-pct sup {
-  font-size: 0.42em;
+  font-size: 0.4em;
   vertical-align: super;
-  margin-left: 2px;
-  color: var(--ink-dim);
+  margin-left: 3px;
+  color: var(--text-secondary, #9aa4b8);
 }
 
 /* ===== Stage list ================================================= */
@@ -202,22 +198,29 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 11px;
   width: min(340px, 82vw);
-  opacity: 0;
-  animation: kFade 600ms ease 1250ms forwards;
 }
 
+/* Rows arrive one at a time so the eye can follow them */
 .k-stage {
   display: grid;
   grid-template-columns: 16px 1fr auto;
   align-items: center;
-  gap: 11px;
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  color: var(--ink-dim);
-  transition: color 260ms ease;
+  gap: 12px;
+  /* --text-tertiary measures 4.24:1 on the page background and fails AA,
+     so anything readable here uses --text-secondary at 7.98:1 */
+  font-size: var(--font-size-sm, 12px);
+  color: var(--text-secondary, #9aa4b8);
   text-align: left;
+  opacity: 0;
+  transform: translateY(4px);
+  animation: kStageIn 560ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: color 280ms ease;
+}
+
+@keyframes kStageIn {
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .k-stage-dot {
@@ -225,61 +228,58 @@
   height: 6px;
   margin: 0 auto;
   border-radius: 50%;
-  background: rgba(212, 175, 55, 0.22);
-  transition: background 260ms ease, box-shadow 260ms ease, transform 260ms ease;
+  background: var(--border-subtle, #161d2e);
+  transition: background 280ms ease, box-shadow 280ms ease, transform 280ms ease;
 }
 
 .k-stage-note {
   font-variant-numeric: tabular-nums;
-  font-size: 11px;
+  font-size: var(--font-size-xs, 11px);
   color: transparent;
-  transition: color 260ms ease;
+  transition: color 280ms ease;
 }
 
-/* Running */
-.k-stage.is-active { color: var(--ink); }
+.k-stage.is-active { color: var(--text-primary, #e8ebf0); }
 .k-stage.is-active .k-stage-dot {
-  background: var(--gold-bright);
-  box-shadow: 0 0 9px var(--gold-glow);
-  animation: kDotPulse 1.05s ease-in-out infinite;
+  background: var(--gold-secondary, #f4c430);
+  box-shadow: 0 0 9px var(--gold-glow, rgba(212, 175, 55, 0.4));
+  animation: kDotPulse 1.1s ease-in-out infinite;
 }
 
 @keyframes kDotPulse {
-  0%, 100% { transform: scale(1);   opacity: 1;   }
-  50%      { transform: scale(1.5); opacity: 0.55;}
+  0%, 100% { transform: scale(1);   opacity: 1;    }
+  50%      { transform: scale(1.5); opacity: 0.55; }
 }
 
-/* Finished */
-.k-stage.is-done { color: var(--ink); }
+.k-stage.is-done { color: var(--text-primary, #e8ebf0); }
 .k-stage.is-done .k-stage-dot {
-  background: var(--gold);
-  box-shadow: 0 0 7px var(--gold-glow);
+  background: var(--gold-primary, #d4af37);
+  box-shadow: 0 0 7px var(--gold-glow, rgba(212, 175, 55, 0.4));
   animation: none;
 }
-.k-stage.is-done .k-stage-note { color: var(--ink-dim); }
+.k-stage.is-done .k-stage-note { color: var(--text-secondary, #9aa4b8); }
 
-/* Failed - static, never pulsing. A pulse would imply it is still working. */
-.k-stage.is-failed { color: #f0a2a2; }
+/* Failed rows are static. A pulse would imply it is still trying. */
+.k-stage.is-failed { color: #f3a4a4; }
 .k-stage.is-failed .k-stage-dot {
-  background: #ef4444;
+  background: var(--color-error, #ef4444);
   box-shadow: none;
   animation: none;
 }
-.k-stage.is-failed .k-stage-note { color: #f0a2a2; }
+.k-stage.is-failed .k-stage-note { color: #f3a4a4; }
 
 /* ===== Escape hatch =============================================== */
-/* Appears if a stage fails or the load overruns, so nobody is trapped */
 
 .k-intro-escape {
-  margin-top: 4px;
+  margin-top: var(--space-sm, 8px);
   padding: 9px 20px;
-  font-size: 12px;
   font-family: inherit;
+  font-size: var(--font-size-sm, 12px);
   letter-spacing: 0.04em;
-  color: var(--gold);
+  color: var(--gold-primary, #d4af37);
   background: transparent;
-  border: 1px solid rgba(212, 175, 55, 0.4);
-  border-radius: 6px;
+  border: 1px solid var(--gold-glow, rgba(212, 175, 55, 0.4));
+  border-radius: var(--radius-sm, 6px);
   cursor: pointer;
   opacity: 0;
   transform: translateY(6px);
@@ -296,61 +296,54 @@
 
 .k-intro-escape:hover {
   background: rgba(212, 175, 55, 0.1);
-  border-color: var(--gold);
+  border-color: var(--gold-primary, #d4af37);
 }
 
 .k-intro-escape:focus-visible {
-  outline: 2px solid var(--gold);
+  outline: 2px solid var(--gold-primary, #d4af37);
   outline-offset: 3px;
 }
 
 /* ===== Gold dust ================================================== */
-/* Purely decorative motes drifting through the light pool */
 
 .k-mote {
   position: absolute;
   width: 2px;
   height: 2px;
   border-radius: 50%;
-  background: var(--gold-bright);
+  background: var(--gold-primary, #d4af37);
   opacity: 0;
   pointer-events: none;
   animation: kMoteDrift linear infinite;
 }
 
 @keyframes kMoteDrift {
-  0%   { opacity: 0;    transform: translateY(0) translateX(0); }
-  12%  { opacity: 0.55; }
-  85%  { opacity: 0.32; }
-  100% { opacity: 0;    transform: translateY(-88vh) translateX(22px); }
+  0%   { opacity: 0;   transform: translateY(0) translateX(0); }
+  12%  { opacity: 0.5; }
+  85%  { opacity: 0.3; }
+  100% { opacity: 0;   transform: translateY(-88vh) translateX(22px); }
 }
 
 /* ===== Reduced motion ============================================= */
-/* Everything resolves instantly. Required, not optional. */
+/* Everything resolves instantly and stays readable. Required. */
 
 @media (prefers-reduced-motion: reduce) {
-  .k-intro,
-  .k-intro * {
-    animation: none !important;
-    transition: none !important;
-  }
+  .k-intro, .k-intro * { animation: none !important; transition: none !important; }
   .k-intro-mark span,
   .k-intro-sub,
+  .k-intro-rule,
   .k-intro-readout,
-  .k-intro-stages { opacity: 1; transform: none; }
+  .k-stage { opacity: 1; transform: none; }
   .k-mote { display: none; }
 }
 
 body.reduce-motion .k-intro,
-body.reduce-motion .k-intro * {
-  animation: none !important;
-  transition: none !important;
-}
+body.reduce-motion .k-intro * { animation: none !important; transition: none !important; }
 body.reduce-motion .k-intro-mark span,
 body.reduce-motion .k-intro-sub,
+body.reduce-motion .k-intro-rule,
 body.reduce-motion .k-intro-readout,
-body.reduce-motion .k-intro-stages { opacity: 1; transform: none; }
+body.reduce-motion .k-stage { opacity: 1; transform: none; }
 body.reduce-motion .k-mote { display: none; }
 
-/* Stop the page scrolling behind the overlay while it is up */
 body.k-intro-open { overflow: hidden; }

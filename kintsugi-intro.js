@@ -25,9 +25,14 @@
   // harness can exercise this exactly as the real page does.
   if (!document.documentElement.hasAttribute('data-kintsugi-intro')) return;
 
-  var FAILSAFE_MS = 12000;  // absolute ceiling before we let go
-  var SLOW_MS     = 4500;   // offer the escape hatch after this
-  var MIN_SHOW_MS = 900;    // avoid a jarring flash on a warm cache
+  // Pacing. The stage list finishes arriving at ~1.6s, so dismissing
+  // much before ~3.4s means nobody ever reads it. On a warm cache the
+  // data is ready in ~150ms, so MIN_SHOW_MS is what actually governs
+  // how long this is on screen almost every time.
+  var FAILSAFE_MS = 14000;  // absolute ceiling before we let go regardless
+  var SLOW_MS     = 5000;   // offer the escape hatch after this
+  var MIN_SHOW_MS = 3400;   // floor, so the screen is readable not a flash
+  var HOLD_MS     = 900;    // beat after 100% before dismissing
 
   var STAGES = [
     { id: 'connect', label: 'Connecting to records' },
@@ -54,7 +59,7 @@
   var root, rule, pct, escapeBtn, seamEls = [];
   var built = false, done = false;
   var shownAt = 0, failsafeTimer = null, slowTimer = null;
-  var current = 0;
+  var current = 0, tweenId = null;
 
   function reduced() {
     return window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
@@ -83,8 +88,9 @@
       return '<span style="animation-delay:' + (140 + i * 55) + 'ms">' + ch + '</span>';
     }).join('');
 
-    var stageList = STAGES.map(function (s) {
-      return '<li class="k-stage" data-stage="' + s.id + '">' +
+    var stageList = STAGES.map(function (s, i) {
+      return '<li class="k-stage" data-stage="' + s.id + '"' +
+             ' style="animation-delay:' + (1320 + i * 130) + 'ms">' +
                '<span class="k-stage-dot" aria-hidden="true"></span>' +
                '<span class="k-stage-label">' + s.label + '</span>' +
                '<span class="k-stage-note"></span>' +
@@ -153,14 +159,32 @@
     escapeBtn.classList.add('is-shown');
   }
 
-  function setProgress(frac) {
-    frac = Math.max(0, Math.min(1, frac));
-    current = frac;
+  function paint(frac) {
     if (rule) rule.style.width = (frac * 100) + '%';
     if (pct)  pct.innerHTML = Math.round(frac * 100) + '<sup>%</sup>';
     seamEls.forEach(function (p) {
       var len = Number(p.dataset.len) || 0;
       p.style.strokeDashoffset = len * (1 - frac);
+    });
+  }
+
+  // Stages settle in jumps of 25%. Tweening between them keeps the
+  // number and the seams moving continuously instead of ticking.
+  function setProgress(target) {
+    target = Math.max(0, Math.min(1, target));
+    if (reduced()) { current = target; paint(target); return; }
+
+    var from = current, delta = target - from, t0 = null, DUR = 620;
+    if (tweenId) cancelAnimationFrame(tweenId);
+
+    tweenId = requestAnimationFrame(function step(ts) {
+      if (t0 === null) t0 = ts;
+      var k = Math.min(1, (ts - t0) / DUR);
+      var eased = 1 - Math.pow(1 - k, 3);        // ease-out cubic
+      current = from + delta * eased;
+      paint(current);
+      if (k < 1) tweenId = requestAnimationFrame(step);
+      else { current = target; tweenId = null; }
     });
   }
 
@@ -198,9 +222,10 @@
       setProgress(1);
       root.classList.add('is-complete');
 
-      // Hold briefly on a warm cache so it resolves rather than blinks
+      // Never dismiss before MIN_SHOW_MS, and always leave a beat at 100%
+      // so the seams flare and the numbers land before it lifts away.
       var elapsed = Date.now() - shownAt;
-      var wait = reduced() ? 0 : Math.max(0, MIN_SHOW_MS - elapsed) + 620;
+      var wait = reduced() ? 0 : Math.max(0, MIN_SHOW_MS - elapsed) + HOLD_MS;
       setTimeout(api.dismiss, wait);
     },
 
