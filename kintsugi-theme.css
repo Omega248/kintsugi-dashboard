@@ -1,0 +1,348 @@
+/* =====================================================================
+   Kintsugi gold — theme layer
+   ---------------------------------------------------------------------
+   Loads AFTER shared-styles.css and every page stylesheet. This is the
+   ONE place in the codebase where design tokens are deliberately
+   redefined; everywhere else consumes them.
+
+   Because the whole site already reads from tokens, retinting the
+   palette here re-skins all six pages, the settings panel, the toasts
+   and the intro overlay without touching their markup.
+
+   Spec: docs/superpowers/specs/2026-08-05-kintsugi-gold-visual-overhaul-design.md
+
+   Contrast measured against --bg-secondary #080706:
+     gold      #d4af37   9.57:1    text-primary   #f2efe8  17.53:1
+     gold-lit  #f4c430  12.25:1    text-secondary #a89f8c   7.67:1
+     ink-on-gold #2b1f04 7.68:1    text-tertiary  #8a8170   5.23:1
+   All pass AA for normal text.
+   ===================================================================== */
+
+:root {
+  /* ----- Lacquer surfaces ----- */
+  --bg-primary:    #050404;
+  --bg-secondary:  #080706;
+  --bg-tertiary:   #0a0908;
+  --bg-elevated:   rgba(20, 17, 16, 0.94);
+  --surface:       #0e0c0a;
+  --surface-hover: #141110;
+  --surface-card:  #0e0c0a;
+
+  /* ----- Borders warmed to match the lacquer ----- */
+  --border-subtle:  #1a1613;
+  --border-default: #2a2119;
+  --border-strong:  #3d3125;
+
+  /* ----- Warm ink ----- */
+  --text-primary:   #f2efe8;
+  --text-secondary: #a89f8c;
+  --text-tertiary:  #8a8170;
+  /* Sits on gold fills. White on gold is 2.1:1 and unreadable, so this
+     must stay dark - it is what makes primary buttons legible. */
+  --text-inverse:   #2b1f04;
+
+  /* ----- Gold is the accent now -----
+     Retargeting --accent-primary turns every active nav pill, primary
+     button, focus ring and sorted-column marker gold in one move. */
+  --accent-primary:   #d4af37;
+  --accent-secondary: #f4c430;
+  --accent-soft:      rgba(212, 175, 55, 0.22);
+  --accent-hover:     rgba(212, 175, 55, 0.12);
+
+  --gold-primary:   #d4af37;
+  --gold-secondary: #f4c430;
+  --gold-deep:      #8a6f22;
+  --gold-soft:      rgba(212, 175, 55, 0.15);
+  --gold-glow:      rgba(212, 175, 55, 0.45);
+
+  /* Indigo survives only for links, so they stay distinguishable
+     from gold, which now means "active" or "earned". */
+  --link-color: #8b95f5;
+
+  /* ----- Depth: layered surface + inner highlight, not a drop shadow.
+     The inner highlight is what reads as lacquer rather than card. --- */
+  --shadow-sm:       inset 0 1px 0 rgba(255, 255, 255, 0.04),
+                     0 1px 2px rgba(0, 0, 0, 0.6);
+  --shadow-soft:     inset 0 1px 0 rgba(255, 255, 255, 0.045),
+                     0 2px 8px rgba(0, 0, 0, 0.65);
+  --shadow-elevated: inset 0 1px 0 rgba(255, 255, 255, 0.06),
+                     0 8px 28px rgba(0, 0, 0, 0.72);
+  --shadow-overlay:  0 24px 64px rgba(0, 0, 0, 0.85);
+  --shadow-glow:     0 0 0 1px var(--gold-soft);
+
+  /* ----- Motion tokens, tunable from one place ----- */
+  --motion-enter:   440ms;
+  --motion-seam:    900ms;
+  --motion-count:   700ms;
+  --motion-stagger: 60ms;
+  --ease-out-soft:  cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Warm the page wash to gold instead of indigo */
+body::before {
+  background:
+    radial-gradient(1200px 620px at 50% -10%, rgba(212, 175, 55, 0.11), transparent 70%),
+    var(--bg-primary) !important;
+}
+
+/* Links stay indigo so "clickable" never collides with "earned" */
+a:not(.nav-pill):not(.cta-btn):not(.btn) {
+  color: var(--link-color);
+}
+
+/* ===== Brand ====================================================== */
+
+.brand-title {
+  background: linear-gradient(135deg, #fff8e2 6%, var(--gold-primary) 58%, var(--gold-deep) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.brand-title::after {
+  background: var(--gold-primary);
+  box-shadow: 0 0 10px var(--gold-glow);
+}
+
+/* ===== Navigation ================================================= */
+
+.nav-tabs {
+  background: var(--surface);
+  border-color: var(--border-subtle);
+  box-shadow: var(--shadow-soft);
+}
+
+.nav-pill.active {
+  background: linear-gradient(135deg, var(--gold-secondary), var(--gold-primary));
+  color: var(--text-inverse);
+  box-shadow: 0 0 16px var(--gold-glow);
+}
+
+.nav-pill.active:hover {
+  background: linear-gradient(135deg, #ffd75e, var(--gold-secondary));
+}
+
+/* ===== Cards ====================================================== */
+
+.stat-box,
+.cta-card,
+.data-card,
+.summary-card,
+.analytics-kpi-card,
+.this-week-card,
+.table-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-soft);
+  position: relative;
+  transition: border-color var(--transition-fast),
+              box-shadow var(--transition-fast),
+              transform var(--transition-fast);
+}
+
+.stat-box:hover,
+.cta-card:hover,
+.analytics-kpi-card:hover,
+.this-week-card:hover {
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-elevated);
+  transform: translateY(-2px);
+}
+
+/* A hairline of gold along the top edge, revealed on hover */
+.stat-box::after,
+.cta-card::after,
+.analytics-kpi-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold-primary), transparent);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  pointer-events: none;
+}
+
+.stat-box:hover::after,
+.cta-card:hover::after,
+.analytics-kpi-card:hover::after {
+  opacity: 0.75;
+}
+
+/* ===== Hero numerals ==============================================
+   The primary figure on every card. Styled by existing selectors so
+   no page markup changes. */
+
+.stat-box p:not(.sub),
+.this-week-card-value,
+.analytics-kpi-value {
+  font-size: clamp(26px, 3.2vw, 38px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;   /* stops width jitter while counting */
+  color: var(--text-primary);           /* fallback before background-clip */
+  background: linear-gradient(135deg, #fff6d9 0%, var(--gold-primary) 78%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Labels above them */
+.stat-box h3,
+.this-week-card-label,
+.analytics-kpi-label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-tertiary);
+}
+
+.stat-box .sub,
+.this-week-card-sub,
+.analytics-kpi-sub {
+  color: var(--text-secondary);
+}
+
+/* ===== Trend deltas =============================================== */
+
+.k-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.k-trend--up   { color: var(--color-success); }
+.k-trend--down { color: var(--color-error);   }
+.k-trend--flat { color: var(--text-tertiary); }
+
+/* ===== Seams ======================================================
+   Irregular by design. A smooth curve reads as a border; a crack
+   reads as kintsugi. Max one per viewport height (spec §2.3). */
+
+.k-seam-divider {
+  display: block;
+  width: 100%;
+  height: 26px;
+  margin: var(--space-xl) 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.k-seam-divider path {
+  fill: none;
+  stroke: var(--gold-primary);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 4px var(--gold-glow));
+  opacity: 0.75;
+}
+
+/* ===== Buttons ==================================================== */
+
+.btn-primary,
+.btn.active {
+  background: linear-gradient(135deg, var(--gold-secondary), var(--gold-primary));
+  border-color: var(--gold-deep);
+  color: var(--text-inverse);
+  font-weight: 600;
+}
+
+.btn-primary:hover,
+.btn.active:hover {
+  background: linear-gradient(135deg, #ffd75e, var(--gold-secondary));
+  border-color: var(--gold-primary);
+  color: var(--text-inverse);
+}
+
+.btn:hover {
+  border-color: var(--gold-soft);
+}
+
+.cta-btn {
+  color: var(--gold-primary);
+}
+
+/* ===== Tables ===================================================== */
+
+th {
+  background: var(--bg-secondary);
+  border-bottom-color: var(--border-default);
+}
+
+th.sorted-asc,
+th.sorted-desc {
+  color: var(--gold-primary);
+  box-shadow: inset 0 -2px 0 var(--gold-primary);
+}
+
+tbody tr:hover {
+  background: var(--surface-hover);
+}
+
+/* ===== Focus ====================================================== */
+
+*:focus-visible {
+  outline: 2px solid var(--gold-primary);
+  outline-offset: 2px;
+}
+
+/* ===== Loading shimmer ============================================ */
+
+.skeleton,
+.k-skeleton {
+  background: linear-gradient(90deg,
+              var(--surface) 25%,
+              rgba(212, 175, 55, 0.09) 50%,
+              var(--surface) 75%);
+  background-size: 200% 100%;
+}
+
+/* ===== Entrance animation =========================================
+   Applied by kintsugi-motion.js. Elements are visible by default and
+   only hidden once JS confirms it will animate them, so a failed
+   script can never leave a blank page. */
+
+.k-anim-ready [data-k-enter] {
+  opacity: 0;
+  transform: translateY(14px);
+}
+
+[data-k-enter].k-entered {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity var(--motion-enter) var(--ease-out-soft),
+              transform var(--motion-enter) var(--ease-out-soft);
+}
+
+/* Error states never animate - a pulse implies it is still trying */
+.error-state,
+.k-error,
+[data-k-error] {
+  animation: none !important;
+}
+
+/* ===== Reduced motion ============================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .k-anim-ready [data-k-enter],
+  [data-k-enter] { opacity: 1 !important; transform: none !important; transition: none !important; }
+  .stat-box:hover, .cta-card:hover,
+  .analytics-kpi-card:hover, .this-week-card:hover { transform: none; }
+}
+
+body.reduce-motion .k-anim-ready [data-k-enter],
+body.reduce-motion [data-k-enter] {
+  opacity: 1 !important;
+  transform: none !important;
+  transition: none !important;
+}
+body.reduce-motion .stat-box:hover,
+body.reduce-motion .cta-card:hover,
+body.reduce-motion .analytics-kpi-card:hover,
+body.reduce-motion .this-week-card:hover { transform: none; }

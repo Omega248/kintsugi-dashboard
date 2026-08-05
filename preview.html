@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Kintsugi — component preview</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="stylesheet" href="shared-styles.css" />
+<link rel="stylesheet" href="dashboard-style.css" />
+<link rel="stylesheet" href="kintsugi-theme.css" />
+<style>
+  .pv-wrap { max-width: 1200px; margin: 0 auto; }
+  .pv-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+             justify-content: space-between; margin-bottom: var(--space-xl); }
+  .pv-sec  { margin: var(--space-2xl) 0; }
+  .pv-sec > h2 { font-size: var(--font-size-lg); margin-bottom: var(--space-xs); }
+  .pv-sec > .pv-note { color: var(--text-secondary); font-size: var(--font-size-sm);
+                       margin-bottom: var(--space-lg); }
+  .pv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+             gap: var(--space-md); }
+  .pv-row  { display: flex; flex-wrap: wrap; gap: var(--space-sm); align-items: center; }
+  .pv-swatch { border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);
+               padding: var(--space-sm); font-size: var(--font-size-xs); }
+  .pv-swatch b { display: block; height: 34px; border-radius: 4px; margin-bottom: 6px; }
+  .pv-label { font-size: var(--font-size-xs); text-transform: uppercase;
+              letter-spacing: 0.12em; color: var(--text-tertiary); margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div class="app pv-wrap">
+
+  <header class="top-bar">
+    <div>
+      <div class="brand-title">Kintsugi Motorworks</div>
+      <div class="brand-sub">Component preview</div>
+    </div>
+    <nav class="nav-tabs" aria-label="Preview navigation">
+      <a href="#" class="nav-pill active" aria-current="page">Active</a>
+      <a href="#" class="nav-pill">Inactive</a>
+      <a href="#" class="nav-pill">Another</a>
+    </nav>
+  </header>
+
+  <main id="main">
+
+  <div class="pv-head">
+    <p class="pv-note" style="margin:0">
+      Every component in every state, against the real stylesheets.
+      Toggle the settings gear (bottom right) to check Reduce Motion,
+      High Contrast and Large Text.
+    </p>
+    <button class="btn" id="pvReplay">Replay animation</button>
+  </div>
+
+  <section class="pv-sec">
+    <h2>Palette</h2>
+    <p class="pv-note">All measured against the lacquer base. Every pairing passes AA for normal text.</p>
+    <div class="pv-grid">
+      <div class="pv-swatch"><b style="background:var(--bg-primary)"></b>--bg-primary<br>#050404</div>
+      <div class="pv-swatch"><b style="background:var(--surface)"></b>--surface<br>#0e0c0a</div>
+      <div class="pv-swatch"><b style="background:var(--gold-primary)"></b>--gold-primary<br>9.57:1</div>
+      <div class="pv-swatch"><b style="background:var(--gold-secondary)"></b>--gold-secondary<br>12.25:1</div>
+      <div class="pv-swatch"><b style="background:var(--text-primary)"></b>--text-primary<br>17.53:1</div>
+      <div class="pv-swatch"><b style="background:var(--text-secondary)"></b>--text-secondary<br>7.67:1</div>
+      <div class="pv-swatch"><b style="background:var(--text-tertiary)"></b>--text-tertiary<br>5.23:1</div>
+      <div class="pv-swatch"><b style="background:var(--color-error)"></b>--color-error</div>
+    </div>
+  </section>
+
+  <section class="pv-sec">
+    <h2>Stat cards</h2>
+    <p class="pv-note">Hero numerals count up from zero on entrance. Hover reveals the gold hairline.</p>
+    <div class="stat-boxes">
+      <div class="stat-box">
+        <h3>All-time repairs</h3>
+        <p>1,284</p>
+        <p class="sub"><span class="k-trend k-trend--up">▲ 12.4%</span> vs last week</p>
+      </div>
+      <div class="stat-box">
+        <h3>All-time payout</h3>
+        <p>$898,800</p>
+        <p class="sub"><span class="k-trend k-trend--down">▼ 3.1%</span> vs last week</p>
+      </div>
+      <div class="stat-box">
+        <h3>Active mechanics</h3>
+        <p>14</p>
+        <p class="sub"><span class="k-trend k-trend--flat">■ no change</span></p>
+      </div>
+      <div class="stat-box">
+        <h3>Long value overflow</h3>
+        <p>$12,345,678</p>
+        <p class="sub">Checks the numerals do not clip</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="pv-sec">
+    <h2>Seam divider</h2>
+    <p class="pv-note">Draws left to right on scroll. Maximum one per viewport height.</p>
+    <svg class="k-seam-divider" viewBox="0 0 1000 26" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M0,18 C140,14 210,4 340,9 C470,14 540,22 680,17 C810,12 900,20 1000,15"/>
+    </svg>
+  </section>
+
+  <section class="pv-sec">
+    <h2>Buttons</h2>
+    <p class="pv-note">Gold fills use dark text — white on gold is 2.1:1 and unreadable.</p>
+    <div class="pv-row">
+      <button class="btn btn-primary">Primary</button>
+      <button class="btn">Secondary</button>
+      <button class="btn btn-ghost">Ghost</button>
+      <button class="btn btn-success">Success</button>
+      <button class="btn" disabled>Disabled</button>
+      <button class="btn btn-primary" disabled>Primary disabled</button>
+      <button class="btn" aria-busy="true">Busy</button>
+    </div>
+  </section>
+
+  <section class="pv-sec">
+    <h2>Inputs</h2>
+    <p class="pv-note">Consistent 32px height. Focus ring is gold. Tab through to check.</p>
+    <div class="pv-row">
+      <input type="text" placeholder="Search mechanics" />
+      <div class="select-wrap">
+        <select class="select-pill">
+          <option>All departments</option><option>LSPD</option><option>SASM</option>
+        </select>
+      </div>
+      <input type="date" />
+      <input type="text" value="Disabled" disabled />
+    </div>
+  </section>
+
+  <section class="pv-sec">
+    <h2>Table</h2>
+    <p class="pv-note">Sorted column marked in gold. Rows never animate.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th class="sortable-header">Mechanic</th>
+          <th class="sortable-header sorted-desc">Repairs <span class="sort-indicator">▼</span></th>
+          <th class="sortable-header">Department</th>
+          <th class="sortable-header">Payout</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>R. Stangoe</td><td>42</td><td>SASM</td><td>$29,400</td></tr>
+          <tr><td>A. Mercer</td><td>38</td><td>LSPD</td><td>$26,600</td></tr>
+          <tr><td>J. Okafor</td><td>31</td><td>BCSO</td><td>$21,700</td></tr>
+          <tr><td>very-long-mechanic-name-that-should-ellipsis</td><td>12</td><td>CIV</td><td>$8,400</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="pv-sec">
+    <h2>States</h2>
+    <div class="pv-grid">
+      <div>
+        <div class="pv-label">Loading</div>
+        <div class="stat-box"><div id="pvLoad"></div></div>
+      </div>
+      <div>
+        <div class="pv-label">Empty</div>
+        <div class="stat-box"><div id="pvEmpty"></div></div>
+      </div>
+      <div>
+        <div class="pv-label">Error (must not animate)</div>
+        <div class="stat-box"><div id="pvError"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="pv-sec">
+    <h2>Quick links</h2>
+    <div class="cta-row">
+      <div class="cta-card">
+        <h4>Payouts</h4>
+        <p>Weekly and monthly mechanic payouts, with job-level detail.</p>
+        <a href="#" class="cta-btn">Open Payouts →</a>
+      </div>
+      <div class="cta-card">
+        <h4>Mechanics</h4>
+        <p>Performance profiles, repair history and lifetime stats.</p>
+        <a href="#" class="cta-btn">Open Mechanics →</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="pv-sec">
+    <h2>Toasts and dialogs</h2>
+    <div class="pv-row">
+      <button class="btn" onclick="kShowToast('Saved','success',2500)">Success toast</button>
+      <button class="btn" onclick="kShowToast('Could not reach the sheet','error',2500)">Error toast</button>
+      <button class="btn" onclick="kConfirm('Reset everything?','This cannot be undone.',function(){kShowToast('Confirmed','success',1500)})">Confirm dialog</button>
+    </div>
+  </section>
+
+  </main>
+</div>
+
+<script src="constants.js"></script>
+<script src="utils.js"></script>
+<script src="payout-helpers.js"></script>
+<script src="preferences.js"></script>
+<script src="settings-ui.js"></script>
+<script src="ui-enhancements.js"></script>
+<script src="kintsugi-core.js"></script>
+<script src="kintsugi-motion.js"></script>
+<script>
+  kShowLoading('pvLoad', 'Loading payouts…');
+  kShowEmpty('pvEmpty', 'No repairs logged this week.');
+  kShowError('pvError', 'Could not reach the jobs sheet.', function () {
+    kShowToast('Retry clicked', 'info', 1500);
+  });
+
+  document.getElementById('pvReplay').addEventListener('click', function () {
+    location.reload();
+  });
+</script>
+</body>
+</html>
