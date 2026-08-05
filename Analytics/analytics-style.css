@@ -7,7 +7,7 @@
 
 .analytics-kpi-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: var(--space-md);
   margin-bottom: var(--space-lg);
 }
@@ -15,11 +15,9 @@
 .analytics-kpi-card {
   padding: 20px;
   border-radius: var(--radius-lg);
-  background:
-    radial-gradient(circle at top left, rgba(148, 163, 253, 0.10), transparent),
-    rgba(6, 11, 25, 0.98);
+  background: var(--surface);
   border: 1px solid var(--border-default);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75);
+  box-shadow: var(--shadow-soft);
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
@@ -39,7 +37,7 @@
 
 .analytics-kpi-card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.95), 0 0 32px rgba(79, 70, 229, 0.4);
+  box-shadow: var(--shadow-elevated);
   border-color: var(--accent-primary);
 }
 
@@ -77,7 +75,7 @@
   border-radius: var(--radius-lg);
   background: rgba(5, 9, 20, 0.98);
   border: 1px solid var(--border-default);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75);
+  box-shadow: var(--shadow-soft);
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
@@ -129,7 +127,7 @@
 }
 
 .leaderboard-rank--gold   { color: var(--gold-primary); }
-.leaderboard-rank--silver { color: #9ca3af; }
+.leaderboard-rank--silver { color: var(--text-secondary); }
 .leaderboard-rank--bronze { color: #b87333; }
 
 .leaderboard-name {

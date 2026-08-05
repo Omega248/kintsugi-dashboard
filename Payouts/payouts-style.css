@@ -73,7 +73,7 @@
   border: 1px solid rgba(79, 70, 229, 0.15);
   gap: 2px;
   margin-left: auto;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-soft);
 }
 
 .seg-btn {
@@ -108,7 +108,7 @@
 }
 
 .seg-btn.active {
-  background: radial-gradient(circle at top left, var(--accent-secondary), var(--accent-primary));
+  background: var(--accent-primary);
   color: var(--text-inverse);
   box-shadow: 0 0 12px rgba(79, 70, 229, 0.8);
 }
@@ -256,7 +256,7 @@
       rgba(10, 14, 28, 0.92),
       rgba(6, 10, 20, 0.96)
     );
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75);
+  box-shadow: var(--shadow-soft);
   padding: 28px 28px 28px;
   display: flex;
   flex-direction: column;
