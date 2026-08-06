@@ -42,10 +42,10 @@ body::-webkit-scrollbar {
   height: 9px;
 }
 body::-webkit-scrollbar-track {
-  background: #050816;
+  background: #080706;
 }
 body::-webkit-scrollbar-thumb {
-  background: #29304a;
+  background: #2a2119;
   border-radius: 999px;
 }
 body::-webkit-scrollbar-thumb:hover {
@@ -107,7 +107,7 @@ body::-webkit-scrollbar-thumb:hover {
 
 .filter-group {
   display: inline-flex;
-  background: #020817;
+  background: #050404;
   border-radius: 999px;
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-elevated);
@@ -187,7 +187,7 @@ body::-webkit-scrollbar-thumb:hover {
   margin: 4px 0 10px;
   padding: 9px 10px;
   border-radius: 12px;
-  background: #050814;
+  background: #080706;
   border: 1px solid var(--border-subtle);
   display: none;
   gap: 18px;
@@ -207,7 +207,7 @@ body::-webkit-scrollbar-thumb:hover {
   padding: 5px 7px;
   border-radius: 7px;
   border: 1px solid var(--border-strong);
-  background: #020817;
+  background: #050404;
   color: var(--text-main);
   font-size: var(--font-size-base);
 }
@@ -316,10 +316,10 @@ body::-webkit-scrollbar-thumb:hover {
   height: 9px;
 }
 .table-wrap::-webkit-scrollbar-track {
-  background: #020817;
+  background: #050404;
 }
 .table-wrap::-webkit-scrollbar-thumb {
-  background: #29304a;
+  background: #2a2119;
   border-radius: 999px;
 }
 .table-wrap::-webkit-scrollbar-thumb:hover {
@@ -415,7 +415,7 @@ td.col-date {
 .cat-repair       { background: rgba(212, 175, 55, 0.18); color:#e8c76a; }
 .cat-tax          { background: rgba(248,250,252,0.06); color:#fbbf24; }
 .cat-payout       { background: rgba(249,115,22,0.16); color:#fb923c; }
-.cat-other        { background: rgba(75,85,99,0.40); color:var(--text-secondary); }
+.cat-other        { background: rgba(111,104,88,0.40); color:var(--text-secondary); }
 
 .flag-pill {
   background: rgba(250,204,21,0.18);
@@ -428,7 +428,7 @@ td.col-date {
   margin-top: 8px;
   padding: 10px 11px;
   border-radius: 12px;
-  background: #050814;
+  background: #080706;
   border: 1px solid var(--border-subtle);
   font-size: var(--font-size-base);
   color: var(--text-soft);
@@ -439,7 +439,7 @@ td.col-date {
   text-transform: uppercase;
   font-size: var(--font-size-xs);
   letter-spacing: 0.09em;
-  color: #6b7280;
+  color: #8a8170;
 }
 
 #detailsPanel strong {

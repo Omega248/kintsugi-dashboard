@@ -73,7 +73,7 @@
 .analytics-panel {
   padding: var(--space-lg);
   border-radius: var(--radius-lg);
-  background: rgba(5, 9, 20, 0.98);
+  background: rgba(8, 7, 6, 0.98);
   border: 1px solid var(--border-default);
   box-shadow: var(--shadow-soft);
   display: flex;
@@ -107,7 +107,7 @@
   gap: var(--space-sm);
   padding: 10px 12px;
   border-radius: var(--radius-md);
-  background: rgba(10, 14, 28, 0.6);
+  background: rgba(14, 12, 10, 0.6);
   border: 1px solid var(--border-subtle);
   transition: all var(--duration-fast) var(--ease-smooth);
 }

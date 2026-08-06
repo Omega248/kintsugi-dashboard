@@ -7,26 +7,26 @@
 
 :root {
   /* Colors */
-  --bg-primary: #020817;
-  --bg-secondary: #050816;
-  --bg-tertiary: #030712;
-  --bg-elevated: rgba(10, 14, 28, 0.92);
+  --bg-primary: #050404;
+  --bg-secondary: #080706;
+  --bg-tertiary: #0a0908;
+  --bg-elevated: rgba(14, 12, 10, 0.92);
 
   /* Card surface — one flat colour, lifted just enough to read against
      the page. Replaces the per-card radial gradients. */
-  --surface: #0a1020;
-  --surface-hover: #0e1526;
+  --surface: #0e0c0a;
+  --surface-hover: #141110;
 
   /* Borders — cards are separated by these now, not by drop shadows,
      so the default step is brighter than it used to be. */
-  --border-subtle: #161d2e;
-  --border-default: #232c40;
-  --border-strong: #384156;
+  --border-subtle: #1a1613;
+  --border-default: #2a2119;
+  --border-strong: #3d3125;
 
   /* Text */
-  --text-primary: #e8ebf0;
-  --text-secondary: #9aa4b8;
-  --text-tertiary: #6b7482;
+  --text-primary: #f2efe8;
+  --text-secondary: #a89f8c;
+  --text-tertiary: #8a8170;
   --text-inverse: #ffffff;
   
   /* Brand/Accent */
@@ -801,7 +801,7 @@ tbody.loading::after {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(2, 8, 23, 0.85);
+  background: rgba(5, 4, 4, 0.85);
   backdrop-filter: blur(4px);
   z-index: 100;
   border-radius: var(--radius-md);
@@ -838,7 +838,7 @@ tbody.loading::after {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(2, 8, 23, 0.95);
+  background: rgba(5, 4, 4, 0.95);
   z-index: 100;
   padding: var(--space-lg);
   border-radius: var(--radius-md);
@@ -1200,8 +1200,8 @@ body.high-contrast {
   --border-subtle: #cccccc;
   --text-primary: #ffffff;
   --text-secondary: #ffffff;
-  --accent-primary: #00ffff;
-  --accent-secondary: #00cccc;
+  --accent-primary: #ffdf6b;   /* 16.02:1 on black, was cyan */
+  --accent-secondary: #ffd23f;
 }
 
 body.high-contrast * {
@@ -1524,7 +1524,7 @@ body.compact-mode table td {
 
 .trend-neutral {
   color: var(--text-secondary);
-  background: rgba(156, 163, 175, 0.1);
+  background: rgba(168, 159, 140, 0.1);
 }
 
 .trend-icon {

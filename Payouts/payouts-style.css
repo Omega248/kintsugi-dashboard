@@ -69,7 +69,7 @@
   display: inline-flex;
   padding: 3px;
   border-radius: var(--radius-full);
-  background: linear-gradient(135deg, rgba(10, 16, 32, 0.98), rgba(15, 23, 42, 0.95));
+  background: linear-gradient(135deg, rgba(14, 12, 10, 0.98), rgba(20, 17, 16, 0.95));
   border: 1px solid rgba(212, 175, 55, 0.15);
   gap: 2px;
   margin-left: auto;
@@ -180,7 +180,7 @@
   padding: var(--space-md);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
-  background: linear-gradient(135deg, rgba(15,23,42,0.95), rgba(15,23,42,0.7));
+  background: linear-gradient(135deg, rgba(20,17,16,0.95), rgba(20,17,16,0.7));
   box-shadow: var(--shadow-soft);
 }
 
@@ -253,8 +253,8 @@
   border: 1px solid rgba(255, 255, 255, 0.03);
   background: linear-gradient(
       135deg,
-      rgba(10, 14, 28, 0.92),
-      rgba(6, 10, 20, 0.96)
+      rgba(14, 12, 10, 0.92),
+      rgba(9, 10, 8, 0.96)
     );
   box-shadow: var(--shadow-soft);
   padding: 28px 28px 28px;
@@ -549,8 +549,8 @@
 
 /* ===== Department Invoice Generator Panel ===== */
 .invoice-panel {
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-  border: 1px solid #334155;
+  background: linear-gradient(135deg, #141110 0%, #2a2119 100%);
+  border: 1px solid #3d3125;
   border-radius: 12px;
   padding: 20px 24px;
   margin-top: 32px;
@@ -571,7 +571,7 @@
 .invoice-panel-sub {
   display: block;
   font-size: 0.8rem;
-  color: #64748b;
+  color: #8a8170;
 }
 
 .invoice-controls {
@@ -582,15 +582,15 @@
 }
 
 .btn-invoice {
-  background: #1d4ed8;
+  background: #8a6f22;
   color: #fff;
-  border: 1px solid #2563eb;
+  border: 1px solid #d4af37;
   font-weight: 600;
 }
 
 .btn-invoice:hover {
-  background: #2563eb;
-  border-color: #3b82f6;
+  background: #d4af37;
+  border-color: #f4c430;
 }
 
 @media (max-width: 768px) {

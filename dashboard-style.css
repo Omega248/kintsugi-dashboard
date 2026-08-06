@@ -140,7 +140,7 @@
 .cta-card {
   padding: 20px;
   border-radius: var(--radius-lg);
-  background: rgba(5, 9, 20, 0.98);
+  background: rgba(8, 7, 6, 0.98);
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-soft);
   transition: all var(--duration-fast) var(--ease-smooth);
@@ -290,7 +290,7 @@
 
 .this-week-panel {
   background: radial-gradient(circle at top left, rgba(212, 175, 55, 0.12), transparent),
-              rgba(6, 11, 25, 0.98);
+              rgba(10, 9, 8, 0.98);
   border: 1px solid rgba(212, 175, 55, 0.3);
   border-radius: var(--radius-lg);
   padding: 20px 24px;

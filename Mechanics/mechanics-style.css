@@ -5,8 +5,8 @@
 
 /* Additional local variables */
 :root {
-  --panel: #050816;
-  --panel-soft: #060b1a;
+  --panel: #080706;
+  --panel-soft: #0a0908;
 }
 
 /* Page shell override for mechanics layout */
@@ -16,8 +16,8 @@
   border: 1px solid rgba(255, 255, 255, 0.03);
   background: linear-gradient(
       135deg,
-      rgba(10, 14, 28, 0.92),
-      rgba(6, 10, 20, 0.96)
+      rgba(14, 12, 10, 0.92),
+      rgba(9, 10, 8, 0.96)
     );
   box-shadow: var(--shadow-soft);
   padding: 28px 28px 28px;
@@ -135,8 +135,8 @@
   margin-top: 10px;
   padding: 10px 14px;
   border-radius: 16px;
-  border: 1px solid rgba(24, 32, 56, 0.9);
-  background: linear-gradient(135deg, #050a1b, #050816);
+  border: 1px solid rgba(26, 22, 19, 0.9);
+  background: linear-gradient(135deg, #080706, #080706);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -158,7 +158,7 @@
   padding: 5px 28px 5px 11px;
   border-radius: 999px;
   border: 1px solid var(--border-strong);
-  background: #020617;
+  background: #050404;
   color: var(--text-main);
   font-size: var(--font-size-base);
   appearance: none;
@@ -199,7 +199,7 @@
 }
 
 .search-input::placeholder {
-  color: #4b5563;
+  color: var(--text-tertiary);   /* 5.07:1, was 3.70:1 */
 }
 
 .search-input:focus {
@@ -226,8 +226,8 @@
 }
 
 .weekly-summary-panel {
-  border: 1px solid rgba(24, 32, 56, 0.9);
-  background: linear-gradient(135deg, #050a1b, #020617);
+  border: 1px solid rgba(26, 22, 19, 0.9);
+  background: linear-gradient(135deg, #080706, #050404);
   border-radius: 16px;
   padding: 16px;
   max-height: 600px;
@@ -277,7 +277,7 @@
 .table thead {
   position: sticky;
   top: 0;
-  background: linear-gradient(to right, #020617, #020817);
+  background: linear-gradient(to right, #050404, #050404);
   z-index: 5;
 }
 
@@ -285,7 +285,7 @@
 .table td {
   padding: 10px 12px;
   height: 44px;
-  border-bottom: 1px solid #0f172a;
+  border-bottom: 1px solid #141110;
 }
 
 .table th {
@@ -355,7 +355,7 @@
 .mechanic-detail-shell {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid rgba(24, 32, 56, 0.9);
+  border-top: 1px solid rgba(26, 22, 19, 0.9);
 }
 
 .panel-header-detail {
@@ -382,7 +382,7 @@
 .mechanic-detail-item {
   padding: 10px 10px 8px;
   border-radius: 12px;
-  border: 1px solid rgba(24, 32, 56, 0.9);
+  border: 1px solid rgba(26, 22, 19, 0.9);
   background: var(--panel-soft);
 }
 
@@ -424,7 +424,7 @@
   margin-bottom: 12px;
   padding: 12px;
   border-radius: 12px;
-  border: 1px solid rgba(24, 32, 56, 0.9);
+  border: 1px solid rgba(26, 22, 19, 0.9);
   background: var(--panel-soft);
 }
 
@@ -434,7 +434,7 @@
   align-items: center;
   margin-bottom: 8px;
   padding-bottom: 8px;
-  border-bottom: 1px solid rgba(24, 32, 56, 0.7);
+  border-bottom: 1px solid rgba(26, 22, 19, 0.7);
 }
 
 .weekly-summary-week {
@@ -448,7 +448,7 @@
 .weekly-summary-copy-btn {
   padding: 4px 10px;
   border-radius: 8px;
-  border: 1px solid rgba(24, 32, 56, 0.9);
+  border: 1px solid rgba(26, 22, 19, 0.9);
   background: rgba(212, 175, 55, 0.1);
   color: var(--accent-strong);
   font-size: var(--font-size-sm);

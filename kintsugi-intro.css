@@ -21,7 +21,7 @@
   z-index: 9999;
   display: grid;
   place-items: center;
-  background: var(--bg-primary, #020817);
+  background: var(--bg-primary, #050404);
   overflow: hidden;
   /* opacity + transform only: both composite on the GPU */
   transition: opacity 760ms cubic-bezier(0.65, 0, 0.35, 1),
@@ -113,9 +113,9 @@
   line-height: 1.05;
   margin: 0;
   /* solid fallback must come first for browsers without background-clip */
-  color: var(--text-primary, #e8ebf0);
+  color: var(--text-primary, #f2efe8);
   background: linear-gradient(135deg,
-              var(--text-primary, #e8ebf0) 4%,
+              var(--text-primary, #f2efe8) 4%,
               var(--gold-primary, #d4af37) 62%,
               var(--gold-deep, #8a6f22) 100%);
   -webkit-background-clip: text;
@@ -141,7 +141,7 @@
   letter-spacing: 0.4em;
   text-indent: 0.4em;
   font-weight: 500;
-  color: var(--text-secondary, #9aa4b8);
+  color: var(--text-secondary, #a89f8c);
   opacity: 0;
   animation: kIntroFade 800ms ease 900ms forwards;
 }
@@ -151,7 +151,7 @@
 .k-intro-rule {
   width: min(340px, 72vw);
   height: 1px;
-  background: var(--border-subtle, #161d2e);
+  background: var(--border-subtle, #1a1613);
   position: relative;
   overflow: hidden;
   opacity: 0;
@@ -187,7 +187,7 @@
   font-size: 0.4em;
   vertical-align: super;
   margin-left: 3px;
-  color: var(--text-secondary, #9aa4b8);
+  color: var(--text-secondary, #a89f8c);
 }
 
 /* ===== Stage list ================================================= */
@@ -211,7 +211,7 @@
   /* --text-tertiary measures 4.24:1 on the page background and fails AA,
      so anything readable here uses --text-secondary at 7.98:1 */
   font-size: var(--font-size-sm, 12px);
-  color: var(--text-secondary, #9aa4b8);
+  color: var(--text-secondary, #a89f8c);
   text-align: left;
   opacity: 0;
   transform: translateY(4px);
@@ -228,7 +228,7 @@
   height: 6px;
   margin: 0 auto;
   border-radius: 50%;
-  background: var(--border-subtle, #161d2e);
+  background: var(--border-subtle, #1a1613);
   transition: background 280ms ease, box-shadow 280ms ease, transform 280ms ease;
 }
 
@@ -239,7 +239,7 @@
   transition: color 280ms ease;
 }
 
-.k-stage.is-active { color: var(--text-primary, #e8ebf0); }
+.k-stage.is-active { color: var(--text-primary, #f2efe8); }
 .k-stage.is-active .k-stage-dot {
   background: var(--gold-secondary, #f4c430);
   box-shadow: 0 0 9px var(--gold-glow, rgba(212, 175, 55, 0.4));
@@ -251,13 +251,13 @@
   50%      { transform: scale(1.5); opacity: 0.55; }
 }
 
-.k-stage.is-done { color: var(--text-primary, #e8ebf0); }
+.k-stage.is-done { color: var(--text-primary, #f2efe8); }
 .k-stage.is-done .k-stage-dot {
   background: var(--gold-primary, #d4af37);
   box-shadow: 0 0 7px var(--gold-glow, rgba(212, 175, 55, 0.4));
   animation: none;
 }
-.k-stage.is-done .k-stage-note { color: var(--text-secondary, #9aa4b8); }
+.k-stage.is-done .k-stage-note { color: var(--text-secondary, #a89f8c); }
 
 /* Failed rows are static. A pulse would imply it is still trying. */
 .k-stage.is-failed { color: #f3a4a4; }

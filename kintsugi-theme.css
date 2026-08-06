@@ -55,9 +55,10 @@
   --gold-soft:      rgba(212, 175, 55, 0.15);
   --gold-glow:      rgba(212, 175, 55, 0.45);
 
-  /* Indigo survives only for links, so they stay distinguishable
-     from gold, which now means "active" or "earned". */
-  --link-color: #8b95f5;
+  /* No blue anywhere on the site. Links are distinguished by an
+     underline rather than a hue, so gold keeps meaning live, earned or
+     active rather than merely "clickable". */
+  --link-color: var(--text-primary);
 
   /* ----- Depth: layered surface + inner highlight, not a drop shadow.
      The inner highlight is what reads as lacquer rather than card. --- */
@@ -88,6 +89,15 @@ body::before {
 /* Links stay indigo so "clickable" never collides with "earned" */
 a:not(.nav-pill):not(.cta-btn):not(.btn) {
   color: var(--link-color);
+  text-decoration: underline;
+  text-decoration-color: var(--gold-deep);
+  text-underline-offset: 3px;
+  transition: color var(--transition-fast), text-decoration-color var(--transition-fast);
+}
+
+a:not(.nav-pill):not(.cta-btn):not(.btn):hover {
+  color: var(--gold-primary);
+  text-decoration-color: var(--gold-primary);
 }
 
 /* ===== Brand ====================================================== */
