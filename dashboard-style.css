@@ -152,7 +152,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at center, rgba(79, 70, 229, 0.1), transparent);
+  background: radial-gradient(circle at center, rgba(212, 175, 55, 0.1), transparent);
   opacity: 0;
   transition: opacity var(--duration-fast);
 }
@@ -223,7 +223,7 @@
 
 .cta-btn:hover {
   transform: translateY(-2px) scale(1.03);
-  box-shadow: 0 16px 36px rgba(79, 70, 229, 0.95), 0 0 20px rgba(212, 175, 55, 0.3);
+  box-shadow: 0 16px 36px rgba(212, 175, 55, 0.95), 0 0 20px rgba(212, 175, 55, 0.3);
 }
 
 .cta-btn:hover::before {
@@ -232,7 +232,7 @@
 
 .cta-btn:active {
   transform: translateY(-1px) scale(1.01);
-  box-shadow: 0 8px 20px rgba(79, 70, 229, 0.8);
+  box-shadow: 0 8px 20px rgba(212, 175, 55, 0.8);
 }
 
 /* Hide empty sub-text paragraphs to avoid blank gap space */
@@ -289,9 +289,9 @@
 /* ===== This Week Live Panel ===== */
 
 .this-week-panel {
-  background: radial-gradient(circle at top left, rgba(79, 70, 229, 0.12), transparent),
+  background: radial-gradient(circle at top left, rgba(212, 175, 55, 0.12), transparent),
               rgba(6, 11, 25, 0.98);
-  border: 1px solid rgba(79, 70, 229, 0.3);
+  border: 1px solid rgba(212, 175, 55, 0.3);
   border-radius: var(--radius-lg);
   padding: 20px 24px;
   margin-bottom: var(--space-lg);

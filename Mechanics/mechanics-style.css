@@ -204,7 +204,7 @@
 
 .search-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.35);
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.35);
 }
 
 /* Mechanics main area – two-column layout */
@@ -302,9 +302,9 @@
 }
 
 .table tbody tr:hover {
-  background: rgba(79, 70, 229, 0.18);
+  background: rgba(212, 175, 55, 0.18);
   transform: scale(1.01);
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+  box-shadow: 0 2px 8px rgba(212, 175, 55, 0.3);
 }
 
 /* Column widths */
@@ -449,7 +449,7 @@
   padding: 4px 10px;
   border-radius: 8px;
   border: 1px solid rgba(24, 32, 56, 0.9);
-  background: rgba(79, 70, 229, 0.1);
+  background: rgba(212, 175, 55, 0.1);
   color: var(--accent-strong);
   font-size: var(--font-size-sm);
   cursor: pointer;
@@ -457,7 +457,7 @@
 }
 
 .weekly-summary-copy-btn:hover {
-  background: rgba(79, 70, 229, 0.2);
+  background: rgba(212, 175, 55, 0.2);
   border-color: var(--accent);
 }
 
@@ -483,7 +483,7 @@
   width: 100%;
   border-radius: 12px;
   border: 1px solid var(--accent);
-  background: rgba(79, 70, 229, 0.15);
+  background: rgba(212, 175, 55, 0.15);
   color: var(--accent-strong);
   font-size: var(--font-size-base);
   font-weight: 600;
@@ -493,7 +493,7 @@
 }
 
 .weekly-summary-copy-all:hover {
-  background: rgba(79, 70, 229, 0.25);
+  background: rgba(212, 175, 55, 0.25);
   border-color: var(--accent-strong);
 }
 

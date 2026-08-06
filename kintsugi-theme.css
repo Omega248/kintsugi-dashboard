@@ -346,3 +346,87 @@ body.reduce-motion .stat-box:hover,
 body.reduce-motion .cta-card:hover,
 body.reduce-motion .analytics-kpi-card:hover,
 body.reduce-motion .this-week-card:hover { transform: none; }
+
+/* =====================================================================
+   Fixes from the first real screenshot
+   ===================================================================== */
+
+/* The "This Week — Live View" panel kept a hardcoded indigo gradient and
+   border, so it stayed blue while everything around it went gold. */
+.this-week-panel {
+  background:
+    radial-gradient(680px 300px at 12% -20%, rgba(212, 175, 55, 0.10), transparent 70%),
+    var(--surface);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-soft);
+  position: relative;
+  overflow: hidden;
+}
+
+/* A seam running along the panel's top edge */
+.this-week-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 4%;
+  right: 4%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold-primary) 35%, var(--gold-secondary) 55%, transparent);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.this-week-title {
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+}
+
+.this-week-card {
+  background: var(--bg-secondary);
+  border-color: var(--border-subtle);
+}
+
+/* MY BUG: the theme set .cta-btn colour to gold while its background was
+   --accent-primary, which the theme had just retargeted to gold. Gold text
+   on a gold fill - the four quick-link buttons rendered as blank pills.
+   Outlined instead of filled: four solid gold blocks also broke the rule
+   that gold means live, earned or active rather than "here is a button". */
+.cta-btn {
+  background: transparent;
+  color: var(--gold-primary);
+  border: 1px solid var(--gold-deep);
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.cta-btn::before { display: none; }   /* kill the indigo sheen sweep */
+
+.cta-btn:hover {
+  background: var(--gold-soft);
+  border-color: var(--gold-primary);
+  color: var(--gold-secondary);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(212, 175, 55, 0.18);
+}
+
+.cta-btn:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+/* Placeholder values (– and —) were rendering as bright gold gradient
+   dashes, which read as data rather than absence of it. */
+.stat-box p:not(.sub),
+.this-week-card-value {
+  transition: opacity var(--transition-base);
+}
+
+.stat-box p.is-placeholder,
+.this-week-card-value.is-placeholder {
+  -webkit-text-fill-color: var(--text-tertiary);
+  color: var(--text-tertiary);
+  opacity: 0.45;
+  font-size: var(--font-size-xl);
+}

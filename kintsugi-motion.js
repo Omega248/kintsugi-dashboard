@@ -68,6 +68,7 @@
     var original = el.textContent;
     var parts = parseNumeric(original);
     if (!parts) return;                 // not a number, leave it be
+    if (el.classList.contains('is-placeholder')) return;
     el.dataset.kCounted = '1';
 
     if (reduced()) return;              // already showing the right value
@@ -113,7 +114,26 @@
     }, delay || 0);
   }
 
+  /* Values still showing a placeholder dash are dimmed, so "no data yet"
+     never looks like data. Re-checked whenever the page writes new values. */
+  var PLACEHOLDERS = ['-', '\u2013', '\u2014', '', '...', '\u2026'];
+
+  function markPlaceholders() {
+    var els = document.querySelectorAll(NUMBER_SELECTOR);
+    for (var i = 0; i < els.length; i++) {
+      var t = (els[i].textContent || '').trim();
+      els[i].classList.toggle('is-placeholder', PLACEHOLDERS.indexOf(t) !== -1);
+    }
+  }
+
   function init() {
+    markPlaceholders();
+    // The dashboard fills these in asynchronously, so re-check as it does
+    if ('MutationObserver' in window) {
+      new MutationObserver(markPlaceholders)
+        .observe(document.body, { childList: true, subtree: true, characterData: true });
+    }
+
     var cards = Array.prototype.slice.call(document.querySelectorAll(CARD_SELECTOR));
     var seams = Array.prototype.slice.call(document.querySelectorAll('.k-seam-divider'));
 
@@ -179,7 +199,8 @@
     }
   }
 
-  window.kMotion = { init: init, countUp: countUp, drawSeam: drawSeam };
+  window.kMotion = { init: init, countUp: countUp, drawSeam: drawSeam,
+                     markPlaceholders: markPlaceholders };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

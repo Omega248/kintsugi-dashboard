@@ -56,6 +56,43 @@
     'M872,300 C806,326 760,286 700,306'
   ];
 
+
+  /* The vessel: a tea bowl that assembles from four shards while gold
+     runs into the fractures. Hand-authored rather than generated - the
+     fracture lines have to look broken, and a smooth curve does not.
+     It is the one element on the site that states the brand outright. */
+  var VESSEL =
+    '<svg class="k-vessel" viewBox="0 0 200 140" aria-hidden="true">' +
+      '<defs>' +
+        '<clipPath id="kBowl">' +
+          '<path d="M26,36 C26,96 52,124 100,124 C148,124 174,96 174,36 Z"/>' +
+        '</clipPath>' +
+        '<linearGradient id="kShardFill" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0" stop-color="#241d16"/>' +
+          '<stop offset="1" stop-color="#100c09"/>' +
+        '</linearGradient>' +
+      '</defs>' +
+
+      '<g clip-path="url(#kBowl)">' +
+        '<g class="k-shard" data-shard="0"><path d="M0,0 L72,0 L84,80 L60,140 L0,140 Z"/></g>' +
+        '<g class="k-shard" data-shard="1"><path d="M72,0 L132,0 L120,86 L84,80 Z"/></g>' +
+        '<g class="k-shard" data-shard="2"><path d="M84,80 L120,86 L146,140 L60,140 Z"/></g>' +
+        '<g class="k-shard" data-shard="3"><path d="M132,0 L200,0 L200,140 L146,140 L120,86 Z"/></g>' +
+      '</g>' +
+
+      '<path class="k-bowl-rim" d="M26,36 C26,96 52,124 100,124 C148,124 174,96 174,36"/>' +
+      '<path class="k-bowl-lip" d="M26,36 L174,36"/>' +
+      '<path class="k-bowl-foot" d="M84,124 L84,132 L116,132 L116,124"/>' +
+
+      '<g clip-path="url(#kBowl)" class="k-fractures">' +
+        '<path d="M72,36 L84,80 L60,124"/>' +
+        '<path d="M132,36 L120,86 L146,124"/>' +
+        '<path d="M84,80 L120,86"/>' +
+        '<path class="k-fracture--hair" d="M84,80 L96,58"/>' +
+        '<path class="k-fracture--hair" d="M120,86 L138,70"/>' +
+      '</g>' +
+    '</svg>';
+
   var root, rule, pct, escapeBtn, seamEls = [];
   var built = false, done = false;
   var shownAt = 0, failsafeTimer = null, slowTimer = null;
@@ -100,6 +137,7 @@
     root.innerHTML =
       seamSvg +
       '<div class="k-intro-core">' +
+        VESSEL +
         '<h1 class="k-intro-mark">' + letters + '</h1>' +
         '<p class="k-intro-sub">Motorworks</p>' +
         '<div class="k-intro-rule"><i></i></div>' +
